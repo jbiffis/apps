@@ -34,6 +34,10 @@ $beers = [
     ['name' => 'Landshark',             'format' => '24 bottles',  'price' => 35.00, 'taxable' => true, 'containers' => 24],
     ['name' => 'Peroni',                'format' => '24 cans',     'price' => 32.54, 'taxable' => true, 'containers' => 24],
     ['name' => 'Kronenbourg 1664 Blanc','format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
+
+    // Added after initial orders — appended to preserve existing IDs
+    ['name' => 'Michelob Ultra',         'format' => '30 cans',    'price' => 39.93, 'taxable' => false, 'containers' => 30],
+    ['name' => 'Cracked Canoe',          'format' => '30 cans',    'price' => 39.93, 'taxable' => false, 'containers' => 30],
 ];
 
 // Pre-calculate tax, deposit, and total for each beer
