@@ -64,6 +64,22 @@ if (!isset($_SESSION['admin_authenticated'])) {
     }
 }
 
+// Handle order deletion
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
+    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
+        http_response_code(403);
+        die('Invalid CSRF token.');
+    }
+    $deleteIndex = intval($_POST['order_index'] ?? -1);
+    $orders = load_orders();
+    if (isset($orders[$deleteIndex])) {
+        array_splice($orders, $deleteIndex, 1);
+        save_orders($orders);
+    }
+    header('Location: admin.php');
+    exit;
+}
+
 $orders = load_orders();
 
 // Build summary: total qty of each beer across all orders
@@ -120,6 +136,10 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
         .stat { display: inline-block; margin-right: 30px; }
         .stat-num { font-size: 1.5em; font-weight: 700; color: #27ae60; }
         .stat-label { font-size: 0.85em; color: #666; }
+        .order-header { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; margin-bottom: 8px; }
+        .order-header h3 { margin: 0; }
+        .btn-delete { background: #e74c3c; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+        .btn-delete:hover { background: #c0392b; }
     </style>
 </head>
 <body>
@@ -202,11 +222,19 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
 
         <!-- Individual orders -->
         <h2>Individual Orders</h2>
-        <?php foreach ($orders as $order): ?>
-            <h3>
-                <?= htmlspecialchars($order['name']) ?>
-                <span class="order-meta">— <?= htmlspecialchars($order['submitted']) ?></span>
-            </h3>
+        <?php foreach ($orders as $orderIndex => $order): ?>
+            <div class="order-header">
+                <h3>
+                    <?= htmlspecialchars($order['name']) ?>
+                    <span class="order-meta">— <?= htmlspecialchars($order['submitted']) ?></span>
+                </h3>
+                <form method="POST" action="admin.php" style="display:inline;" onsubmit="return confirm('Delete order for <?= htmlspecialchars(addslashes($order['name'])) ?>?');">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
+                    <input type="hidden" name="order_index" value="<?= $orderIndex ?>">
+                    <button type="submit" class="btn-delete">Delete</button>
+                </form>
+            </div>
             <table>
                 <thead>
                     <tr>
