@@ -2,7 +2,9 @@
 
 define('TAX_RATE', 0.15);
 define('DEPOSIT_PER_CONTAINER', 0.10);
-define('ORDERS_FILE', __DIR__ . '/orders.json');
+define('ORDERS_FILE', '/var/www/data/beer/orders.json');
+
+session_start();
 
 $beers = [
     // No tax (store pays both taxes)
@@ -52,7 +54,7 @@ function load_orders(): array {
 }
 
 function save_orders(array $orders): void {
-    file_put_contents(ORDERS_FILE, json_encode($orders, JSON_PRETTY_PRINT));
+    file_put_contents(ORDERS_FILE, json_encode($orders, JSON_PRETTY_PRINT), LOCK_EX);
 }
 
 function find_order_index(array $orders, string $name): int|false {
@@ -63,4 +65,29 @@ function find_order_index(array $orders, string $name): int|false {
         }
     }
     return false;
+}
+
+function generate_csrf_token(): string {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function verify_csrf_token(string $token): bool {
+    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+function validate_name(string $name): ?string {
+    $name = trim($name);
+    if (strlen($name) === 0) {
+        return 'Name is required.';
+    }
+    if (strlen($name) > 100) {
+        return 'Name must be 100 characters or fewer.';
+    }
+    if (!preg_match('/^[\p{L}\p{N}\s\'-]+$/u', $name)) {
+        return 'Name contains invalid characters.';
+    }
+    return null;
 }

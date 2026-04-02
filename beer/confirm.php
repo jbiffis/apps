@@ -3,10 +3,16 @@ require __DIR__ . '/beers.php';
 
 // Handle final save
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save') {
+    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
+        http_response_code(403);
+        die('Invalid CSRF token. Please go back and try again.');
+    }
+
     $name = trim($_POST['name'] ?? '');
     $items = json_decode($_POST['items'] ?? '[]', true);
 
-    if (!$name || !is_array($items) || empty($items)) {
+    $nameError = validate_name($name);
+    if ($nameError || !is_array($items) || empty($items)) {
         header('Location: index.php');
         exit;
     }
@@ -24,6 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     ];
 
     save_orders($orders);
+
+    // Regenerate CSRF token after successful save
+    unset($_SESSION['csrf_token']);
 
     header('Location: confirm.php?saved=1&name=' . urlencode($name));
     exit;
@@ -69,10 +78,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
+    http_response_code(403);
+    die('Invalid CSRF token. Please go back and try again.');
+}
+
 $name = trim($_POST['name'] ?? '');
 $quantities = $_POST['qty'] ?? [];
 
-if (!$name) {
+$nameError = validate_name($name);
+if ($nameError) {
     header('Location: index.php');
     exit;
 }
@@ -82,6 +97,8 @@ $orderItems = [];
 $grandTotal = 0;
 foreach ($beers as $beer) {
     $qty = intval($quantities[$beer['id']] ?? 0);
+    if ($qty < 0) $qty = 0;
+    if ($qty > 99) $qty = 99;
     if ($qty > 0) {
         $lineTotal = round($qty * $beer['total'], 2);
         $orderItems[] = [
@@ -182,6 +199,7 @@ $hasExisting = $existingIndex !== false;
         <a href="index.php" class="btn btn-back">← Go Back</a>
         <form method="POST" action="confirm.php" style="display:inline;">
             <input type="hidden" name="action" value="save">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
             <input type="hidden" name="name" value="<?= htmlspecialchars($name) ?>">
             <input type="hidden" name="items" value="<?= htmlspecialchars(json_encode($orderItems)) ?>">
             <button type="submit" class="btn btn-confirm">

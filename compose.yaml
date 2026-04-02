@@ -5,3 +5,9 @@ services:
       - "8081:80"
     volumes:
       - ./beer:/var/www/html/beer
+      - beer-data:/var/www/data/beer
+    environment:
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+
+volumes:
+  beer-data:

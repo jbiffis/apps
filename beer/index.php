@@ -41,9 +41,10 @@
     <p class="subtitle">Dépanneur Rapido — Easter Specials</p>
 
     <form method="POST" action="confirm.php" id="orderForm">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
         <div class="name-section">
             <label for="name">Your Name</label><br>
-            <input type="text" id="name" name="name" required placeholder="Enter your name">
+            <input type="text" id="name" name="name" required placeholder="Enter your name" maxlength="100">
         </div>
 
         <table>
