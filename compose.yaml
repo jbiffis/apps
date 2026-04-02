@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8081:80"
+    volumes:
+      - ./beer:/var/www/html/beer
