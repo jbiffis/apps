@@ -221,7 +221,7 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
         </table>
 
         <!-- Individual orders -->
-        <h2>Individual Orders</h2>
+        <h2>Orders</h2>
         <?php foreach ($orders as $orderIndex => $order): ?>
             <div class="order-header">
                 <h3>
