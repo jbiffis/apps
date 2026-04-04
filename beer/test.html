@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Test Page</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        .status { padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .ok { background: #d4edda; color: #155724; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        td, th { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Server Test Page</h1>
+    <div class="status ok" id="status">Web server is running</div>
+
+    <table>
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td>Page loaded at</td><td id="time"></td></tr>
+        <tr><td>User Agent</td><td id="ua"></td></tr>
+        <tr><td>URL</td><td id="url"></td></tr>
+    </table>
+
+    <h2>Ping</h2>
+    <button onclick="ping()">Ping server</button>
+    <div id="ping-result"></div>
+
+    <script>
+        document.getElementById('time').textContent = new Date().toISOString();
+        document.getElementById('ua').textContent = navigator.userAgent;
+        document.getElementById('url').textContent = window.location.href;
+
+        function ping() {
+            const start = Date.now();
+            fetch(window.location.href)
+                .then(r => {
+                    const ms = Date.now() - start;
+                    document.getElementById('ping-result').textContent =
+                        `OK (${r.status}) — ${ms}ms — ${new Date().toISOString()}`;
+                })
+                .catch(e => {
+                    document.getElementById('ping-result').textContent = `Error: ${e.message}`;
+                });
+        }
+    </script>
+</body>
+</html>
