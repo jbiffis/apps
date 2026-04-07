@@ -4,7 +4,6 @@ services:
     ports:
       - "8081:80"
     volumes:
-      - ./beer:/var/www/html/beer
       - /var/lib/docker/volumes/apps/beer:/var/www/data/beer
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
