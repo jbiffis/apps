@@ -64,18 +64,44 @@ if (!isset($_SESSION['admin_authenticated'])) {
     }
 }
 
-// Handle order deletion
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
+// Handle logout
+if (isset($_GET['logout'])) {
+    unset($_SESSION['admin_authenticated']);
+    header('Location: admin.php');
+    exit;
+}
+
+// Handle POST actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
         http_response_code(403);
         die('Invalid CSRF token.');
     }
-    $deleteIndex = intval($_POST['order_index'] ?? -1);
+
     $orders = load_orders();
-    if (isset($orders[$deleteIndex])) {
-        array_splice($orders, $deleteIndex, 1);
-        save_orders($orders);
+
+    switch ($_POST['action']) {
+        case 'delete':
+            $deleteIndex = intval($_POST['order_index'] ?? -1);
+            if (isset($orders[$deleteIndex])) {
+                array_splice($orders, $deleteIndex, 1);
+                save_orders($orders);
+            }
+            break;
+
+        case 'toggle_paid':
+            $toggleIndex = intval($_POST['order_index'] ?? -1);
+            if (isset($orders[$toggleIndex])) {
+                $orders[$toggleIndex]['paid'] = !($orders[$toggleIndex]['paid'] ?? false);
+                save_orders($orders);
+            }
+            break;
+
+        case 'reset_all':
+            save_orders([]);
+            break;
     }
+
     header('Location: admin.php');
     exit;
 }
@@ -104,6 +130,29 @@ foreach ($orders as $order) {
 
 // Filter summary to only beers that have been ordered
 $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
+
+// Calculate paid/unpaid stats
+$totalRevenue = 0;
+$totalUnits = 0;
+$paidTotal = 0;
+$unpaidTotal = 0;
+$paidCount = 0;
+$unpaidCount = 0;
+foreach ($orders as $order) {
+    $orderSum = 0;
+    foreach ($order['items'] as $item) {
+        $orderSum += $item['line_total'];
+        $totalUnits += $item['qty'];
+    }
+    $totalRevenue += $orderSum;
+    if ($order['paid'] ?? false) {
+        $paidTotal += $orderSum;
+        $paidCount++;
+    } else {
+        $unpaidTotal += $orderSum;
+        $unpaidCount++;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -133,13 +182,26 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
         .logout-link { color: #e74c3c; text-decoration: none; font-weight: 600; font-size: 0.9em; }
         .logout-link:hover { text-decoration: underline; }
         .grand-summary { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .stat { display: inline-block; margin-right: 30px; }
+        .stat { display: inline-block; margin-right: 30px; margin-bottom: 8px; }
         .stat-num { font-size: 1.5em; font-weight: 700; color: #27ae60; }
+        .stat-num.paid { color: #27ae60; }
+        .stat-num.unpaid { color: #e74c3c; }
         .stat-label { font-size: 0.85em; color: #666; }
         .order-header { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; margin-bottom: 8px; }
         .order-header h3 { margin: 0; }
+        .order-actions { display: flex; gap: 8px; align-items: center; }
         .btn-delete { background: #e74c3c; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
         .btn-delete:hover { background: #c0392b; }
+        .btn-paid { background: #27ae60; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+        .btn-paid:hover { background: #219a52; }
+        .btn-unpaid { background: #f39c12; color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+        .btn-unpaid:hover { background: #d68910; }
+        .paid-badge { display: inline-block; background: #27ae60; color: #fff; font-size: 0.7em; padding: 2px 8px; border-radius: 3px; vertical-align: middle; margin-left: 8px; }
+        .unpaid-badge { display: inline-block; background: #e74c3c; color: #fff; font-size: 0.7em; padding: 2px 8px; border-radius: 3px; vertical-align: middle; margin-left: 8px; }
+        .btn-reset { background: #e74c3c; color: #fff; border: none; padding: 10px 25px; border-radius: 6px; cursor: pointer; font-size: 0.95em; font-weight: 600; }
+        .btn-reset:hover { background: #c0392b; }
+        .reset-section { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e74c3c; text-align: center; }
+        .reset-section p { color: #666; margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -148,13 +210,6 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
         <a href="index.php" class="back-link">← Back to Order Form</a>
         <a href="admin.php?logout=1" class="logout-link">Logout</a>
     </div>
-    <?php
-    if (isset($_GET['logout'])) {
-        unset($_SESSION['admin_authenticated']);
-        header('Location: admin.php');
-        exit;
-    }
-    ?>
     <h1>Admin — All Orders</h1>
     <p class="subtitle"><?= count($orders) ?> order(s) submitted</p>
 
@@ -163,16 +218,6 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
     <?php else: ?>
 
         <!-- Grand summary stats -->
-        <?php
-        $totalRevenue = 0;
-        $totalUnits = 0;
-        foreach ($orders as $order) {
-            foreach ($order['items'] as $item) {
-                $totalRevenue += $item['line_total'];
-                $totalUnits += $item['qty'];
-            }
-        }
-        ?>
         <div class="grand-summary">
             <span class="stat">
                 <span class="stat-num"><?= count($orders) ?></span>
@@ -185,6 +230,14 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
             <span class="stat">
                 <span class="stat-num">$<?= number_format($totalRevenue, 2) ?></span>
                 <span class="stat-label">Total Value</span>
+            </span>
+            <span class="stat">
+                <span class="stat-num paid">$<?= number_format($paidTotal, 2) ?></span>
+                <span class="stat-label">Paid (<?= $paidCount ?>)</span>
+            </span>
+            <span class="stat">
+                <span class="stat-num unpaid">$<?= number_format($unpaidTotal, 2) ?></span>
+                <span class="stat-label">Unpaid (<?= $unpaidCount ?>)</span>
             </span>
         </div>
 
@@ -222,18 +275,35 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
 
         <!-- Individual orders -->
         <h2>Orders</h2>
-        <?php foreach ($orders as $orderIndex => $order): ?>
+        <?php foreach ($orders as $orderIndex => $order):
+            $isPaid = $order['paid'] ?? false;
+        ?>
             <div class="order-header">
                 <h3>
                     <?= htmlspecialchars($order['name']) ?>
                     <span class="order-meta">— <?= htmlspecialchars($order['submitted']) ?></span>
+                    <?php if ($isPaid): ?>
+                        <span class="paid-badge">PAID</span>
+                    <?php else: ?>
+                        <span class="unpaid-badge">UNPAID</span>
+                    <?php endif; ?>
                 </h3>
-                <form method="POST" action="admin.php" style="display:inline;" onsubmit="return confirm('Delete order for <?= htmlspecialchars(addslashes($order['name'])) ?>?');">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
-                    <input type="hidden" name="order_index" value="<?= $orderIndex ?>">
-                    <button type="submit" class="btn-delete">Delete</button>
-                </form>
+                <div class="order-actions">
+                    <form method="POST" action="admin.php" style="display:inline;">
+                        <input type="hidden" name="action" value="toggle_paid">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
+                        <input type="hidden" name="order_index" value="<?= $orderIndex ?>">
+                        <button type="submit" class="<?= $isPaid ? 'btn-unpaid' : 'btn-paid' ?>">
+                            <?= $isPaid ? 'Mark Unpaid' : 'Mark Paid' ?>
+                        </button>
+                    </form>
+                    <form method="POST" action="admin.php" style="display:inline;" onsubmit="return confirm('Delete order for <?= htmlspecialchars(addslashes($order['name'])) ?>?');">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
+                        <input type="hidden" name="order_index" value="<?= $orderIndex ?>">
+                        <button type="submit" class="btn-delete">Delete</button>
+                    </form>
+                </div>
             </div>
             <table>
                 <thead>
@@ -266,6 +336,16 @@ $orderedSummary = array_filter($summary, fn($s) => $s['total_qty'] > 0);
                 </tbody>
             </table>
         <?php endforeach; ?>
+
+        <!-- Reset all orders -->
+        <div class="reset-section">
+            <p>Start a new ordering round by clearing all existing orders.</p>
+            <form method="POST" action="admin.php" onsubmit="return confirm('This will permanently delete ALL orders. Are you sure?');">
+                <input type="hidden" name="action" value="reset_all">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
+                <button type="submit" class="btn-reset">Reset All Orders</button>
+            </form>
+        </div>
 
     <?php endif; ?>
 </div>
