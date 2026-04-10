@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sim Golf League — Technical Plan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #2d5a27;
+      --green-light: #3d7a36;
+      --gold: #c9a84c;
+      --gold-light: #e8c96a;
+      --cream: #faf8f2;
+      --text: #1a1a1a;
+      --text-muted: #555;
+      --border: #d4cfc0;
+      --tag-bg: #eef5ec;
+      --tag-text: #2d5a27;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--cream);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    header {
+      background: var(--green);
+      color: white;
+      padding: 2.5rem 2rem 2rem;
+      border-bottom: 4px solid var(--gold);
+    }
+
+    header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    header p {
+      margin-top: 0.4rem;
+      opacity: 0.85;
+      font-size: 0.95rem;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    /* Confirmation banner */
+    .confirm-bar {
+      background: white;
+      border: 2px solid var(--gold);
+      border-radius: 10px;
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 2.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+
+    .confirm-bar p {
+      flex: 1;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .confirm-bar strong { color: var(--text); }
+
+    .btn {
+      display: inline-block;
+      padding: 0.55rem 1.3rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+    }
+
+    .btn:hover { opacity: 0.85; }
+
+    .btn-primary {
+      background: var(--green);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* Open question callout */
+    .question-box {
+      background: #fff8e8;
+      border-left: 4px solid var(--gold);
+      border-radius: 0 8px 8px 0;
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .question-box h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      color: #7a5c00;
+      margin-bottom: 0.5rem;
+    }
+
+    .question-box p { font-size: 0.9rem; color: #5a4400; }
+
+    .question-box ul {
+      margin: 0.6rem 0 0 1.2rem;
+      font-size: 0.9rem;
+      color: #5a4400;
+    }
+
+    /* Sections */
+    section {
+      margin-bottom: 2.5rem;
+    }
+
+    h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.3rem;
+      color: var(--green);
+      border-bottom: 2px solid var(--gold-light);
+      padding-bottom: 0.4rem;
+      margin-bottom: 1.2rem;
+    }
+
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    thead tr {
+      background: var(--green);
+      color: white;
+    }
+
+    thead th {
+      padding: 0.65rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.8rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    tbody tr:nth-child(even) { background: #f5f2ea; }
+    tbody tr:nth-child(odd) { background: white; }
+
+    tbody td {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    code {
+      background: #eef5ec;
+      color: var(--green);
+      padding: 0.1em 0.4em;
+      border-radius: 3px;
+      font-size: 0.85em;
+      font-family: 'Courier New', monospace;
+    }
+
+    /* Phase list */
+    .phases {
+      list-style: none;
+      counter-reset: phase;
+    }
+
+    .phases li {
+      counter-increment: phase;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      padding: 0.9rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .phases li:last-child { border-bottom: none; }
+
+    .phase-num {
+      flex-shrink: 0;
+      width: 2rem;
+      height: 2rem;
+      background: var(--green);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .phase-body h4 {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .phase-body p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-block;
+      background: var(--tag-bg);
+      color: var(--tag-tag);
+      border: 1px solid #c5ddc2;
+      border-radius: 4px;
+      padding: 0.15em 0.5em;
+      font-size: 0.78rem;
+      margin-right: 0.3rem;
+      color: var(--green);
+    }
+
+    /* Logic box */
+    .logic-block {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      margin-top: 0.8rem;
+      font-size: 0.88rem;
+    }
+
+    .logic-block p + p { margin-top: 0.4rem; }
+
+    /* Color swatch */
+    .swatches {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: 0.6rem;
+    }
+
+    .swatch {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .swatch-dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Sim Golf League — Technical Plan</h1>
+  <p>Review the architecture and confirm to proceed with task creation</p>
+</header>
+
+<div class="container">
+
+  <!-- Confirm bar -->
+  <div class="confirm-bar">
+    <p><strong>Ready to proceed?</strong> Review the plan below, then let Claude Code know you confirm — or request changes before tasks are created.</p>
+    <button class="btn btn-secondary" onclick="this.closest('.confirm-bar').remove()">Dismiss</button>
+  </div>
+
+  <!-- Open question -->
+  <div class="question-box">
+    <h3>Open Question — Needs Your Answer</h3>
+    <p><strong>Handicap adjustment between tournaments:</strong> The requirements describe the initial handicap from 2 practice rounds, but not how it's updated for Tournaments 2 and 3. Which formula should be used?</p>
+    <ul>
+      <li><strong>Option A</strong> — Recalculate from all rounds played so far (rolling average vs par)</li>
+      <li><strong>Option B</strong> — Use only the most recent tournament's scores</li>
+      <li><strong>Option C</strong> — Manual adjustment set by the league admin each tournament</li>
+    </ul>
+  </div>
+
+  <!-- Tech Stack -->
+  <section>
+    <h2>Tech Stack</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Choice</th>
+            <th>Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Frontend</td>
+            <td><code>React + Vite</code> (TypeScript)</td>
+            <td>SPA routing, complex interactive tables, strong PWA ecosystem</td>
+          </tr>
+          <tr>
+            <td>Backend</td>
+            <td><code>PHP REST API</code></td>
+            <td>Consistent with existing Docker/PHP project setup</td>
+          </tr>
+          <tr>
+            <td>Database</td>
+            <td><code>MySQL</code></td>
+            <td>Relational model fits scorecard and tournament data well</td>
+          </tr>
+          <tr>
+            <td>Styling</td>
+            <td>CSS Modules + custom theme</td>
+            <td>Masters-inspired palette, Playfair Display font, zero dependencies</td>
+          </tr>
+          <tr>
+            <td>PWA</td>
+            <td><code>vite-plugin-pwa</code> + Workbox</td>
+            <td>Service worker, web manifest, offline support, install prompt</td>
+          </tr>
+          <tr>
+            <td>Deployment</td>
+            <td><code>Docker Compose</code></td>
+            <td>Matches existing repo pattern</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Color scheme -->
+  <section>
+    <h2>Masters Color Scheme</h2>
+    <div class="swatches">
+      <div class="swatch"><div class="swatch-dot" style="background:#2d5a27;"></div> Deep Green <code>#2d5a27</code></div>
+      <div class="swatch"><div class="swatch-dot" style="background:#c9a84c;"></div> Gold <code>#c9a84c</code></div>
+      <div class="swatch"><div class="swatch-dot" style="background:#faf8f2; border:1px solid #ccc;"></div> Cream White <code>#faf8f2</code></div>
+      <div class="swatch"><div class="swatch-dot" style="background:#3d7a36;"></div> Medium Green <code>#3d7a36</code></div>
+    </div>
+  </section>
+
+  <!-- Database Schema -->
+  <section>
+    <h2>Database Schema</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Table</th><th>Key Columns</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>seasons</code></td><td>id, year, name</td></tr>
+          <tr><td><code>players</code></td><td>id, name</td></tr>
+          <tr><td><code>courses</code></td><td>id, name</td></tr>
+          <tr><td><code>holes</code></td><td>id, course_id, hole_number (1–9 per nine), par, yardage</td></tr>
+          <tr><td><code>tournaments</code></td><td>id, season_id, number (1/2/3), name</td></tr>
+          <tr><td><code>rounds</code></td><td>id, tournament_id, round_number, course_id, nine (front/back), date, is_practice, ctp_hole, ctp_yardage, ctp_prize_amount</td></tr>
+          <tr><td><code>scores</code></td><td>id, round_id, player_id, hole_number, strokes (NULL = absent)</td></tr>
+          <tr><td><code>handicaps</code></td><td>id, player_id, tournament_id, value</td></tr>
+          <tr><td><code>prize_winnings</code></td><td>id, player_id, round_id, tournament_id, type (ctp/chip_in/t1st/t2nd), amount</td></tr>
+          <tr><td><code>closest_to_pin</code></td><td>id, round_id, player_id, distance, won</td></tr>
+          <tr><td><code>score_edits</code></td><td>id, round_id, player_id, hole_number, old_score, new_score, edited_at</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Pages -->
+  <section>
+    <h2>Pages &amp; Routes</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Route</th><th>Page</th><th>Key Features</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/</code></td>
+            <td>Season Summary</td>
+            <td>Season switcher, overall leaderboard (T1/T2/T3 + total), links to player &amp; tournament pages</td>
+          </tr>
+          <tr>
+            <td><code>/tournament/:id</code></td>
+            <td>Tournament</td>
+            <td>All 6 rounds, handicap-adjusted scores, sticky name column on mobile, scroll sideways for rounds</td>
+          </tr>
+          <tr>
+            <td><code>/round/:id</code></td>
+            <td>Round Scorecard</td>
+            <td>Hole-by-hole, golf score formatting (circles/squares), edit mode, closest-to-pin section, edit history</td>
+          </tr>
+          <tr>
+            <td><code>/player/:id</code></td>
+            <td>Player</td>
+            <td>Season switcher, per-round points by tournament, prize winnings list with totals</td>
+          </tr>
+          <tr>
+            <td><code>/handicap</code></td>
+            <td>Handicap</td>
+            <td>One table per tournament showing each player's handicap</td>
+          </tr>
+          <tr>
+            <td><code>/prizes</code></td>
+            <td>Prize Winnings</td>
+            <td>Season switcher, total purse per player, click-through to player page prize section</td>
+          </tr>
+          <tr>
+            <td><code>/in-round/:id</code></td>
+            <td>In-Round Entry</td>
+            <td>Closest-to-pin entry, chip-in awarding, live prize pot tracking</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Scoring Logic -->
+  <section>
+    <h2>Scoring Logic</h2>
+    <div class="logic-block">
+      <p><strong>Handicap (initial):</strong> Sum of gross scores across 2 practice rounds − total par for those rounds.</p>
+      <p><strong>Points per round:</strong> Rank 8 players by net score (gross − handicap). Best = 8 pts, worst = 1 pt. Ties split the tied positions' total points evenly. Absent players share the worst position.</p>
+      <p><strong>Golf score formatting:</strong> Single circle = birdie, double circle = eagle, no mark = par, single square = bogey, double square = double bogey, solid square = 3+ over par.</p>
+      <p><strong>Closest to pin:</strong> Hole + yardage recorded per round. Players enter distances. Winner = shortest distance. If no one made the green, $20 rolls to next round.</p>
+      <p><strong>Chip-in pot:</strong> Everyone pays $2/round into a pot. When a chip-in is recorded, the current pot is awarded.</p>
+    </div>
+  </section>
+
+  <!-- Build Phases -->
+  <section>
+    <h2>Build Phases</h2>
+    <ul class="phases">
+      <li>
+        <div class="phase-num">1</div>
+        <div class="phase-body">
+          <h4>Foundation</h4>
+          <p>Docker Compose (Nginx + PHP-FPM + MySQL), database schema &amp; seed data, Vite + React scaffold, PWA manifest &amp; service worker, base Masters theme, navigation shell.</p>
+        </div>
+      </li>
+      <li>
+        <div class="phase-num">2</div>
+        <div class="phase-body">
+          <h4>Data Layer</h4>
+          <p>PHP REST API endpoints for all entities, handicap calculation, points calculation, prize allocation logic.</p>
+        </div>
+      </li>
+      <li>
+        <div class="phase-num">3</div>
+        <div class="phase-body">
+          <h4>Read-only Pages</h4>
+          <p>Season Summary, Tournament, Round (view-only), Player, Handicap, Prize Winnings pages.</p>
+        </div>
+      </li>
+      <li>
+        <div class="phase-num">4</div>
+        <div class="phase-body">
+          <h4>Interactive Features</h4>
+          <p>Round edit mode (with confirmation + edit history), In-Round entry page (CTP + chip-in).</p>
+        </div>
+      </li>
+      <li>
+        <div class="phase-num">5</div>
+        <div class="phase-body">
+          <h4>Admin / Data Entry</h4>
+          <p>Season, player, course, and round setup UI. Score entry interface.</p>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+</div>
+</body>
+</html>
