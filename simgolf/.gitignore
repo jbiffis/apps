@@ -6,7 +6,6 @@
 
 # Frontend
 frontend/node_modules/
-frontend/dist/
 
 # Postgres data
 postgres/data/
