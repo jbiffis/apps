@@ -140,11 +140,14 @@ function getRoundScorecard(PDO $db, int $roundId): array
     $round = $stmt->fetch();
     if (!$round) return [];
 
-    // Get holes for this course
+    // Get holes for this course (only the nine being played)
+    $nineFilter = ($round['nine'] === 'back')
+        ? 'AND hole_number BETWEEN 10 AND 18'
+        : 'AND hole_number BETWEEN 1 AND 9';
     $stmt = $db->prepare("
         SELECT hole_number, par, yardage
         FROM holes
-        WHERE course_id = ?
+        WHERE course_id = ? $nineFilter
         ORDER BY hole_number
     ");
     $stmt->execute([$round['course_id']]);
