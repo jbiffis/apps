@@ -219,7 +219,15 @@ function getRoundScorecard(PDO $db, int $roundId): array
         ];
     }
 
-    $points = calculatePoints($netScores, count($players));
+    // Round net scores for ranking: exact .5 values kept, others rounded to integer
+    // This matches the Excel leaderboard behaviour where e.g. 34.625 ranks same as 35,
+    // but 36.5 stays as 36.5 to avoid false ties with 37.
+    $rankingScores = [];
+    foreach ($netScores as $pid => $n) {
+        if ($n === null) { $rankingScores[$pid] = null; continue; }
+        $rankingScores[$pid] = (fmod(abs((float)$n), 1.0) === 0.5) ? $n : round($n);
+    }
+    $points = calculatePoints($rankingScores, count($players));
     foreach ($points as $pid => $pts) {
         $playerRows[$pid]['points'] = $pts;
     }
