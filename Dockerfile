@@ -1,10 +1,11 @@
 FROM php:8.3-apache
 
 # Enable required Apache modules
-RUN a2enmod rewrite headers
+RUN a2enmod rewrite headers proxy proxy_http
 
 # Apache security hardening
 COPY apache-security.conf /etc/apache2/conf-enabled/security.conf
+COPY simgolf-proxy.conf /etc/apache2/conf-enabled/simgolf-proxy.conf
 
 # Disable PHP version header
 RUN echo "expose_php = Off" > /usr/local/etc/php/conf.d/security.ini
