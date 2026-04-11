@@ -394,8 +394,8 @@ for course_name, nine, player_scores in t3_rounds:
 print("\n[6] Inserting handicaps...")
 
 handicaps = {
-    1: {'Cody': 19, 'Jeremy': 14, 'Lance': 13, 'Shea': 7, 'Michael': 6, 'Tim': 6, 'Sonat': 5, 'Lindsay': 4},
-    2: {'Cody': 22, 'Jeremy': 20, 'Lance': 18, 'Shea': 6, 'Michael': 8, 'Tim': 7, 'Sonat': 7, 'Lindsay': 4},
+    1: {'Cody': 19, 'Jeremy': 13.5, 'Lance': 13, 'Shea': 6.5, 'Michael': 6, 'Tim': 5.5, 'Sonat': 5, 'Lindsay': 4},
+    2: {'Cody': 22, 'Jeremy': 20, 'Lance': 18, 'Shea': 5.5, 'Michael': 8.5, 'Tim': 7, 'Sonat': 7.5, 'Lindsay': 4},
     3: {'Cody': 21, 'Jeremy': 20, 'Lance': 18, 'Shea': 5, 'Michael': 7, 'Tim': 7, 'Sonat': 7, 'Lindsay': 5},
 }
 
