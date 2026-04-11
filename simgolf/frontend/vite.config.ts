@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/simgolf/',
   plugins: [
     react(),
     VitePWA({
@@ -42,8 +43,9 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': {
+      '/simgolf/api': {
         target: 'http://localhost:8082',
+        rewrite: (path) => path.replace(/^\/simgolf/, ''),
         changeOrigin: true,
       },
     },
