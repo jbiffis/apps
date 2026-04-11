@@ -29,5 +29,5 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./simgolf/api:/var/www/api
-    env_file: ./simgolf/.env
+    env_file: ./.env
     restart: unless-stopped
