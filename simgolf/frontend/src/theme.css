@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --green:       #2d5a27;
+  --green-light: #3d7a36;
+  --green-dark:  #1e3d1a;
+  --gold:        #c9a84c;
+  --gold-light:  #e8c96a;
+  --gold-dark:   #a07a30;
+  --cream:       #faf8f2;
+  --cream-dark:  #f0ece0;
+  --text:        #1a1a1a;
+  --text-muted:  #5a5a5a;
+  --border:      #d4cfc0;
+  --white:       #ffffff;
+
+  --font-serif:  'Playfair Display', Georgia, serif;
+  --font-sans:   'Inter', system-ui, sans-serif;
+
+  --radius:      8px;
+  --shadow:      0 2px 12px rgba(0,0,0,0.08);
+  --shadow-lg:   0 4px 24px rgba(0,0,0,0.14);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--cream);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100dvh;
+}
+
+a {
+  color: var(--green);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+/* Scrollable tables */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Sticky first column for wide tables */
+.table-sticky th:first-child,
+.table-sticky td:first-child {
+  position: sticky;
+  left: 0;
+  background: inherit;
+  z-index: 1;
+  box-shadow: 2px 0 4px rgba(0,0,0,0.06);
+}
+
+/* Golf score marks */
+.score-eagle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  font-weight: 600;
+}
+
+.score-birdie {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-weight: 600;
+}
+
+.score-par {
+  font-weight: 400;
+}
+
+.score-bogey {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  border: 2px solid currentColor;
+  font-weight: 600;
+}
+
+.score-double-bogey {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  border: 2px solid currentColor;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  font-weight: 600;
+}
+
+.score-triple-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  background: var(--text);
+  color: white;
+  font-weight: 700;
+}

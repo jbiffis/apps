@@ -1,0 +1,77 @@
+.title {
+  font-family: var(--font-serif);
+  font-size: 1.8rem;
+  color: var(--green);
+  margin-bottom: 1.2rem;
+}
+
+.loading {
+  color: var(--text-muted);
+  padding: 2rem 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  font-size: 0.9rem;
+}
+
+.table thead tr {
+  background: var(--green);
+  color: white;
+}
+
+.table thead th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table thead th a {
+  color: var(--gold-light);
+}
+
+.table tbody tr:nth-child(even) {
+  background: var(--cream);
+}
+
+.table tbody tr:nth-child(odd) {
+  background: white;
+}
+
+.table tbody td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.thPos, .tdPos {
+  width: 3rem;
+  text-align: center;
+}
+
+.thName, .tdName {
+  min-width: 120px;
+}
+
+.thTournament, .tdScore {
+  text-align: center;
+  width: 5rem;
+}
+
+.thTotal, .tdTotal {
+  text-align: center;
+  width: 5rem;
+  font-weight: 600;
+}

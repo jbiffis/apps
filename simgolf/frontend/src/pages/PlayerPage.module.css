@@ -1,0 +1,116 @@
+.loading { color: var(--text-muted); padding: 2rem 0; }
+
+.breadcrumb {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.breadcrumb a { color: var(--green); }
+
+.title {
+  font-family: var(--font-serif);
+  font-size: 1.8rem;
+  color: var(--green);
+  margin-bottom: 1.5rem;
+}
+
+.tournamentBlock {
+  margin-bottom: 2rem;
+}
+
+.tournamentTitle {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  color: var(--green);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 2px solid var(--gold-light);
+}
+
+.roundTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  background: white;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.roundTable thead tr {
+  background: var(--green);
+  color: white;
+}
+
+.roundTable th {
+  padding: 0.6rem 1rem;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.thPts { text-align: right !important; width: 6rem; }
+
+.roundTable tbody tr:nth-child(even) { background: var(--cream); }
+.roundTable tbody tr:nth-child(odd) { background: white; }
+
+.roundTable td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.roundTable tr:last-child td { border-bottom: none; }
+
+.tdPts { text-align: right; font-weight: 600; color: var(--green); }
+
+.totalRow {
+  background: var(--cream-dark) !important;
+  font-weight: 600;
+}
+
+.overallTotal {
+  text-align: right;
+  font-size: 1.05rem;
+  color: var(--green);
+  padding: 0.5rem 0 1.5rem;
+}
+
+.section { margin-top: 2rem; }
+
+.sectionTitle {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  color: var(--green);
+  border-bottom: 2px solid var(--gold-light);
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.8rem;
+}
+
+.prizesLink {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.muted { color: var(--text-muted); font-size: 0.9rem; }
+
+.prizeList {
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.prizeItem {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+}
+
+.prizeTotal {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  text-align: right;
+}
