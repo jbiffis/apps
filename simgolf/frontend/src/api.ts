@@ -156,6 +156,8 @@ export interface PlayerDetail {
     tournament: Tournament
     rounds: Array<{ round: Round; scores: PlayerScoreRow; points: number }>
     total: number
+    handicap: number | null
+    next_handicap: number | null
   }>
   prize_winnings: PrizeWinning[]
   overall_points: number

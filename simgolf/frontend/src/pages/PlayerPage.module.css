@@ -71,6 +71,20 @@
   font-weight: 600;
 }
 
+.handicapRow {
+  background: #f0f7f0 !important;
+  color: var(--green);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.tdHandicap {
+  text-align: right;
+  color: var(--green);
+  font-weight: 600;
+  font-style: normal;
+}
+
 .overallTotal {
   text-align: right;
   font-size: 1.05rem;

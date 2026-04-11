@@ -263,7 +263,22 @@ return [
             $stmt->execute([$tournament['id']]);
             $rounds = $stmt->fetchAll();
 
-            $tData = ['tournament' => $tournament, 'rounds' => [], 'total' => 0];
+            // Handicap used entering this tournament
+            $stmt = $db->prepare("
+                SELECT value FROM handicaps
+                WHERE player_id = ? AND season_id = ? AND tournament_number = ?
+            ");
+            $stmt->execute([$playerId, $seasonId, $tournament['number']]);
+            $hRow = $stmt->fetchColumn();
+            $handicap = $hRow !== false ? (float)$hRow : null;
+
+            // Handicap for the next tournament (new handicap after this tournament)
+            $stmt->execute([$playerId, $seasonId, $tournament['number'] + 1]);
+            $hNext = $stmt->fetchColumn();
+            $nextHandicap = $hNext !== false ? (float)$hNext : null;
+
+            $tData = ['tournament' => $tournament, 'rounds' => [], 'total' => 0,
+                      'handicap' => $handicap, 'next_handicap' => $nextHandicap];
             foreach ($rounds as $round) {
                 $scorecard = getRoundScorecard($db, (int)$round['id']);
                 $playerRow = array_values(array_filter($scorecard['players'], fn($r) => $r['player_id'] === $playerId))[0] ?? null;

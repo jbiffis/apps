@@ -34,10 +34,46 @@ export function PlayerPage() {
         <>
           <h1 className={styles.title}>{data.player.name}</h1>
 
+          {/* Practice Rounds */}
+          {data.practice_rounds.length > 0 && (
+            <div className={styles.tournamentBlock}>
+              <h2 className={styles.tournamentTitle}>Practice Rounds</h2>
+              <table className={styles.roundTable}>
+                <thead>
+                  <tr>
+                    <th>Round</th>
+                    <th className={styles.thPts}>Gross</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.practice_rounds.map(r => (
+                    <tr key={r.round.id}>
+                      <td>
+                        <Link to={`/round/${r.round.id}`}>
+                          R{r.round.round_number} — {r.round.course_name} · {r.round.nine}
+                        </Link>
+                      </td>
+                      <td className={styles.tdPts}>
+                        {r.scores?.absent ? '—' : r.scores?.gross ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* Tournaments */}
           {data.tournaments.map(t => (
             <div key={t.tournament.id} className={styles.tournamentBlock}>
-              <h2 className={styles.tournamentTitle}>{t.tournament.name}</h2>
+              <h2 className={styles.tournamentTitle}>
+                {t.tournament.name}
+                {t.handicap != null && (
+                  <span style={{ fontSize: '0.85rem', fontWeight: 400, marginLeft: '0.75rem', color: 'var(--color-muted)' }}>
+                    HC: {t.handicap}
+                  </span>
+                )}
+              </h2>
               <table className={styles.roundTable}>
                 <thead>
                   <tr>
@@ -60,6 +96,12 @@ export function PlayerPage() {
                     <td>Tournament {t.tournament.number} Total</td>
                     <td className={styles.tdPts}>{t.total}</td>
                   </tr>
+                  {t.next_handicap != null && (
+                    <tr className={styles.handicapRow}>
+                      <td>New Handicap</td>
+                      <td className={styles.tdHandicap}>{t.next_handicap}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
