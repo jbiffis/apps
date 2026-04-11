@@ -8,5 +8,5 @@
 frontend/node_modules/
 frontend/dist/
 
-# MySQL data
-mysql/data/
+# Postgres data
+postgres/data/

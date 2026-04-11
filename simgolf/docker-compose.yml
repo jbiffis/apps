@@ -18,31 +18,31 @@ services:
     volumes:
       - ./api:/var/www/api
     environment:
-      DB_HOST: mysql
+      DB_HOST: postgres
+      DB_PORT: 5432
       DB_NAME: simgolf
       DB_USER: simgolf
       DB_PASS: simgolf
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
-  mysql:
-    image: mysql:8.0
+  postgres:
+    image: postgres:16-alpine
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: simgolf
-      MYSQL_USER: simgolf
-      MYSQL_PASSWORD: simgolf
+      POSTGRES_DB: simgolf
+      POSTGRES_USER: simgolf
+      POSTGRES_PASSWORD: simgolf
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql/initdb.d:/docker-entrypoint-initdb.d:ro
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb.d:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      test: ["CMD-SHELL", "pg_isready -U simgolf -d simgolf"]
       interval: 5s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
 volumes:
-  mysql_data:
+  postgres_data:

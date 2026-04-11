@@ -4,13 +4,14 @@ declare(strict_types=1);
 static $pdo;
 if ($pdo) return $pdo;
 
-$host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'mysql';
+$host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: 'postgres';
+$port = $_ENV['DB_PORT'] ?? getenv('DB_PORT') ?: '5432';
 $name = $_ENV['DB_NAME'] ?? getenv('DB_NAME') ?: 'simgolf';
 $user = $_ENV['DB_USER'] ?? getenv('DB_USER') ?: 'simgolf';
 $pass = $_ENV['DB_PASS'] ?? getenv('DB_PASS') ?: 'simgolf';
 
 $pdo = new PDO(
-    "mysql:host=$host;dbname=$name;charset=utf8mb4",
+    "pgsql:host=$host;port=$port;dbname=$name",
     $user,
     $pass,
     [

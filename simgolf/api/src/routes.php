@@ -198,7 +198,7 @@ return [
         $stmt = $db->prepare("
             INSERT INTO scores (round_id, player_id, hole_number, strokes)
             VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE strokes = VALUES(strokes)
+            ON CONFLICT (round_id, player_id, hole_number) DO UPDATE SET strokes = EXCLUDED.strokes
         ");
         $stmt->execute([$roundId, $playerId, $holeNumber, $newStrokes]);
 
@@ -342,9 +342,9 @@ return [
             return ['error' => 'player_id and distance_feet required'];
         }
 
-        $stmt = $db->prepare("INSERT INTO closest_to_pin (round_id, player_id, distance_feet) VALUES (?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO closest_to_pin (round_id, player_id, distance_feet) VALUES (?, ?, ?) RETURNING id");
         $stmt->execute([$roundId, $playerId, $distance]);
-        return ['id' => $db->lastInsertId()];
+        return ['id' => $stmt->fetchColumn()];
     },
 
     'POST /rounds/{roundId}/ctp/award' => function (PDO $db, array $p): array {
@@ -414,11 +414,12 @@ return [
         $stmt = $db->prepare("
             INSERT INTO prize_winnings (player_id, round_id, tournament_id, season_id, type, amount, description)
             VALUES (?, ?, ?, ?, 'chip_in', ?, ?)
+            RETURNING id
         ");
         $desc = "Round {$round['round_number']} - Chip In";
         $stmt->execute([$playerId, $roundId, $round['tournament_id'], $round['season_id'], $amount, $desc]);
 
-        return ['success' => true, 'id' => $db->lastInsertId()];
+        return ['success' => true, 'id' => $stmt->fetchColumn()];
     },
 
     // ── Score entry (bulk for a round) ────────────────────────
@@ -437,7 +438,7 @@ return [
         $stmt = $db->prepare("
             INSERT INTO scores (round_id, player_id, hole_number, strokes)
             VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE strokes = VALUES(strokes)
+            ON CONFLICT (round_id, player_id, hole_number) DO UPDATE SET strokes = EXCLUDED.strokes
         ");
         foreach ($holes as $holeNum => $strokes) {
             $stmt->execute([$roundId, $playerId, (int)$holeNum, $strokes !== null ? (int)$strokes : null]);
@@ -466,7 +467,7 @@ return [
                 $stmt2 = $db->prepare("
                     INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
                     VALUES (?, ?, ?, 1, ?)
-                    ON DUPLICATE KEY UPDATE value = VALUES(value)
+                    ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
                 ");
                 $stmt2->execute([$pid, $t1['id'], $seasonId, $h1]);
             }
