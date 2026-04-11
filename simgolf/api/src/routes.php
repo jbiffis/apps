@@ -478,4 +478,416 @@ return [
         return ['updated' => $updated];
     },
 
+    // ══════════════════════════════════════════════════════════
+    // ADMIN / DATA ENTRY ENDPOINTS
+    // ══════════════════════════════════════════════════════════
+
+    // ── Create season ─────────────────────────────────────────
+    'POST /seasons' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $year = (int)($body['year'] ?? 0);
+        $name = trim($body['name'] ?? '');
+        if (!$year || !$name) { http_response_code(400); return ['error' => 'year and name required']; }
+
+        $stmt = $db->prepare("INSERT INTO seasons (year, name) VALUES (?, ?) RETURNING id");
+        $stmt->execute([$year, $name]);
+        $id = $stmt->fetchColumn();
+
+        // Auto-create 3 tournaments
+        $tournamentNames = ["Tournament 1", "Tournament 2", "Tournament 3"];
+        foreach ([1, 2, 3] as $num) {
+            $s2 = $db->prepare("INSERT INTO tournaments (season_id, number, name) VALUES (?, ?, ?)");
+            $s2->execute([$id, $num, $tournamentNames[$num - 1]]);
+        }
+
+        $stmt = $db->prepare("SELECT * FROM seasons WHERE id = ?");
+        $stmt->execute([$id]);
+        return $stmt->fetch();
+    },
+
+    // ── Create player ─────────────────────────────────────────
+    'POST /players' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $name = trim($body['name'] ?? '');
+        if (!$name) { http_response_code(400); return ['error' => 'name required']; }
+
+        $stmt = $db->prepare("INSERT INTO players (name) VALUES (?) RETURNING id");
+        $stmt->execute([$name]);
+        $id = $stmt->fetchColumn();
+
+        $stmt = $db->prepare("SELECT * FROM players WHERE id = ?");
+        $stmt->execute([$id]);
+        return $stmt->fetch();
+    },
+
+    // ── Update player ─────────────────────────────────────────
+    'PUT /players/{playerId}' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $name = trim($body['name'] ?? '');
+        if (!$name) { http_response_code(400); return ['error' => 'name required']; }
+
+        $stmt = $db->prepare("UPDATE players SET name = ? WHERE id = ? RETURNING id, name");
+        $stmt->execute([$name, (int)$p['playerId']]);
+        return $stmt->fetch() ?: (http_response_code(404) && ['error' => 'Not found']);
+    },
+
+    // ── Create course ─────────────────────────────────────────
+    'POST /courses' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $name = trim($body['name'] ?? '');
+        $holes = $body['holes'] ?? []; // [{hole_number, par, yardage}, ...]
+        if (!$name) { http_response_code(400); return ['error' => 'name required']; }
+
+        $stmt = $db->prepare("INSERT INTO courses (name) VALUES (?) RETURNING id");
+        $stmt->execute([$name]);
+        $courseId = $stmt->fetchColumn();
+
+        foreach ($holes as $h) {
+            $stmt = $db->prepare("INSERT INTO holes (course_id, hole_number, par, yardage) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$courseId, (int)$h['hole_number'], (int)$h['par'], (int)$h['yardage']]);
+        }
+
+        $stmt = $db->prepare("SELECT * FROM courses WHERE id = ?");
+        $stmt->execute([$courseId]);
+        $course = $stmt->fetch();
+        $stmt = $db->prepare("SELECT * FROM holes WHERE course_id = ? ORDER BY hole_number");
+        $stmt->execute([$courseId]);
+        return ['course' => $course, 'holes' => $stmt->fetchAll()];
+    },
+
+    // ── Get courses ───────────────────────────────────────────
+    'GET /courses' => function (PDO $db, array $p): array {
+        $courses = $db->query("SELECT * FROM courses ORDER BY name")->fetchAll();
+        foreach ($courses as &$c) {
+            $stmt = $db->prepare("SELECT * FROM holes WHERE course_id = ? ORDER BY hole_number");
+            $stmt->execute([$c['id']]);
+            $c['holes'] = $stmt->fetchAll();
+        }
+        return $courses;
+    },
+
+    // ── Update tournament name ────────────────────────────────
+    'PUT /tournaments/{tournamentId}' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $name = trim($body['name'] ?? '');
+        if (!$name) { http_response_code(400); return ['error' => 'name required']; }
+
+        $stmt = $db->prepare("UPDATE tournaments SET name = ? WHERE id = ? RETURNING *");
+        $stmt->execute([$name, (int)$p['tournamentId']]);
+        return $stmt->fetch() ?: (http_response_code(404) && ['error' => 'Not found']);
+    },
+
+    // ── Create round ──────────────────────────────────────────
+    'POST /rounds' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $seasonId      = (int)($body['season_id'] ?? 0);
+        $tournamentId  = isset($body['tournament_id']) ? (int)$body['tournament_id'] : null;
+        $roundNumber   = (int)($body['round_number'] ?? 0);
+        $courseId      = (int)($body['course_id'] ?? 0);
+        $nine          = $body['nine'] ?? '';
+        $playedDate    = $body['played_date'] ?? '';
+        $isPractice    = (bool)($body['is_practice'] ?? false);
+        $ctpHole       = isset($body['ctp_hole']) ? (int)$body['ctp_hole'] : null;
+        $ctpYardage    = isset($body['ctp_yardage']) ? (int)$body['ctp_yardage'] : null;
+        $ctpPrize      = (float)($body['ctp_prize_amount'] ?? 20.00);
+        $chipInPot     = (float)($body['chip_in_pot'] ?? 0.00);
+
+        if (!$seasonId || !$roundNumber || !$courseId || !in_array($nine, ['front', 'back']) || !$playedDate) {
+            http_response_code(400);
+            return ['error' => 'season_id, round_number, course_id, nine, played_date required'];
+        }
+
+        $stmt = $db->prepare("
+            INSERT INTO rounds (season_id, tournament_id, round_number, course_id, nine, played_date,
+                                is_practice, ctp_hole, ctp_yardage, ctp_prize_amount, chip_in_pot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+        ");
+        $stmt->execute([$seasonId, $tournamentId, $roundNumber, $courseId, $nine, $playedDate,
+                        $isPractice, $ctpHole, $ctpYardage, $ctpPrize, $chipInPot]);
+        $id = $stmt->fetchColumn();
+
+        $stmt = $db->prepare("
+            SELECT r.*, c.name as course_name
+            FROM rounds r JOIN courses c ON c.id = r.course_id
+            WHERE r.id = ?
+        ");
+        $stmt->execute([$id]);
+        return $stmt->fetch();
+    },
+
+    // ── Update round (CTP hole, date, prize) ──────────────────
+    'PUT /rounds/{roundId}' => function (PDO $db, array $p): array {
+        $roundId = (int)$p['roundId'];
+        $body = json_decode(file_get_contents('php://input'), true);
+
+        $allowed = ['ctp_hole', 'ctp_yardage', 'ctp_prize_amount', 'chip_in_pot', 'played_date'];
+        $sets = [];
+        $vals = [];
+        foreach ($allowed as $field) {
+            if (array_key_exists($field, $body)) {
+                $sets[] = "$field = ?";
+                $vals[] = $body[$field];
+            }
+        }
+        if (empty($sets)) { http_response_code(400); return ['error' => 'Nothing to update']; }
+        $vals[] = $roundId;
+
+        $stmt = $db->prepare("UPDATE rounds SET " . implode(', ', $sets) . " WHERE id = ? RETURNING *");
+        $stmt->execute($vals);
+        return $stmt->fetch() ?: (http_response_code(404) && ['error' => 'Not found']);
+    },
+
+    // ── Get rounds for a season (all, including practice) ─────
+    'GET /seasons/{seasonId}/rounds' => function (PDO $db, array $p): array {
+        $stmt = $db->prepare("
+            SELECT r.*, c.name as course_name, t.number as tournament_number, t.name as tournament_name
+            FROM rounds r
+            JOIN courses c ON c.id = r.course_id
+            LEFT JOIN tournaments t ON t.id = r.tournament_id
+            WHERE r.season_id = ?
+            ORDER BY r.played_date, r.id
+        ");
+        $stmt->execute([(int)$p['seasonId']]);
+        return $stmt->fetchAll();
+    },
+
+    // ── Batch score entry for a round ────────────────────────
+    // Body: { scores: [{ player_id, holes: { "1": 4, "2": 5, ... } }, ...] }
+    'POST /rounds/{roundId}/scores/batch' => function (PDO $db, array $p): array {
+        $roundId = (int)$p['roundId'];
+        $body = json_decode(file_get_contents('php://input'), true);
+        $scoresets = $body['scores'] ?? [];
+
+        if (empty($scoresets)) { http_response_code(400); return ['error' => 'scores array required']; }
+
+        $stmt = $db->prepare("
+            INSERT INTO scores (round_id, player_id, hole_number, strokes)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (round_id, player_id, hole_number) DO UPDATE SET strokes = EXCLUDED.strokes
+        ");
+
+        $db->beginTransaction();
+        try {
+            foreach ($scoresets as $set) {
+                $playerId = (int)($set['player_id'] ?? 0);
+                if (!$playerId) continue;
+                foreach ($set['holes'] as $holeNum => $strokes) {
+                    $stmt->execute([$roundId, $playerId, (int)$holeNum, $strokes !== null ? (int)$strokes : null]);
+                }
+            }
+            $db->commit();
+        } catch (Throwable $e) {
+            $db->rollBack();
+            http_response_code(500);
+            return ['error' => $e->getMessage()];
+        }
+
+        return ['success' => true, 'rounds_affected' => count($scoresets)];
+    },
+
+    // ── Get all scores for a round (raw, for score entry UI) ─
+    'GET /rounds/{roundId}/scores' => function (PDO $db, array $p): array {
+        $stmt = $db->prepare("
+            SELECT s.player_id, p.name as player_name, s.hole_number, s.strokes
+            FROM scores s
+            JOIN players p ON p.id = s.player_id
+            WHERE s.round_id = ?
+            ORDER BY p.name, s.hole_number
+        ");
+        $stmt->execute([(int)$p['roundId']]);
+        $rows = $stmt->fetchAll();
+
+        // Group by player
+        $byPlayer = [];
+        foreach ($rows as $row) {
+            $pid = $row['player_id'];
+            if (!isset($byPlayer[$pid])) {
+                $byPlayer[$pid] = ['player_id' => $pid, 'player_name' => $row['player_name'], 'holes' => []];
+            }
+            $byPlayer[$pid]['holes'][$row['hole_number']] = $row['strokes'];
+        }
+        return array_values($byPlayer);
+    },
+
+    // ── Set handicap manually ─────────────────────────────────
+    'PUT /handicaps' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $playerId          = (int)($body['player_id'] ?? 0);
+        $seasonId          = (int)($body['season_id'] ?? 0);
+        $tournamentId      = isset($body['tournament_id']) ? (int)$body['tournament_id'] : null;
+        $tournamentNumber  = (int)($body['tournament_number'] ?? 0);
+        $value             = (float)($body['value'] ?? 0);
+
+        if (!$playerId || !$seasonId || !$tournamentNumber) {
+            http_response_code(400);
+            return ['error' => 'player_id, season_id, tournament_number required'];
+        }
+
+        $stmt = $db->prepare("
+            INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
+        ");
+        $stmt->execute([$playerId, $tournamentId, $seasonId, $tournamentNumber, $value]);
+        return ['success' => true];
+    },
+
+    // ── Recalculate handicaps for T2 and T3 ──────────────────
+    // T2 handicap = avg gross over T1 rounds − avg par
+    // T3 handicap = avg gross over T1+T2 rounds − avg par
+    'POST /seasons/{seasonId}/recalculate-handicaps/{tournamentNumber}' => function (PDO $db, array $p): array {
+        $seasonId = (int)$p['seasonId'];
+        $tNum     = (int)$p['tournamentNumber']; // 1, 2, or 3
+
+        // For T1: use practice rounds (existing logic)
+        // For T2: use T1 rounds
+        // For T3: use T1+T2 rounds
+        if ($tNum === 1) {
+            // Delegate to existing T1 logic via the existing endpoint logic
+            $players = $db->query("SELECT * FROM players")->fetchAll();
+            $stmt = $db->prepare("SELECT * FROM tournaments WHERE season_id = ? ORDER BY number");
+            $stmt->execute([$seasonId]);
+            $tournaments = $stmt->fetchAll();
+            $t = array_values(array_filter($tournaments, fn($t) => $t['number'] === 1))[0] ?? null;
+            $updated = [];
+            foreach ($players as $player) {
+                $h = calculateHandicap($db, $player['id'], $seasonId);
+                if ($t) {
+                    $stmt2 = $db->prepare("
+                        INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
+                        VALUES (?, ?, ?, 1, ?)
+                        ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
+                    ");
+                    $stmt2->execute([$player['id'], $t['id'], $seasonId, $h]);
+                }
+                $updated[] = ['player_id' => $player['id'], 'name' => $player['name'], 'handicap' => $h];
+            }
+            return ['tournament_number' => 1, 'updated' => $updated];
+        }
+
+        // For T2/T3: avg gross across prior tournament rounds minus avg par
+        $priorTNums = $tNum === 2 ? [1] : [1, 2];
+
+        $stmt = $db->prepare("SELECT * FROM tournaments WHERE season_id = ? ORDER BY number");
+        $stmt->execute([$seasonId]);
+        $allTournaments = $stmt->fetchAll();
+
+        $priorTournaments = array_values(array_filter($allTournaments, fn($t) => in_array($t['number'], $priorTNums)));
+        $targetTournament = array_values(array_filter($allTournaments, fn($t) => $t['number'] === $tNum))[0] ?? null;
+
+        if (!$targetTournament) { http_response_code(404); return ['error' => "Tournament $tNum not found"]; }
+
+        $players = $db->query("SELECT * FROM players")->fetchAll();
+        $updated = [];
+
+        foreach ($players as $player) {
+            $pid = $player['id'];
+            $totalGross = 0;
+            $totalPar = 0;
+            $roundsPlayed = 0;
+
+            foreach ($priorTournaments as $pt) {
+                $stmt = $db->prepare("SELECT id, course_id FROM rounds WHERE tournament_id = ? AND is_practice = FALSE");
+                $stmt->execute([$pt['id']]);
+                $rounds = $stmt->fetchAll();
+
+                foreach ($rounds as $round) {
+                    $stmt2 = $db->prepare("
+                        SELECT strokes FROM scores
+                        WHERE round_id = ? AND player_id = ? AND strokes IS NOT NULL
+                    ");
+                    $stmt2->execute([$round['id'], $pid]);
+                    $holeScores = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+
+                    if (count($holeScores) < 9) continue;
+
+                    $totalGross += array_sum($holeScores);
+                    $roundsPlayed++;
+
+                    $stmt3 = $db->prepare("SELECT SUM(par) FROM holes WHERE course_id = ?");
+                    $stmt3->execute([$round['course_id']]);
+                    $totalPar += (int)$stmt3->fetchColumn();
+                }
+            }
+
+            $handicap = $roundsPlayed > 0 ? max(0, $totalGross - $totalPar) : 0;
+
+            $stmt = $db->prepare("
+                INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
+            ");
+            $stmt->execute([$pid, $targetTournament['id'], $seasonId, $tNum, $handicap]);
+            $updated[] = ['player_id' => $pid, 'name' => $player['name'], 'handicap' => $handicap];
+        }
+
+        return ['tournament_number' => $tNum, 'updated' => $updated];
+    },
+
+    // ── Award tournament prizes ───────────────────────────────
+    'POST /tournaments/{tournamentId}/award-prizes' => function (PDO $db, array $p): array {
+        $tid = (int)$p['tournamentId'];
+
+        $stmt = $db->prepare("SELECT t.*, s.id as season_id FROM tournaments t JOIN seasons s ON s.id = t.season_id WHERE t.id = ?");
+        $stmt->execute([$tid]);
+        $tournament = $stmt->fetch();
+        if (!$tournament) { http_response_code(404); return ['error' => 'Not found']; }
+
+        // Get all rounds for this tournament and sum points per player
+        $stmt = $db->prepare("SELECT id FROM rounds WHERE tournament_id = ? AND is_practice = FALSE");
+        $stmt->execute([$tid]);
+        $roundIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $playerPoints = [];
+        $players = $db->query("SELECT * FROM players")->fetchAll();
+        foreach ($players as $p2) { $playerPoints[$p2['id']] = ['name' => $p2['name'], 'points' => 0]; }
+
+        foreach ($roundIds as $rid) {
+            $scorecard = getRoundScorecard($db, (int)$rid);
+            foreach ($scorecard['players'] as $row) {
+                $playerPoints[$row['player_id']]['points'] += $row['points'] ?? 0;
+            }
+        }
+
+        // Sort by points desc
+        uasort($playerPoints, fn($a, $b) => $b['points'] <=> $a['points']);
+        $ranked = array_keys($playerPoints);
+
+        $prizes = [];
+
+        // 1st place: $200
+        if (isset($ranked[0])) {
+            $stmt = $db->prepare("
+                INSERT INTO prize_winnings (player_id, tournament_id, season_id, type, amount, description)
+                VALUES (?, ?, ?, 't1st', 200, ?)
+            ");
+            $desc = "Tournament {$tournament['number']} - 1st Place";
+            $stmt->execute([$ranked[0], $tid, $tournament['season_id'], $desc]);
+            $prizes[] = ['player_id' => $ranked[0], 'type' => '1st', 'amount' => 200];
+        }
+
+        // 2nd place: $50
+        if (isset($ranked[1])) {
+            $stmt = $db->prepare("
+                INSERT INTO prize_winnings (player_id, tournament_id, season_id, type, amount, description)
+                VALUES (?, ?, ?, 't2nd', 50, ?)
+            ");
+            $desc = "Tournament {$tournament['number']} - 2nd Place";
+            $stmt->execute([$ranked[1], $tid, $tournament['season_id'], $desc]);
+            $prizes[] = ['player_id' => $ranked[1], 'type' => '2nd', 'amount' => 50];
+        }
+
+        return ['tournament' => $tournament, 'prizes_awarded' => $prizes];
+    },
+
+    // ── Delete prize winning ──────────────────────────────────
+    'DELETE /prize-winnings/{id}' => function (PDO $db, array $p): array {
+        $stmt = $db->prepare("DELETE FROM prize_winnings WHERE id = ? RETURNING id");
+        $stmt->execute([(int)$p['id']]);
+        $deleted = $stmt->fetchColumn();
+        if (!$deleted) { http_response_code(404); return ['error' => 'Not found']; }
+        return ['success' => true, 'deleted_id' => $deleted];
+    },
+
 ];
