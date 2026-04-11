@@ -46,7 +46,7 @@ return [
             $tournamentTotals[$tid] = ['tournament' => $tournament, 'player_points' => []];
 
             // Get all rounds for this tournament
-            $stmt = $db->prepare("SELECT id FROM rounds WHERE tournament_id = ? AND is_practice = 0");
+            $stmt = $db->prepare("SELECT id FROM rounds WHERE tournament_id = ? AND is_practice = FALSE");
             $stmt->execute([$tid]);
             $roundIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -226,7 +226,7 @@ return [
         $stmt = $db->prepare("
             SELECT r.*, c.name as course_name
             FROM rounds r JOIN courses c ON c.id = r.course_id
-            WHERE r.season_id = ? AND r.is_practice = 1
+            WHERE r.season_id = ? AND r.is_practice = TRUE
             ORDER BY r.round_number
         ");
         $stmt->execute([$seasonId]);
@@ -366,7 +366,7 @@ return [
             // Find next round
             $stmt = $db->prepare("
                 SELECT id FROM rounds
-                WHERE (tournament_id = ? OR (is_practice = 1 AND season_id = ?))
+                WHERE (tournament_id = ? OR (is_practice = TRUE AND season_id = ?))
                   AND round_number > ?
                 ORDER BY round_number ASC LIMIT 1
             ");

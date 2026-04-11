@@ -1,5 +1,6 @@
 FROM php:8.3-fpm-alpine
 
-RUN docker-php-ext-install pdo pdo_pgsql
+RUN apk add --no-cache libpq-dev \
+    && docker-php-ext-install pdo pdo_pgsql
 
 WORKDIR /var/www/api

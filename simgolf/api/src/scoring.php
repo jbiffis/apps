@@ -85,7 +85,7 @@ function calculateHandicap(PDO $db, int $playerId, int $seasonId): float
     $stmt = $db->prepare("
         SELECT r.id, r.course_id, r.nine
         FROM rounds r
-        WHERE r.season_id = ? AND r.is_practice = 1
+        WHERE r.season_id = ? AND r.is_practice = TRUE
         ORDER BY r.round_number
     ");
     $stmt->execute([$seasonId]);
