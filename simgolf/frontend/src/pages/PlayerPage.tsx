@@ -66,14 +66,7 @@ export function PlayerPage() {
           {/* Tournaments */}
           {data.tournaments.map(t => (
             <div key={t.tournament.id} className={styles.tournamentBlock}>
-              <h2 className={styles.tournamentTitle}>
-                {t.tournament.name}
-                {t.handicap != null && (
-                  <span style={{ fontSize: '0.85rem', fontWeight: 400, marginLeft: '0.75rem', color: 'var(--color-muted)' }}>
-                    HC: {t.handicap}
-                  </span>
-                )}
-              </h2>
+              <h2 className={styles.tournamentTitle}>{t.tournament.name}</h2>
               <table className={styles.roundTable}>
                 <thead>
                   <tr>
