@@ -13,8 +13,6 @@ services:
 
   simgolf-nginx:
     image: nginx:alpine
-    ports:
-      - "8063:80"
     volumes:
       - ./simgolf/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./simgolf/frontend/dist:/var/www/html:ro
