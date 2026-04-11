@@ -5,6 +5,7 @@ Reads: /tmp/simleague.xlsx
 Connects to: 192.168.86.36:5432/app_simgolf_db
 """
 
+import os
 import openpyxl
 import sys
 import psycopg2
@@ -13,11 +14,11 @@ from datetime import date, timedelta
 
 # ─── DB connection ────────────────────────────────────────────────────────────
 conn = psycopg2.connect(
-    host='192.168.86.36',
+    host=os.environ.get('DB_HOST', '192.168.86.36'),
     port=5432,
-    dbname='app_simgolf_db',
-    user='simgolf_usr',
-    password='REDACTED',
+    dbname=os.environ.get('DB_NAME', 'app_simgolf_db'),
+    user=os.environ.get('DB_USER', 'simgolf_usr'),
+    password=os.environ['DB_PASS'],
 )
 conn.autocommit = True
 cur = conn.cursor()
