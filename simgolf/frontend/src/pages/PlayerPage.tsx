@@ -96,12 +96,6 @@ export function PlayerPage() {
                     <td>Tournament {t.tournament.number} Total</td>
                     <td className={styles.tdPts}>{t.total}</td>
                   </tr>
-                  {t.next_handicap != null && (
-                    <tr className={styles.handicapRow}>
-                      <td>New Handicap</td>
-                      <td className={styles.tdHandicap}>{t.next_handicap}</td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
