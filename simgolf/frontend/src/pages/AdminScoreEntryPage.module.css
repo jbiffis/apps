@@ -1,0 +1,307 @@
+.page {
+  padding-bottom: 3rem;
+}
+
+.loading {
+  text-align: center;
+  color: var(--color-muted);
+  padding: 2rem;
+}
+
+.breadcrumb {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+}
+
+.breadcrumb a {
+  color: var(--color-green);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  color: var(--color-green);
+  margin: 0 0 0.25rem;
+}
+
+.subtitle {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin: 0;
+}
+
+.saveArea {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+  font-style: italic;
+}
+
+.error {
+  color: #c0392b;
+  font-size: 0.85rem;
+}
+
+.savedMsg {
+  color: #2a7a2a;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btnSave {
+  background: var(--color-green);
+  color: var(--color-cream);
+  border: none;
+  border-radius: 4px;
+  padding: 0.6rem 1.25rem;
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btnSave:hover:not(:disabled) {
+  background: #1e3d1a;
+}
+
+.btnSave:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Table */
+.tableWrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--color-gold);
+  border-radius: 6px;
+}
+
+.table {
+  border-collapse: collapse;
+  min-width: max-content;
+  width: 100%;
+}
+
+.thName {
+  background: var(--color-green);
+  color: var(--color-cream);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-family: var(--font-serif);
+  font-size: 0.85rem;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 90px;
+}
+
+.thHole {
+  background: var(--color-green);
+  color: var(--color-cream);
+  padding: 0.35rem 0.4rem;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 0.8rem;
+  min-width: 52px;
+  white-space: nowrap;
+}
+
+.holeNum {
+  display: block;
+  font-size: 0.75rem;
+}
+
+.holePar {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+
+.thTotal {
+  background: var(--color-green);
+  color: var(--color-cream);
+  padding: 0.5rem 0.5rem;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 0.85rem;
+  min-width: 70px;
+}
+
+.parRow td {
+  background: #f5eed8;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--color-green);
+  text-align: center;
+  padding: 0.3rem 0.4rem;
+  border-bottom: 2px solid var(--color-gold);
+}
+
+.tdParLabel {
+  position: sticky;
+  left: 0;
+  background: #f5eed8 !important;
+  text-align: left !important;
+  padding-left: 0.75rem !important;
+  z-index: 1;
+}
+
+/* Player rows */
+.rowAlt {
+  background: #faf6ee;
+}
+
+.tdName {
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  color: var(--color-green);
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: white;
+  z-index: 1;
+  border-right: 1px solid #e0d8c8;
+}
+
+.rowAlt .tdName {
+  background: #faf6ee;
+}
+
+.tdCell {
+  padding: 0.25rem 0.25rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Score color coding */
+.eagle .scoreInput { background: #ffe066; border-color: #c9a000; font-weight: 700; }
+.birdie .scoreInput { background: #e8f5e8; border-color: #4caf50; }
+.bogey .scoreInput { background: #fff3e0; border-color: #ff9800; }
+.double .scoreInput { background: #fde8e8; border-color: #f44336; }
+.worse .scoreInput { background: #f5d0d0; border-color: #c62828; font-weight: 700; }
+
+.scoreInput {
+  width: 44px;
+  padding: 0.35rem 0.2rem;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--color-gold);
+  border-radius: 3px;
+  background: white;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.scoreInput::-webkit-outer-spin-button,
+.scoreInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.scoreInput:focus {
+  outline: 2px solid var(--color-green);
+  outline-offset: 0;
+  background: #f0f7f0;
+}
+
+.scoreInput::placeholder {
+  color: #ccc;
+  font-weight: 400;
+}
+
+/* Total column */
+.tdTotal {
+  text-align: center;
+  padding: 0.4rem 0.5rem;
+  border-left: 2px solid var(--color-gold);
+  min-width: 65px;
+}
+
+.totalGross {
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-green);
+}
+
+.totalOver {
+  display: block;
+  font-size: 0.75rem;
+  color: #c0392b;
+}
+
+.totalUnder {
+  display: block;
+  font-size: 0.75rem;
+  color: #2a7a2a;
+}
+
+.totalEven {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+/* Bottom actions */
+.bottomSave {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btnViewRound, .btnLive {
+  display: inline-block;
+  padding: 0.6rem 1.1rem;
+  border-radius: 4px;
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btnViewRound {
+  color: var(--color-green);
+  border: 1px solid var(--color-green);
+}
+
+.btnViewRound:hover {
+  background: #f0f7f0;
+}
+
+.btnLive {
+  background: var(--color-gold);
+  color: #333;
+}
+
+.btnLive:hover {
+  background: #b8973b;
+}

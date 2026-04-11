@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/',          label: 'Season' },
   { to: '/handicap',  label: 'Handicaps' },
   { to: '/prizes',    label: 'Prizes' },
+  { to: '/admin',     label: 'Admin' },
 ]
 
 export function Layout({ children }: LayoutProps) {

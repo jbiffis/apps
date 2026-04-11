@@ -582,7 +582,6 @@ return [
         $body = json_decode(file_get_contents('php://input'), true);
         $seasonId      = (int)($body['season_id'] ?? 0);
         $tournamentId  = isset($body['tournament_id']) ? (int)$body['tournament_id'] : null;
-        $roundNumber   = (int)($body['round_number'] ?? 0);
         $courseId      = (int)($body['course_id'] ?? 0);
         $nine          = $body['nine'] ?? '';
         $playedDate    = $body['played_date'] ?? '';
@@ -592,9 +591,17 @@ return [
         $ctpPrize      = (float)($body['ctp_prize_amount'] ?? 20.00);
         $chipInPot     = (float)($body['chip_in_pot'] ?? 0.00);
 
-        if (!$seasonId || !$roundNumber || !$courseId || !in_array($nine, ['front', 'back']) || !$playedDate) {
+        if (!$seasonId || !$courseId || !in_array($nine, ['front', 'back']) || !$playedDate) {
             http_response_code(400);
-            return ['error' => 'season_id, round_number, course_id, nine, played_date required'];
+            return ['error' => 'season_id, course_id, nine, played_date required'];
+        }
+
+        // Auto-calculate round number if not provided
+        $roundNumber = (int)($body['round_number'] ?? 0);
+        if (!$roundNumber) {
+            $stmt = $db->prepare("SELECT COALESCE(MAX(round_number), 0) + 1 FROM rounds WHERE season_id = ?");
+            $stmt->execute([$seasonId]);
+            $roundNumber = (int)$stmt->fetchColumn();
         }
 
         $stmt = $db->prepare("
@@ -672,8 +679,16 @@ return [
             foreach ($scoresets as $set) {
                 $playerId = (int)($set['player_id'] ?? 0);
                 if (!$playerId) continue;
-                foreach ($set['holes'] as $holeNum => $strokes) {
-                    $stmt->execute([$roundId, $playerId, (int)$holeNum, $strokes !== null ? (int)$strokes : null]);
+                foreach ($set['holes'] as $holeData) {
+                    // Accept both array-of-objects [{hole_number:N, strokes:N}] and keyed [N => strokes]
+                    if (is_array($holeData)) {
+                        $holeNum = (int)$holeData['hole_number'];
+                        $strokes = $holeData['strokes'] !== null ? (int)$holeData['strokes'] : null;
+                    } else {
+                        continue; // skip malformed
+                    }
+                    if (!$holeNum) continue;
+                    $stmt->execute([$roundId, $playerId, $holeNum, $strokes]);
                 }
             }
             $db->commit();

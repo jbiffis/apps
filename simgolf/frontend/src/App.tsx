@@ -7,6 +7,8 @@ import { PlayerPage } from './pages/PlayerPage'
 import { HandicapPage } from './pages/HandicapPage'
 import { PrizesPage } from './pages/PrizesPage'
 import { InRoundPage } from './pages/InRoundPage'
+import { AdminPage } from './pages/AdminPage'
+import { AdminScoreEntryPage } from './pages/AdminScoreEntryPage'
 
 function App() {
   return (
@@ -19,6 +21,8 @@ function App() {
         <Route path="/handicap" element={<HandicapPage />} />
         <Route path="/prizes" element={<PrizesPage />} />
         <Route path="/in-round/:id" element={<InRoundPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/rounds/:id/scores" element={<AdminScoreEntryPage />} />
       </Routes>
     </Layout>
   )
