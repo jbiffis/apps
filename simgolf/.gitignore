@@ -10,3 +10,6 @@ frontend/dist/
 
 # Postgres data
 postgres/data/
+
+# Secrets
+.env

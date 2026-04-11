@@ -17,32 +17,5 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./api:/var/www/api
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: simgolf
-      DB_USER: simgolf
-      DB_PASS: simgolf
-    depends_on:
-      postgres:
-        condition: service_healthy
+    env_file: .env
     restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: simgolf
-      POSTGRES_USER: simgolf
-      POSTGRES_PASSWORD: simgolf
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./postgres/initdb.d:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U simgolf -d simgolf"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
