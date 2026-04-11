@@ -156,7 +156,7 @@ export function RoundPage() {
                 })}
                 <td className={styles.tdStat}>{player.gross ?? '—'}</td>
                 <td className={styles.tdStat}>{player.handicap}</td>
-                <td className={styles.tdStat}>{player.net?.toFixed(0) ?? '—'}</td>
+                <td className={styles.tdStat}>{player.net != null ? (Number.isInteger(player.net) ? player.net : player.net.toFixed(1)) : '—'}</td>
                 <td className={styles.tdPts}>{player.points ?? '—'}</td>
               </tr>
             ))}
