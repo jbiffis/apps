@@ -69,6 +69,22 @@
   background: #1e3d1a;
 }
 
+.btnOutline {
+  background: transparent;
+  color: var(--color-green);
+  border: 1px solid var(--color-green);
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btnOutline:hover {
+  background: #f0f7f0;
+}
+
 .successMsg {
   background: #e6f4e6;
   border: 1px solid var(--color-green);
@@ -76,6 +92,119 @@
   padding: 0.75rem 1rem;
   color: var(--color-green);
   margin-bottom: 1rem;
+}
+
+/* Empty / warning states */
+.emptyState {
+  text-align: center;
+  padding: 3rem;
+  color: var(--color-muted);
+}
+
+.emptyIcon {
+  font-size: 3rem;
+  margin: 0 0 0.5rem;
+}
+
+.emptyText {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.warningBox {
+  background: #fff8e1;
+  border: 1px solid var(--color-gold);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+  color: #5a4200;
+}
+
+.hint {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  margin: 0.25rem 0 0.5rem;
+  font-style: italic;
+}
+
+/* Hole grid for course creation */
+.holeGrid {
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+
+.holeHeader {
+  display: grid;
+  grid-template-columns: 60px repeat(9, 52px);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.holeHeader span {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  font-family: var(--font-serif);
+}
+
+.holeHeader span:first-child {
+  text-align: left;
+}
+
+.holeRow {
+  display: grid;
+  grid-template-columns: 60px repeat(9, 52px);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.holeRowLabel {
+  font-size: 0.8rem;
+  color: var(--color-green);
+  font-weight: 600;
+  font-family: var(--font-serif);
+  display: flex;
+  align-items: center;
+}
+
+.holeInput {
+  width: 50px;
+  padding: 0.3rem 0.2rem;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 0.85rem;
+  border: 1px solid var(--color-gold);
+  border-radius: 3px;
+  background: white;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  box-sizing: border-box;
+}
+
+.holeInput::-webkit-outer-spin-button,
+.holeInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.holeInput:focus {
+  outline: 2px solid var(--color-green);
+  outline-offset: 0;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .formRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Create round form */

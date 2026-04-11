@@ -3,14 +3,10 @@ import { Link } from 'react-router-dom'
 import { api, type Season, type Round } from '../api'
 import styles from './AdminPage.module.css'
 
-interface Course {
-  id: number
-  name: string
-}
+interface Course { id: number; name: string }
+interface RoundWithStatus extends Round { score_count: number }
 
-interface RoundWithStatus extends Round {
-  score_count: number
-}
+const DEFAULT_PAR = [4, 5, 4, 4, 3, 4, 4, 3, 5]
 
 export function AdminPage() {
   const [seasons, setSeasons] = useState<Season[]>([])
@@ -18,9 +14,21 @@ export function AdminPage() {
   const [rounds, setRounds] = useState<RoundWithStatus[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
+  const [msg, setMsg] = useState('')
+
+  // Create season form
+  const [showSeasonForm, setShowSeasonForm] = useState(false)
+  const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString())
+  const [seasonName, setSeasonName] = useState('')
+
+  // Create course form
+  const [showCourseForm, setShowCourseForm] = useState(false)
+  const [courseName, setCourseName] = useState('')
+  const [coursePars, setCoursePars] = useState<string[]>(DEFAULT_PAR.map(String))
+  const [courseYardages, setCourseYardages] = useState<string[]>(Array(9).fill(''))
 
   // Create round form
-  const [showForm, setShowForm] = useState(false)
+  const [showRoundForm, setShowRoundForm] = useState(false)
   const [formCourseId, setFormCourseId] = useState('')
   const [formNine, setFormNine] = useState<'front' | 'back'>('front')
   const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10))
@@ -28,49 +36,98 @@ export function AdminPage() {
   const [formTournamentId, setFormTournamentId] = useState('')
   const [formCtpHole, setFormCtpHole] = useState('')
   const [formCtpYardage, setFormCtpYardage] = useState('')
-  const [formMsg, setFormMsg] = useState('')
   const [tournaments, setTournaments] = useState<Array<{ id: number; number: number; name: string }>>([])
 
+  async function loadSeasons() {
+    const s = await api.get<Season[]>('/seasons')
+    setSeasons(s)
+    return s
+  }
+
+  async function loadCourses() {
+    const c = await api.get<Course[]>('/courses')
+    setCourses(c)
+    if (c.length > 0) setFormCourseId(String(c[0].id))
+    return c
+  }
+
+  async function loadRounds(sid: number) {
+    setLoading(true)
+    try {
+      const [roundsData, summaryData] = await Promise.all([
+        api.get<{ rounds: Round[] }>(`/seasons/${sid}/rounds`),
+        api.get<{ tournaments: Array<{ id: number; number: number; name: string }> }>(`/seasons/${sid}/summary`),
+      ])
+      const roundList = roundsData.rounds
+      setTournaments(summaryData.tournaments)
+      if (summaryData.tournaments.length > 0) setFormTournamentId(String(summaryData.tournaments[0].id))
+
+      const withStatus = await Promise.all(roundList.map(r =>
+        api.get<{ players: Array<{ holes: Record<string, number | null> }> }>(`/rounds/${r.id}`)
+          .then(sc => {
+            const filledHoles = sc.players.reduce((sum, p) =>
+              sum + Object.values(p.holes || {}).filter(v => v != null).length, 0)
+            return { ...r, score_count: filledHoles } as RoundWithStatus
+          })
+      ))
+      setRounds(withStatus)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    Promise.all([
-      api.get<Season[]>('/seasons'),
-      api.get<Course[]>('/courses'),
-    ]).then(([s, c]) => {
-      setSeasons(s)
-      setCourses(c)
-      if (s.length > 0) setSeasonId(s[s.length - 1].id)
-      if (c.length > 0) setFormCourseId(String(c[0].id))
-    }).finally(() => setLoading(false))
+    Promise.all([loadSeasons(), loadCourses()]).then(([s]) => {
+      if (s.length > 0) {
+        const latest = s[s.length - 1]
+        setSeasonId(latest.id)
+        loadRounds(latest.id)
+      } else {
+        setLoading(false)
+        setShowSeasonForm(true)
+      }
+    })
   }, [])
 
   useEffect(() => {
-    if (!seasonId) return
-    setLoading(true)
-    Promise.all([
-      api.get<{ rounds: Round[] }>(`/seasons/${seasonId}/rounds`),
-      api.get<{ tournaments: Array<{ id: number; number: number; name: string }> }>(`/seasons/${seasonId}/summary`),
-    ]).then(([roundsData, summaryData]) => {
-      // Fetch score counts for each round
-      const roundList = roundsData.rounds
-      Promise.all(roundList.map(r =>
-        api.get<{ players: Array<{ holes: Record<string, number | null> }> }>(`/rounds/${r.id}`)
-          .then(sc => {
-            const filledHoles = sc.players.reduce((sum, p) => {
-              return sum + Object.values(p.holes || {}).filter(v => v != null).length
-            }, 0)
-            return { ...r, score_count: filledHoles } as RoundWithStatus
-          })
-      )).then(withStatus => {
-        setRounds(withStatus)
-      })
-      setTournaments(summaryData.tournaments)
-      if (summaryData.tournaments.length > 0) setFormTournamentId(String(summaryData.tournaments[0].id))
-    }).finally(() => setLoading(false))
+    if (seasonId) loadRounds(seasonId)
   }, [seasonId])
+
+  async function createSeason() {
+    const year = parseInt(seasonYear)
+    if (!year) return
+    setMsg('')
+    try {
+      const s = await api.post<Season>('/seasons', { year, name: seasonName || `${year} Season` })
+      const updated = await loadSeasons()
+      setSeasonId(s.id)
+      setShowSeasonForm(false)
+      setMsg(`Season "${updated.find(x => x.id === s.id)?.name}" created with 3 tournaments.`)
+    } catch { setMsg('Error creating season.') }
+  }
+
+  async function createCourse() {
+    if (!courseName.trim()) return
+    setMsg('')
+    try {
+      const holes = coursePars.map((par, i) => ({
+        hole_number: i + 1,
+        par: parseInt(par) || 4,
+        yardage: parseInt(courseYardages[i]) || 0,
+      }))
+      await api.post('/courses', { name: courseName.trim(), holes })
+      await loadCourses()
+      setShowCourseForm(false)
+      setCourseName('')
+      setCoursePars(DEFAULT_PAR.map(String))
+      setCourseYardages(Array(9).fill(''))
+      setMsg(`Course "${courseName}" created.`)
+    } catch { setMsg('Error creating course.') }
+  }
 
   async function createRound() {
     if (!seasonId || !formCourseId) return
-    setFormMsg('')
+    setMsg('')
     try {
       await api.post('/rounds', {
         season_id: seasonId,
@@ -82,35 +139,21 @@ export function AdminPage() {
         ctp_hole: formCtpHole ? Number(formCtpHole) : null,
         ctp_yardage: formCtpYardage ? Number(formCtpYardage) : null,
       })
-      setFormMsg('Round created!')
-      setShowForm(false)
-      // Refresh rounds
-      const roundsData = await api.get<{ rounds: Round[] }>(`/seasons/${seasonId}/rounds`)
-      const roundList = roundsData.rounds
-      const withStatus = await Promise.all(roundList.map(r =>
-        api.get<{ players: Array<{ holes: Record<string, number | null> }> }>(`/rounds/${r.id}`)
-          .then(sc => {
-            const filledHoles = sc.players.reduce((sum, p) =>
-              sum + Object.values(p.holes || {}).filter(v => v != null).length, 0)
-            return { ...r, score_count: filledHoles } as RoundWithStatus
-          })
-      ))
-      setRounds(withStatus)
-    } catch (e) {
-      setFormMsg('Error creating round.')
-    }
+      setShowRoundForm(false)
+      setMsg('Round created!')
+      if (seasonId) loadRounds(seasonId)
+    } catch { setMsg('Error creating round.') }
   }
-
-  if (loading) return <p className={styles.loading}>Loading…</p>
 
   const practiceRounds = rounds.filter(r => r.is_practice)
   const tournamentRounds = rounds.filter(r => !r.is_practice)
 
   function RoundRow({ r }: { r: RoundWithStatus }) {
     const hasScores = r.score_count > 0
-    const label = r.is_practice ? 'Practice' : `T${tournaments.find(t => t.id === r.tournament_id)?.number ?? '?'}`
+    const tNum = tournaments.find(t => t.id === r.tournament_id)?.number
+    const label = r.is_practice ? 'Practice' : `T${tNum ?? '?'}`
     return (
-      <tr key={r.id}>
+      <tr>
         <td className={styles.tdLabel}>{label}</td>
         <td className={styles.tdRound}>Rd {r.round_number}</td>
         <td className={styles.tdCourse}>{r.course_name} · {r.nine}</td>
@@ -118,19 +161,14 @@ export function AdminPage() {
         <td className={styles.tdStatus}>
           {hasScores
             ? <span className={styles.statusDone}>✓ {r.score_count} scores</span>
-            : <span className={styles.statusEmpty}>No scores</span>
-          }
+            : <span className={styles.statusEmpty}>No scores</span>}
         </td>
         <td className={styles.tdActions}>
           <Link className={styles.btnEnter} to={`/admin/rounds/${r.id}/scores`}>
             {hasScores ? 'Edit' : 'Enter'} Scores
           </Link>
-          <Link className={styles.btnLive} to={`/in-round/${r.id}`}>
-            Live
-          </Link>
-          <Link className={styles.btnView} to={`/round/${r.id}`}>
-            View
-          </Link>
+          <Link className={styles.btnLive} to={`/in-round/${r.id}`}>Live</Link>
+          <Link className={styles.btnView} to={`/round/${r.id}`}>View</Link>
         </td>
       </tr>
     )
@@ -141,24 +179,143 @@ export function AdminPage() {
       <div className={styles.headerRow}>
         <h1 className={styles.title}>Admin</h1>
         <div className={styles.controls}>
-          <select
-            className={styles.select}
-            value={seasonId ?? ''}
-            onChange={e => setSeasonId(Number(e.target.value))}
-          >
-            {seasons.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          <button className={styles.btnCreate} onClick={() => setShowForm(true)}>
-            + New Round
+          {seasons.length > 0 && (
+            <select
+              className={styles.select}
+              value={seasonId ?? ''}
+              onChange={e => setSeasonId(Number(e.target.value))}
+            >
+              {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          <button className={styles.btnOutline} onClick={() => setShowSeasonForm(v => !v)}>
+            + Season
           </button>
+          <button className={styles.btnOutline} onClick={() => setShowCourseForm(v => !v)}>
+            + Course
+          </button>
+          {seasons.length > 0 && courses.length > 0 && (
+            <button className={styles.btnCreate} onClick={() => setShowRoundForm(v => !v)}>
+              + Round
+            </button>
+          )}
         </div>
       </div>
 
-      {formMsg && <p className={styles.successMsg}>{formMsg}</p>}
+      {msg && <p className={styles.successMsg}>{msg}</p>}
 
-      {showForm && (
+      {/* No seasons state */}
+      {seasons.length === 0 && !loading && (
+        <div className={styles.emptyState}>
+          <p className={styles.emptyIcon}>⛳</p>
+          <p className={styles.emptyText}>No seasons yet. Create a season to get started.</p>
+        </div>
+      )}
+
+      {/* Create season form */}
+      {showSeasonForm && (
+        <div className={styles.formCard}>
+          <h2 className={styles.formTitle}>Create Season</h2>
+          <div className={styles.formRow}>
+            <label className={styles.label}>
+              Year
+              <input
+                type="number"
+                className={styles.input}
+                value={seasonYear}
+                onChange={e => setSeasonYear(e.target.value)}
+                min={2020}
+                max={2040}
+              />
+            </label>
+            <label className={styles.label}>
+              Name (optional)
+              <input
+                type="text"
+                className={styles.input}
+                value={seasonName}
+                onChange={e => setSeasonName(e.target.value)}
+                placeholder={`${seasonYear} Season`}
+              />
+            </label>
+          </div>
+          <p className={styles.hint}>Creates the season with 3 tournaments (T1, T2, T3) automatically.</p>
+          <div className={styles.formActions}>
+            <button className={styles.btnPrimary} onClick={createSeason}>Create Season</button>
+            <button className={styles.btnSecondary} onClick={() => setShowSeasonForm(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Create course form */}
+      {showCourseForm && (
+        <div className={styles.formCard}>
+          <h2 className={styles.formTitle}>Add Course</h2>
+          <label className={styles.label} style={{ marginBottom: '0.75rem' }}>
+            Course Name
+            <input
+              type="text"
+              className={styles.input}
+              value={courseName}
+              onChange={e => setCourseName(e.target.value)}
+              placeholder="e.g. Pebble Beach"
+            />
+          </label>
+          <p className={styles.hint}>Enter par and yardage for each hole:</p>
+          <div className={styles.holeGrid}>
+            <div className={styles.holeHeader}>
+              <span>Hole</span>
+              {Array.from({ length: 9 }, (_, i) => <span key={i}>{i + 1}</span>)}
+            </div>
+            <div className={styles.holeRow}>
+              <span className={styles.holeRowLabel}>Par</span>
+              {coursePars.map((par, i) => (
+                <input
+                  key={i}
+                  type="number"
+                  min={3}
+                  max={5}
+                  className={styles.holeInput}
+                  value={par}
+                  onChange={e => {
+                    const next = [...coursePars]
+                    next[i] = e.target.value
+                    setCoursePars(next)
+                  }}
+                />
+              ))}
+            </div>
+            <div className={styles.holeRow}>
+              <span className={styles.holeRowLabel}>Yds</span>
+              {courseYardages.map((yds, i) => (
+                <input
+                  key={i}
+                  type="number"
+                  min={50}
+                  max={700}
+                  className={styles.holeInput}
+                  value={yds}
+                  placeholder="—"
+                  onChange={e => {
+                    const next = [...courseYardages]
+                    next[i] = e.target.value
+                    setCourseYardages(next)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className={styles.formActions}>
+            <button className={styles.btnPrimary} onClick={createCourse} disabled={!courseName.trim()}>
+              Add Course
+            </button>
+            <button className={styles.btnSecondary} onClick={() => setShowCourseForm(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Create round form */}
+      {showRoundForm && seasons.length > 0 && courses.length > 0 && (
         <div className={styles.formCard}>
           <h2 className={styles.formTitle}>Create Round</h2>
           <div className={styles.formGrid}>
@@ -192,69 +349,57 @@ export function AdminPage() {
               </label>
             )}
             <label className={styles.label}>
-              CTP Hole (optional)
-              <input type="number" min={1} max={9} className={styles.input} value={formCtpHole} onChange={e => setFormCtpHole(e.target.value)} placeholder="e.g. 5" />
+              CTP Hole
+              <input type="number" min={1} max={9} className={styles.input} value={formCtpHole} onChange={e => setFormCtpHole(e.target.value)} placeholder="optional" />
             </label>
             <label className={styles.label}>
-              CTP Yardage (optional)
-              <input type="number" min={1} className={styles.input} value={formCtpYardage} onChange={e => setFormCtpYardage(e.target.value)} placeholder="e.g. 166" />
+              CTP Yardage
+              <input type="number" min={1} className={styles.input} value={formCtpYardage} onChange={e => setFormCtpYardage(e.target.value)} placeholder="optional" />
             </label>
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnPrimary} onClick={createRound}>Create</button>
-            <button className={styles.btnSecondary} onClick={() => setShowForm(false)}>Cancel</button>
+            <button className={styles.btnPrimary} onClick={createRound}>Create Round</button>
+            <button className={styles.btnSecondary} onClick={() => setShowRoundForm(false)}>Cancel</button>
           </div>
         </div>
       )}
 
-      {practiceRounds.length > 0 && (
+      {/* No courses warning */}
+      {seasons.length > 0 && courses.length === 0 && !loading && (
+        <div className={styles.warningBox}>
+          <strong>No courses yet.</strong> Add at least one course before creating rounds.
+        </div>
+      )}
+
+      {/* Rounds tables */}
+      {loading && <p className={styles.loading}>Loading…</p>}
+
+      {!loading && practiceRounds.length > 0 && (
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Practice Rounds</h2>
           <div className="table-scroll">
             <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Round</th>
-                  <th>Course</th>
-                  <th>Date</th>
-                  <th>Scores</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {practiceRounds.map(r => <RoundRow key={r.id} r={r} />)}
-              </tbody>
+              <thead><tr><th>Type</th><th>Round</th><th>Course</th><th>Date</th><th>Scores</th><th>Actions</th></tr></thead>
+              <tbody>{practiceRounds.map(r => <RoundRow key={r.id} r={r} />)}</tbody>
             </table>
           </div>
         </section>
       )}
 
-      {tournamentRounds.length > 0 && (
+      {!loading && tournamentRounds.length > 0 && (
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Tournament Rounds</h2>
           <div className="table-scroll">
             <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Round</th>
-                  <th>Course</th>
-                  <th>Date</th>
-                  <th>Scores</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tournamentRounds.map(r => <RoundRow key={r.id} r={r} />)}
-              </tbody>
+              <thead><tr><th>Type</th><th>Round</th><th>Course</th><th>Date</th><th>Scores</th><th>Actions</th></tr></thead>
+              <tbody>{tournamentRounds.map(r => <RoundRow key={r.id} r={r} />)}</tbody>
             </table>
           </div>
         </section>
       )}
 
-      {rounds.length === 0 && !loading && (
-        <p className={styles.empty}>No rounds yet. Create one above.</p>
+      {!loading && seasons.length > 0 && rounds.length === 0 && (
+        <p className={styles.empty}>No rounds yet for this season. Click <strong>+ Round</strong> to add one.</p>
       )}
     </div>
   )
