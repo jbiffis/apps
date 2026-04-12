@@ -123,6 +123,9 @@ export interface PrizeWinning {
   played_date?: string
   tournament_number?: number
   tournament_name?: string
+  tournament_week?: number
+  ctp_hole?: number
+  ctp_distance?: number
 }
 
 export interface SeasonSummaryRow {

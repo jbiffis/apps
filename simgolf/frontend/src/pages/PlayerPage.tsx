@@ -1,8 +1,37 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { api, type PlayerDetail } from '../api'
+import { api, type PlayerDetail, type PrizeWinning } from '../api'
 import { SeasonSelect } from '../components/SeasonSelect'
 import styles from './PlayerPage.module.css'
+
+function formatPrize(pw: PrizeWinning): string {
+  const weekLabel = pw.tournament_number != null && pw.tournament_week != null
+    ? `T${pw.tournament_number} Week ${pw.tournament_week}`
+    : pw.round_number != null
+      ? `Round ${pw.round_number}`
+      : null
+
+  switch (pw.type) {
+    case 'ctp': {
+      const parts = [weekLabel]
+      if (pw.ctp_hole != null) parts.push(`Hole ${pw.ctp_hole}`)
+      if (pw.ctp_distance != null) parts.push(`${Number(pw.ctp_distance).toFixed(1)}'`)
+      return `${parts.join(', ')} — Closest to the Pin`
+    }
+    case 'chip_in':
+      return weekLabel ? `${weekLabel} — Chip In` : 'Chip In'
+    case 't1st':
+      return pw.tournament_number != null
+        ? `Tournament ${pw.tournament_number} 1st Place`
+        : pw.description ?? '1st Place'
+    case 't2nd':
+      return pw.tournament_number != null
+        ? `Tournament ${pw.tournament_number} 2nd Place`
+        : pw.description ?? '2nd Place'
+    default:
+      return pw.description ?? pw.type
+  }
+}
 
 export function PlayerPage() {
   const { id } = useParams<{ id: string }>()
@@ -115,9 +144,8 @@ export function PlayerPage() {
                 <ul className={styles.prizeList}>
                   {data.prize_winnings.map(pw => (
                     <li key={pw.id} className={styles.prizeItem}>
-                      {pw.description ?? `${pw.type} — $${pw.amount}`}
-                      {' '}
-                      <strong>${pw.amount}</strong>
+                      <span>{formatPrize(pw)}</span>
+                      <strong>${Number(pw.amount).toFixed(2)}</strong>
                     </li>
                   ))}
                 </ul>

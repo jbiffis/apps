@@ -292,7 +292,14 @@ return [
 
         // Prize winnings
         $stmt = $db->prepare("
-            SELECT pw.*, r.round_number, r.played_date, t.number as tournament_number, t.name as tournament_name
+            SELECT pw.*, r.round_number, r.played_date, r.ctp_hole,
+                t.number as tournament_number, t.name as tournament_name,
+                CASE WHEN t.id IS NOT NULL THEN
+                    r.round_number - (SELECT MIN(r2.round_number) FROM rounds r2 WHERE r2.tournament_id = t.id) + 1
+                END as tournament_week,
+                (SELECT ctp.distance_feet FROM closest_to_pin ctp
+                 WHERE ctp.round_id = pw.round_id AND ctp.player_id = pw.player_id AND ctp.won = TRUE
+                 LIMIT 1) as ctp_distance
             FROM prize_winnings pw
             LEFT JOIN rounds r ON r.id = pw.round_id
             LEFT JOIN tournaments t ON t.id = pw.tournament_id

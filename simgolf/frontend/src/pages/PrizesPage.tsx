@@ -19,7 +19,7 @@ export function PrizesPage() {
 
   return (
     <div>
-      <h1 className={styles.title}>Prize Winnings</h1>
+      <h1 className={styles.title}>Prize Purse</h1>
       <SeasonSelect value={seasonId} onChange={setSeasonId} />
 
       {loading && <p className={styles.loading}>Loading…</p>}
