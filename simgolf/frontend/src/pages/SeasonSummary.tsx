@@ -29,7 +29,7 @@ export function SeasonSummaryPage() {
           <table className={`${styles.table} table-sticky`}>
             <thead>
               <tr>
-                <th className={styles.thPos}>Pos</th>
+                <th className={styles.thPos}></th>
                 <th className={styles.thName}>Player</th>
                 {data.tournaments.map((t: Tournament) => (
                   <th key={t.id} className={styles.thTournament}>
