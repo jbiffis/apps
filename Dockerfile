@@ -1,7 +1,7 @@
 FROM php:8.3-apache
 
 # Enable required Apache modules
-RUN a2enmod rewrite headers proxy proxy_http
+RUN a2enmod rewrite headers proxy proxy_fcgi
 
 # Apache security hardening
 COPY apache-security.conf /etc/apache2/conf-enabled/security.conf
