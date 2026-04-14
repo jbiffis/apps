@@ -66,4 +66,8 @@ _Add a brief overview of your project architecture_
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+### Adding Courses via API
+
+When creating a golf course, add holes in two separate API calls:
+1. `POST /courses` with the front 9 holes (holes 1–9)
+2. Then add the back 9 holes (holes 10–18) in a second call

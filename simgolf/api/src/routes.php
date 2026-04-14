@@ -596,9 +596,10 @@ return [
 
         foreach ($holes as $h) {
             $stmt = $db->prepare(
-                "UPDATE holes SET par = ?, yardage = ? WHERE course_id = ? AND hole_number = ?"
+                "INSERT INTO holes (course_id, hole_number, par, yardage) VALUES (?, ?, ?, ?)
+                 ON CONFLICT (course_id, hole_number) DO UPDATE SET par = EXCLUDED.par, yardage = EXCLUDED.yardage"
             );
-            $stmt->execute([(int)$h['par'], (int)$h['yardage'], $courseId, (int)$h['hole_number']]);
+            $stmt->execute([$courseId, (int)$h['hole_number'], (int)$h['par'], (int)$h['yardage']]);
         }
 
         $stmt = $db->prepare("SELECT * FROM holes WHERE course_id = ? ORDER BY hole_number");
