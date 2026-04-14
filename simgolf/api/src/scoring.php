@@ -224,11 +224,11 @@ function getRoundScorecard(PDO $db, int $roundId): array
         ];
     }
 
-    // Round net scores to nearest half stroke for ranking
+    // Round net scores to nearest whole number for ranking
     $rankingScores = [];
     foreach ($netScores as $pid => $n) {
         if ($n === null) { $rankingScores[$pid] = null; continue; }
-        $rankingScores[$pid] = round((float)$n * 2) / 2;
+        $rankingScores[$pid] = round((float)$n);
     }
     $points = calculatePoints($rankingScores, count($players));
     foreach ($points as $pid => $pts) {
