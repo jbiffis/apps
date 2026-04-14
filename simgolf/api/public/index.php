@@ -16,8 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Strip /api prefix
-$path = preg_replace('#^/api#', '', $requestUri);
+// Strip optional /simgolf prefix and /api prefix
+$path = preg_replace('#^(/simgolf)?/api#', '', $requestUri);
 $path = rtrim($path, '/') ?: '/';
 
 // Simple router
