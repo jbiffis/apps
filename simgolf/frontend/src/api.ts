@@ -26,7 +26,13 @@ async function put<T>(path: string, body: unknown): Promise<T> {
   return res.json()
 }
 
-export const api = { get, post, put }
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
+  return res.json()
+}
+
+export const api = { get, post, put, del }
 
 // Types
 export interface Season {

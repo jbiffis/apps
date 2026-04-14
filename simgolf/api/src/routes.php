@@ -973,6 +973,16 @@ return [
         return ['tournament' => $tournament, 'prizes_awarded' => $prizes];
     },
 
+    // ── Delete round ─────────────────────────────────────────
+    'DELETE /rounds/{roundId}' => function (PDO $db, array $p): array {
+        $roundId = (int)$p['roundId'];
+        $stmt = $db->prepare("DELETE FROM rounds WHERE id = ? RETURNING id");
+        $stmt->execute([$roundId]);
+        $deleted = $stmt->fetchColumn();
+        if (!$deleted) { http_response_code(404); return ['error' => 'Not found']; }
+        return ['success' => true, 'deleted_id' => $deleted];
+    },
+
     // ── Delete prize winning ──────────────────────────────────
     'DELETE /prize-winnings/{id}' => function (PDO $db, array $p): array {
         $stmt = $db->prepare("DELETE FROM prize_winnings WHERE id = ? RETURNING id");

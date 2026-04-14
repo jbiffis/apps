@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { api, type Scorecard, type ScoreEdit } from '../api'
 import { GolfScore } from '../components/GolfScore'
 import styles from './RoundPage.module.css'
 
 export function RoundPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [data, setData] = useState<Scorecard | null>(null)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
@@ -21,6 +22,17 @@ export function RoundPage() {
 
   if (loading) return <p className={styles.loading}>Loading…</p>
   if (!data) return <p>Round not found.</p>
+
+  async function deleteRound() {
+    if (!id || !data) return
+    if (!window.confirm(`Delete Round ${data.round.round_number} (${data.round.course_name} · ${data.round.nine})? This will delete all scores, CTP entries, and edit history for this round.`)) return
+    await api.del(`/rounds/${id}`)
+    if (data.round.tournament_id) {
+      navigate(`/tournament/${data.round.tournament_id}`)
+    } else {
+      navigate('/')
+    }
+  }
 
   const { round, holes, players, ctp_entries, edits } = data
 
@@ -76,7 +88,10 @@ export function RoundPage() {
           <span className={styles.subtitle}>{round.course_name} · {round.nine} nine · {round.played_date}</span>
         </h1>
         {!editMode && (
-          <button className={styles.editBtn} onClick={() => setConfirmEdit(true)}>Edit Scores</button>
+          <div className={styles.editActions}>
+            <button className={styles.editBtn} onClick={() => setConfirmEdit(true)}>Edit Scores</button>
+            <button className={styles.deleteBtn} onClick={deleteRound}>Delete Round</button>
+          </div>
         )}
         {editMode && (
           <div className={styles.editActions}>

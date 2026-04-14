@@ -59,7 +59,23 @@
   color: var(--text-muted);
 }
 
-.editActions { display: flex; align-items: center; }
+.editActions { display: flex; align-items: center; gap: 0.5rem; }
+
+.deleteBtn {
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1.5px solid #c0392b;
+  background: transparent;
+  color: #c0392b;
+  cursor: pointer;
+}
+
+.deleteBtn:hover {
+  background: #c0392b;
+  color: white;
+}
 
 .confirmBar {
   background: #fff8e8;
