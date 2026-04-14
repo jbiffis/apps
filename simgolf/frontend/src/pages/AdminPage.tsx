@@ -6,8 +6,6 @@ import styles from './AdminPage.module.css'
 interface Course { id: number; name: string; holes: Hole[] }
 interface RoundWithStatus extends Round { score_count: number }
 
-const DEFAULT_PAR = [4, 5, 4, 4, 3, 4, 4, 3, 5]
-
 export function AdminPage() {
   const [seasons, setSeasons] = useState<Season[]>([])
   const [seasonId, setSeasonId] = useState<number | null>(null)
@@ -20,12 +18,6 @@ export function AdminPage() {
   const [showSeasonForm, setShowSeasonForm] = useState(false)
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString())
   const [seasonName, setSeasonName] = useState('')
-
-  // Create course form
-  const [showCourseForm, setShowCourseForm] = useState(false)
-  const [courseName, setCourseName] = useState('')
-  const [coursePars, setCoursePars] = useState<string[]>(DEFAULT_PAR.map(String))
-  const [courseYardages, setCourseYardages] = useState<string[]>(Array(9).fill(''))
 
   // Create round form
   const [showRoundForm, setShowRoundForm] = useState(false)
@@ -54,11 +46,10 @@ export function AdminPage() {
   async function loadRounds(sid: number) {
     setLoading(true)
     try {
-      const [roundsData, summaryData] = await Promise.all([
-        api.get<{ rounds: Round[] }>(`/seasons/${sid}/rounds`),
+      const [roundList, summaryData] = await Promise.all([
+        api.get<Round[]>(`/seasons/${sid}/rounds`),
         api.get<{ tournaments: Array<{ id: number; number: number; name: string }> }>(`/seasons/${sid}/summary`),
       ])
-      const roundList = roundsData.rounds
       setTournaments(summaryData.tournaments)
       if (summaryData.tournaments.length > 0) setFormTournamentId(String(summaryData.tournaments[0].id))
 
@@ -104,25 +95,6 @@ export function AdminPage() {
       setShowSeasonForm(false)
       setMsg(`Season "${updated.find(x => x.id === s.id)?.name}" created with 3 tournaments.`)
     } catch { setMsg('Error creating season.') }
-  }
-
-  async function createCourse() {
-    if (!courseName.trim()) return
-    setMsg('')
-    try {
-      const holes = coursePars.map((par, i) => ({
-        hole_number: i + 1,
-        par: parseInt(par) || 4,
-        yardage: parseInt(courseYardages[i]) || 0,
-      }))
-      await api.post('/courses', { name: courseName.trim(), holes })
-      await loadCourses()
-      setShowCourseForm(false)
-      setCourseName('')
-      setCoursePars(DEFAULT_PAR.map(String))
-      setCourseYardages(Array(9).fill(''))
-      setMsg(`Course "${courseName}" created.`)
-    } catch { setMsg('Error creating course.') }
   }
 
   async function createRound() {
@@ -191,9 +163,7 @@ export function AdminPage() {
           <button className={styles.btnOutline} onClick={() => setShowSeasonForm(v => !v)}>
             + Season
           </button>
-          <button className={styles.btnOutline} onClick={() => setShowCourseForm(v => !v)}>
-            + Course
-          </button>
+          <Link className={styles.btnOutline} to="/admin/courses">Courses</Link>
           {seasons.length > 0 && courses.length > 0 && (
             <button className={styles.btnCreate} onClick={() => setShowRoundForm(v => !v)}>
               + Round
@@ -243,73 +213,6 @@ export function AdminPage() {
           <div className={styles.formActions}>
             <button className={styles.btnPrimary} onClick={createSeason}>Create Season</button>
             <button className={styles.btnSecondary} onClick={() => setShowSeasonForm(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* Create course form */}
-      {showCourseForm && (
-        <div className={styles.formCard}>
-          <h2 className={styles.formTitle}>Add Course</h2>
-          <label className={styles.label} style={{ marginBottom: '0.75rem' }}>
-            Course Name
-            <input
-              type="text"
-              className={styles.input}
-              value={courseName}
-              onChange={e => setCourseName(e.target.value)}
-              placeholder="e.g. Pebble Beach"
-            />
-          </label>
-          <p className={styles.hint}>Enter par and yardage for each hole:</p>
-          <div className={styles.holeGrid}>
-            <div className={styles.holeHeader}>
-              <span>Hole</span>
-              {Array.from({ length: 9 }, (_, i) => <span key={i}>{i + 1}</span>)}
-            </div>
-            <div className={styles.holeRow}>
-              <span className={styles.holeRowLabel}>Par</span>
-              {coursePars.map((par, i) => (
-                <input
-                  key={i}
-                  type="number"
-                  min={3}
-                  max={5}
-                  className={styles.holeInput}
-                  value={par}
-                  onChange={e => {
-                    const next = [...coursePars]
-                    next[i] = e.target.value
-                    setCoursePars(next)
-                  }}
-                />
-              ))}
-            </div>
-            <div className={styles.holeRow}>
-              <span className={styles.holeRowLabel}>Yds</span>
-              {courseYardages.map((yds, i) => (
-                <input
-                  key={i}
-                  type="number"
-                  min={50}
-                  max={700}
-                  className={styles.holeInput}
-                  value={yds}
-                  placeholder="—"
-                  onChange={e => {
-                    const next = [...courseYardages]
-                    next[i] = e.target.value
-                    setCourseYardages(next)
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-          <div className={styles.formActions}>
-            <button className={styles.btnPrimary} onClick={createCourse} disabled={!courseName.trim()}>
-              Add Course
-            </button>
-            <button className={styles.btnSecondary} onClick={() => setShowCourseForm(false)}>Cancel</button>
           </div>
         </div>
       )}
@@ -367,7 +270,7 @@ export function AdminPage() {
       {/* No courses warning */}
       {seasons.length > 0 && courses.length === 0 && !loading && (
         <div className={styles.warningBox}>
-          <strong>No courses yet.</strong> Add at least one course before creating rounds.
+          <strong>No courses yet.</strong> <Link to="/admin/courses">Add a course</Link> before creating rounds.
         </div>
       )}
 
@@ -400,121 +303,6 @@ export function AdminPage() {
 
       {!loading && seasons.length > 0 && rounds.length === 0 && (
         <p className={styles.empty}>No rounds yet for this season. Click <strong>+ Round</strong> to add one.</p>
-      )}
-
-      {/* Courses list */}
-      {courses.length > 0 && (
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Courses</h2>
-          {courses.map(c => (
-            <CourseCard key={c.id} course={c} onSave={loadCourses} setMsg={setMsg} />
-          ))}
-        </section>
-      )}
-    </div>
-  )
-}
-
-function CourseCard({ course, onSave, setMsg }: {
-  course: Course
-  onSave: () => Promise<unknown>
-  setMsg: (m: string) => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(course.name)
-  const [pars, setPars] = useState(course.holes.map(h => String(h.par)))
-  const [yardages, setYardages] = useState(course.holes.map(h => String(h.yardage || '')))
-  const [saving, setSaving] = useState(false)
-
-  function reset() {
-    setName(course.name)
-    setPars(course.holes.map(h => String(h.par)))
-    setYardages(course.holes.map(h => String(h.yardage || '')))
-    setEditing(false)
-  }
-
-  async function save() {
-    setSaving(true)
-    try {
-      await api.put(`/courses/${course.id}`, {
-        name,
-        holes: course.holes.map((h, i) => ({
-          hole_number: h.hole_number,
-          par: parseInt(pars[i]) || h.par,
-          yardage: parseInt(yardages[i]) || 0,
-        })),
-      })
-      await onSave()
-      setEditing(false)
-      setMsg(`Course "${name}" updated.`)
-    } catch {
-      setMsg('Error updating course.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const totalPar = pars.reduce((s, p) => s + (parseInt(p) || 0), 0)
-
-  return (
-    <div className={styles.courseCard}>
-      <div className={styles.courseHeader}>
-        {editing ? (
-          <input className={styles.input} value={name} onChange={e => setName(e.target.value)} style={{ maxWidth: '240px' }} />
-        ) : (
-          <span className={styles.courseName}>{course.name}</span>
-        )}
-        <span className={styles.coursePar}>Par {totalPar}</span>
-        {!editing && (
-          <button className={styles.btnOutline} onClick={() => setEditing(true)} style={{ marginLeft: 'auto', padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}>
-            Edit
-          </button>
-        )}
-      </div>
-      <div className={styles.holeGrid}>
-        <div className={styles.holeHeader}>
-          <span>Hole</span>
-          {course.holes.map((_, i) => <span key={i}>{i + 1}</span>)}
-        </div>
-        <div className={styles.holeRow}>
-          <span className={styles.holeRowLabel}>Par</span>
-          {pars.map((par, i) => (
-            <input
-              key={i}
-              type="number"
-              min={3}
-              max={5}
-              className={styles.holeInput}
-              value={par}
-              disabled={!editing}
-              onChange={e => { const next = [...pars]; next[i] = e.target.value; setPars(next) }}
-            />
-          ))}
-        </div>
-        <div className={styles.holeRow}>
-          <span className={styles.holeRowLabel}>Yds</span>
-          {yardages.map((yds, i) => (
-            <input
-              key={i}
-              type="number"
-              min={50}
-              max={700}
-              className={styles.holeInput}
-              value={yds}
-              disabled={!editing}
-              placeholder="—"
-              onChange={e => { const next = [...yardages]; next[i] = e.target.value; setYardages(next) }}
-            />
-          ))}
-        </div>
-      </div>
-      {editing && (
-        <div className={styles.formActions}>
-          <button className={styles.btnPrimary} onClick={save} disabled={saving || !name.trim()}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <button className={styles.btnSecondary} onClick={reset}>Cancel</button>
-        </div>
       )}
     </div>
   )

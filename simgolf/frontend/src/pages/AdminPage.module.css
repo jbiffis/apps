@@ -445,3 +445,12 @@
   color: var(--color-muted);
   font-family: var(--font-serif);
 }
+
+.breadcrumbLink {
+  color: var(--color-green);
+  text-decoration: none;
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
