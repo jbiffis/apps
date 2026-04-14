@@ -22,6 +22,10 @@ export function InRoundPage() {
   const [chipInAmount, setChipInAmount] = useState('')
   const [chipInMsg, setChipInMsg] = useState('')
 
+  // CTP hole setup
+  const [courseHoles, setCourseHoles] = useState<{ hole_number: number; par: number; yardage: number }[]>([])
+  const [ctpHoleInput, setCtpHoleInput] = useState('')
+
   // CTP award state
   const [ctpFinalized, setCtpFinalized] = useState(false)
   const [ctpMsg, setCtpMsg] = useState('')
@@ -31,10 +35,21 @@ export function InRoundPage() {
     Promise.all([
       api.get<{ round: Round; ctp_entries: CtpEntry[] }>(`/rounds/${id}`),
       api.get<Player[]>('/players'),
-    ]).then(([scorecard, pList]) => {
+    ]).then(async ([scorecard, pList]) => {
       setRound(scorecard.round)
       setCtpEntries(scorecard.ctp_entries)
       setPlayers(pList)
+      if (!scorecard.round.ctp_hole) {
+        const courses = await api.get<{ id: number; holes: { hole_number: number; par: number; yardage: number }[] }[]>('/courses')
+        const course = courses.find(c => c.id === scorecard.round.course_id)
+        if (course) {
+          const nine = scorecard.round.nine
+          const holes = course.holes.filter(h =>
+            nine === 'front' ? h.hole_number <= 9 : h.hole_number >= 10
+          )
+          setCourseHoles(holes)
+        }
+      }
     }).finally(() => setLoading(false))
   }, [id])
 
@@ -48,6 +63,17 @@ export function InRoundPage() {
     setCtpEntries(sc.ctp_entries)
     setCtpPlayerId('')
     setCtpDistance('')
+  }
+
+  async function setCtpHole() {
+    if (!id || !ctpHoleInput) return
+    const hole = courseHoles.find(h => h.hole_number === Number(ctpHoleInput))
+    if (!hole) return
+    const updated = await api.put<Round>(`/rounds/${id}`, {
+      ctp_hole: hole.hole_number,
+      ctp_yardage: hole.yardage,
+    })
+    setRound(updated)
   }
 
   async function awardCtp() {
@@ -100,7 +126,23 @@ export function InRoundPage() {
         {round.ctp_hole ? (
           <p className={styles.ctpInfo}>Hole {round.ctp_hole} — {round.ctp_yardage} yards · Prize: ${round.ctp_prize_amount}</p>
         ) : (
-          <p className={styles.muted}>No CTP hole set for this round.</p>
+          <div className={styles.ctpForm}>
+            <select
+              className={styles.select}
+              value={ctpHoleInput}
+              onChange={e => setCtpHoleInput(e.target.value)}
+            >
+              <option value="">Select CTP hole…</option>
+              {courseHoles.filter(h => h.par === 3).map(h => (
+                <option key={h.hole_number} value={h.hole_number}>
+                  Hole {h.hole_number} — Par 3, {h.yardage} yds
+                </option>
+              ))}
+            </select>
+            <button className={styles.btnAdd} onClick={setCtpHole} disabled={!ctpHoleInput}>
+              Set CTP Hole
+            </button>
+          </div>
         )}
 
         {!ctpFinalized && (
