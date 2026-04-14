@@ -224,11 +224,11 @@ function getRoundScorecard(PDO $db, int $roundId): array
         ];
     }
 
-    // Round net scores to nearest whole number for ranking
+    // Round net scores for ranking: exact .5 values kept, others rounded to integer
     $rankingScores = [];
     foreach ($netScores as $pid => $n) {
         if ($n === null) { $rankingScores[$pid] = null; continue; }
-        $rankingScores[$pid] = round((float)$n);
+        $rankingScores[$pid] = (fmod(abs((float)$n), 1.0) === 0.5) ? $n : round($n);
     }
     $points = calculatePoints($rankingScores, count($players));
     foreach ($points as $pid => $pts) {
