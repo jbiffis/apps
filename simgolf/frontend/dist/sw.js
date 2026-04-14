@@ -1,1 +1,25 @@
-if(!self.define){let e,i={};const a=(a,n)=>(a=new URL(a+".js",n).href,i[a]||new Promise(i=>{if("document"in self){const e=document.createElement("script");e.src=a,e.onload=i,document.head.appendChild(e)}else e=a,importScripts(a),i()}).then(()=>{let e=i[a];if(!e)throw new Error(`Module ${a} didn’t register its module`);return e}));self.define=(n,s)=>{const c=e||("document"in self?document.currentScript.src:"")||location.href;if(i[c])return;let o={};const r=e=>a(e,c),f={module:{uri:c},exports:o,require:r};i[c]=Promise.all(n.map(e=>f[e]||r(e))).then(e=>(s(...e),o))}}define(["./workbox-354287e6"],function(e){"use strict";self.skipWaiting(),e.clientsClaim(),e.precacheAndRoute([{url:"registerSW.js",revision:"1829ce8098d460535f453efcdf7ab22d"},{url:"pwa-maskable-512x512.png",revision:"174bf4453052118eb1da692c72bcd52a"},{url:"pwa-512x512.png",revision:"89b3f818af4d77c41482153d15dd9120"},{url:"pwa-192x192.png",revision:"c5c300acd83b18aafea87b85e726e7f0"},{url:"index.html",revision:"3a7b00a94db6f846d117228cbcdafe98"},{url:"icons.svg",revision:"3b4fcfcf393eca4d264dca4a4663bc37"},{url:"golf-flag.svg",revision:"6fd5a5dfde994a661fb1f5965590d357"},{url:"favicon.svg",revision:"7e840862161341271697daa99a40d76b"},{url:"favicon.ico",revision:"016507be23723fcec58fe955537b5604"},{url:"apple-touch-icon.png",revision:"80e32b8582c70c2bb504a8f01baacae9"},{url:"assets/index-CRtUwjd0.js",revision:null},{url:"assets/index-BjvJBa9w.css",revision:null},{url:"apple-touch-icon.png",revision:"80e32b8582c70c2bb504a8f01baacae9"},{url:"favicon.ico",revision:"016507be23723fcec58fe955537b5604"},{url:"favicon.svg",revision:"7e840862161341271697daa99a40d76b"},{url:"golf-flag.svg",revision:"6fd5a5dfde994a661fb1f5965590d357"},{url:"pwa-192x192.png",revision:"c5c300acd83b18aafea87b85e726e7f0"},{url:"pwa-512x512.png",revision:"89b3f818af4d77c41482153d15dd9120"},{url:"pwa-maskable-512x512.png",revision:"174bf4453052118eb1da692c72bcd52a"},{url:"manifest.webmanifest",revision:"92b68e5315e85a099f6509a812a890b3"}],{}),e.cleanupOutdatedCaches(),e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("index.html"),{denylist:[/^\/simgolf\/api\//]})),e.registerRoute(/\/simgolf\/api\//,new e.NetworkFirst({cacheName:"api-cache",networkTimeoutSeconds:3,plugins:[new e.ExpirationPlugin({maxEntries:50,maxAgeSeconds:86400})]}),"GET"),e.registerRoute(/^https:\/\/fonts\.googleapis\.com\/.*/i,new e.CacheFirst({cacheName:"google-fonts-cache",plugins:[new e.ExpirationPlugin({maxEntries:10,maxAgeSeconds:31536e3})]}),"GET"),e.registerRoute(/^https:\/\/fonts\.gstatic\.com\/.*/i,new e.CacheFirst({cacheName:"gstatic-fonts-cache",plugins:[new e.ExpirationPlugin({maxEntries:10,maxAgeSeconds:31536e3})]}),"GET")});
+
+self.addEventListener('install', (e) => {
+  self.skipWaiting();
+});
+self.addEventListener('activate', (e) => {
+  self.registration.unregister()
+    .then(() => self.clients.matchAll())
+    .then((clients) => {
+      clients.forEach((client) => {
+        if (client instanceof WindowClient)
+          client.navigate(client.url);
+      });
+      return Promise.resolve();
+    })
+    .then(() => {
+      self.caches.keys().then((cacheNames) => {
+        Promise.all(
+          cacheNames.map((cacheName) => {
+            return self.caches.delete(cacheName);
+          }),
+        );
+      })
+    });
+});
+    
