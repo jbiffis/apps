@@ -936,6 +936,246 @@ return [
         return ['tournament' => $tournament, 'prizes_awarded' => $prizes];
     },
 
+    // ══════════════════════════════════════════════════════════
+    // SCORECARD SUBMISSION API (for OCR / automation)
+    // ══════════════════════════════════════════════════════════
+
+    // ── Find or create a course ──────────────────────────────
+    // Looks up by name (case-insensitive). Creates with holes if not found.
+    // Body: { name: string, holes: [{hole_number, par, yardage}, ...] }
+    'POST /courses/find-or-create' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $name  = trim($body['name'] ?? '');
+        $holes = $body['holes'] ?? [];
+
+        if (!$name) {
+            http_response_code(400);
+            return ['error' => 'name required'];
+        }
+
+        // Try to find existing course by name (case-insensitive)
+        $stmt = $db->prepare("SELECT * FROM courses WHERE LOWER(name) = LOWER(?)");
+        $stmt->execute([$name]);
+        $course = $stmt->fetch();
+
+        if ($course) {
+            // Return existing course with its holes
+            $stmt = $db->prepare("SELECT * FROM holes WHERE course_id = ? ORDER BY hole_number");
+            $stmt->execute([$course['id']]);
+            return ['course' => $course, 'holes' => $stmt->fetchAll(), 'created' => false];
+        }
+
+        // Create new course
+        if (empty($holes) || count($holes) !== 9) {
+            http_response_code(400);
+            return ['error' => 'holes array with exactly 9 holes required when creating a new course'];
+        }
+
+        $stmt = $db->prepare("INSERT INTO courses (name) VALUES (?) RETURNING id");
+        $stmt->execute([$name]);
+        $courseId = $stmt->fetchColumn();
+
+        $stmt = $db->prepare("INSERT INTO holes (course_id, hole_number, par, yardage) VALUES (?, ?, ?, ?)");
+        foreach ($holes as $h) {
+            $stmt->execute([$courseId, (int)$h['hole_number'], (int)$h['par'], (int)$h['yardage']]);
+        }
+
+        $stmt = $db->prepare("SELECT * FROM courses WHERE id = ?");
+        $stmt->execute([$courseId]);
+        $course = $stmt->fetch();
+        $stmt = $db->prepare("SELECT * FROM holes WHERE course_id = ? ORDER BY hole_number");
+        $stmt->execute([$courseId]);
+        return ['course' => $course, 'holes' => $stmt->fetchAll(), 'created' => true];
+    },
+
+    // ── Submit a full scorecard (one-shot round + scores) ────
+    // Creates a round and enters all scores in one call.
+    // If round_id is provided, appends scores to the existing round instead.
+    //
+    // Body: {
+    //   round_id: int|null,          -- if set, append to this round
+    //   season_id: int,              -- required if creating new round
+    //   tournament_id: int|null,     -- null for practice rounds
+    //   is_practice: bool,
+    //   nine: "front"|"back",
+    //   played_date: "YYYY-MM-DD",
+    //   round_number: int|null,      -- auto-calculated if omitted
+    //   course: {                    -- course info (find-or-create)
+    //     name: string,
+    //     holes: [{hole_number, par, yardage}, ...]
+    //   },
+    //   players: [                   -- player scores
+    //     {
+    //       name: string,            -- matched to existing players
+    //       scores: [4, 5, 3, ...]   -- strokes for holes 1-9 in order
+    //                                -- OR [{hole_number: 1, strokes: 4}, ...]
+    //     }, ...
+    //   ]
+    // }
+    'POST /rounds/submit-scorecard' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+
+        $roundId     = isset($body['round_id']) ? (int)$body['round_id'] : null;
+        $seasonId    = (int)($body['season_id'] ?? 0);
+        $tournamentId = isset($body['tournament_id']) ? (int)$body['tournament_id'] : null;
+        $isPractice  = (bool)($body['is_practice'] ?? false);
+        $nine        = $body['nine'] ?? '';
+        $playedDate  = $body['played_date'] ?? '';
+        $roundNumber = isset($body['round_number']) ? (int)$body['round_number'] : null;
+        $courseData   = $body['course'] ?? null;
+        $playersData  = $body['players'] ?? [];
+
+        if (empty($playersData)) {
+            http_response_code(400);
+            return ['error' => 'players array required'];
+        }
+
+        $db->beginTransaction();
+        try {
+            // ── Resolve or create the round ──────────────────
+            if ($roundId) {
+                // Appending to an existing round
+                $stmt = $db->prepare("SELECT * FROM rounds WHERE id = ?");
+                $stmt->execute([$roundId]);
+                $round = $stmt->fetch();
+                if (!$round) {
+                    $db->rollBack();
+                    http_response_code(404);
+                    return ['error' => "Round $roundId not found"];
+                }
+                $courseId = (int)$round['course_id'];
+            } else {
+                // Creating a new round — need course + round metadata
+                if (!$courseData || empty($courseData['name'])) {
+                    $db->rollBack();
+                    http_response_code(400);
+                    return ['error' => 'course object with name required when creating a new round'];
+                }
+                if (!$seasonId || !in_array($nine, ['front', 'back']) || !$playedDate) {
+                    $db->rollBack();
+                    http_response_code(400);
+                    return ['error' => 'season_id, nine, and played_date required when creating a new round'];
+                }
+
+                // Find or create the course
+                $courseName = trim($courseData['name']);
+                $stmt = $db->prepare("SELECT id FROM courses WHERE LOWER(name) = LOWER(?)");
+                $stmt->execute([$courseName]);
+                $courseId = $stmt->fetchColumn();
+
+                if (!$courseId) {
+                    $courseHoles = $courseData['holes'] ?? [];
+                    if (empty($courseHoles) || count($courseHoles) !== 9) {
+                        $db->rollBack();
+                        http_response_code(400);
+                        return ['error' => 'course.holes array with 9 holes required for a new course'];
+                    }
+                    $stmt = $db->prepare("INSERT INTO courses (name) VALUES (?) RETURNING id");
+                    $stmt->execute([$courseName]);
+                    $courseId = (int)$stmt->fetchColumn();
+                    $ins = $db->prepare("INSERT INTO holes (course_id, hole_number, par, yardage) VALUES (?, ?, ?, ?)");
+                    foreach ($courseHoles as $h) {
+                        $ins->execute([$courseId, (int)$h['hole_number'], (int)$h['par'], (int)$h['yardage']]);
+                    }
+                }
+
+                // Auto-calculate round number
+                if (!$roundNumber) {
+                    $stmt = $db->prepare("SELECT COALESCE(MAX(round_number), 0) + 1 FROM rounds WHERE season_id = ?");
+                    $stmt->execute([$seasonId]);
+                    $roundNumber = (int)$stmt->fetchColumn();
+                }
+
+                // Create the round
+                $stmt = $db->prepare("
+                    INSERT INTO rounds (season_id, tournament_id, round_number, course_id, nine, played_date, is_practice)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    RETURNING id
+                ");
+                $stmt->execute([$seasonId, $tournamentId, $roundNumber, $courseId, $nine, $playedDate, $isPractice]);
+                $roundId = (int)$stmt->fetchColumn();
+            }
+
+            // ── Resolve player names to IDs ──────────────────
+            // Load all players once for matching
+            $allPlayers = $db->query("SELECT id, LOWER(name) as lname, name FROM players")->fetchAll();
+            $playerMap = [];
+            foreach ($allPlayers as $pl) {
+                $playerMap[$pl['lname']] = (int)$pl['id'];
+            }
+
+            $scoreStmt = $db->prepare("
+                INSERT INTO scores (round_id, player_id, hole_number, strokes)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (round_id, player_id, hole_number) DO UPDATE SET strokes = EXCLUDED.strokes
+            ");
+
+            $matched = [];
+            $unmatched = [];
+
+            foreach ($playersData as $pd) {
+                $playerName = trim($pd['name'] ?? '');
+                if (!$playerName) continue;
+
+                $lowerName = strtolower($playerName);
+                $playerId = $playerMap[$lowerName] ?? null;
+
+                if (!$playerId) {
+                    $unmatched[] = $playerName;
+                    continue;
+                }
+
+                // Parse scores — accept two formats:
+                // 1. Array of ints: [4, 5, 3, ...] → holes 1-9
+                // 2. Array of objects: [{hole_number: 1, strokes: 4}, ...]
+                $scores = $pd['scores'] ?? [];
+                $holesInserted = 0;
+
+                foreach ($scores as $idx => $val) {
+                    if (is_array($val)) {
+                        $holeNum = (int)($val['hole_number'] ?? 0);
+                        $strokes = isset($val['strokes']) ? (int)$val['strokes'] : null;
+                    } else {
+                        // Simple array: index 0 = hole 1, index 1 = hole 2, etc.
+                        $holeNum = $idx + 1;
+                        $strokes = $val !== null ? (int)$val : null;
+                    }
+                    if ($holeNum < 1 || $holeNum > 9) continue;
+                    $scoreStmt->execute([$roundId, $playerId, $holeNum, $strokes]);
+                    $holesInserted++;
+                }
+
+                $matched[] = ['player_id' => $playerId, 'name' => $playerName, 'holes_entered' => $holesInserted];
+            }
+
+            $db->commit();
+
+            // Build response
+            $stmt = $db->prepare("
+                SELECT r.*, c.name as course_name
+                FROM rounds r JOIN courses c ON c.id = r.course_id
+                WHERE r.id = ?
+            ");
+            $stmt->execute([$roundId]);
+            $round = $stmt->fetch();
+
+            $response = [
+                'success'   => true,
+                'round'     => $round,
+                'players_matched' => $matched,
+            ];
+            if (!empty($unmatched)) {
+                $response['players_unmatched'] = $unmatched;
+            }
+            return $response;
+
+        } catch (Throwable $e) {
+            $db->rollBack();
+            http_response_code(500);
+            return ['error' => $e->getMessage()];
+        }
+    },
+
     // ── Delete prize winning ──────────────────────────────────
     'DELETE /prize-winnings/{id}' => function (PDO $db, array $p): array {
         $stmt = $db->prepare("DELETE FROM prize_winnings WHERE id = ? RETURNING id");
