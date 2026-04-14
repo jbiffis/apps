@@ -117,8 +117,8 @@ export function AdminPage() {
     } catch { setMsg('Error creating round.') }
   }
 
-  const practiceRounds = rounds.filter(r => r.is_practice)
-  const tournamentRounds = rounds.filter(r => !r.is_practice)
+  const practiceRounds = rounds.filter(r => r.is_practice).sort((a, b) => a.round_number - b.round_number)
+  const tournamentRounds = rounds.filter(r => !r.is_practice).sort((a, b) => a.round_number - b.round_number)
 
   function RoundRow({ r }: { r: RoundWithStatus }) {
     const hasScores = r.score_count > 0
