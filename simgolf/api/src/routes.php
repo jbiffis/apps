@@ -395,7 +395,7 @@ return [
         }
 
         // Mark winner
-        $stmt = $db->prepare("UPDATE closest_to_pin SET won = 1 WHERE id = ?");
+        $stmt = $db->prepare("UPDATE closest_to_pin SET won = true WHERE id = ?");
         $stmt->execute([$winner['id']]);
 
         // Record prize winning
