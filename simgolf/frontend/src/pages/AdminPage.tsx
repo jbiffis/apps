@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, type Season, type Round } from '../api'
+import { api, type Season, type Round, type Hole } from '../api'
 import styles from './AdminPage.module.css'
 
-interface Course { id: number; name: string }
+interface Course { id: number; name: string; holes: Hole[] }
 interface RoundWithStatus extends Round { score_count: number }
 
 const DEFAULT_PAR = [4, 5, 4, 4, 3, 4, 4, 3, 5]
@@ -400,6 +400,121 @@ export function AdminPage() {
 
       {!loading && seasons.length > 0 && rounds.length === 0 && (
         <p className={styles.empty}>No rounds yet for this season. Click <strong>+ Round</strong> to add one.</p>
+      )}
+
+      {/* Courses list */}
+      {courses.length > 0 && (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Courses</h2>
+          {courses.map(c => (
+            <CourseCard key={c.id} course={c} onSave={loadCourses} setMsg={setMsg} />
+          ))}
+        </section>
+      )}
+    </div>
+  )
+}
+
+function CourseCard({ course, onSave, setMsg }: {
+  course: Course
+  onSave: () => Promise<unknown>
+  setMsg: (m: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(course.name)
+  const [pars, setPars] = useState(course.holes.map(h => String(h.par)))
+  const [yardages, setYardages] = useState(course.holes.map(h => String(h.yardage || '')))
+  const [saving, setSaving] = useState(false)
+
+  function reset() {
+    setName(course.name)
+    setPars(course.holes.map(h => String(h.par)))
+    setYardages(course.holes.map(h => String(h.yardage || '')))
+    setEditing(false)
+  }
+
+  async function save() {
+    setSaving(true)
+    try {
+      await api.put(`/courses/${course.id}`, {
+        name,
+        holes: course.holes.map((h, i) => ({
+          hole_number: h.hole_number,
+          par: parseInt(pars[i]) || h.par,
+          yardage: parseInt(yardages[i]) || 0,
+        })),
+      })
+      await onSave()
+      setEditing(false)
+      setMsg(`Course "${name}" updated.`)
+    } catch {
+      setMsg('Error updating course.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const totalPar = pars.reduce((s, p) => s + (parseInt(p) || 0), 0)
+
+  return (
+    <div className={styles.courseCard}>
+      <div className={styles.courseHeader}>
+        {editing ? (
+          <input className={styles.input} value={name} onChange={e => setName(e.target.value)} style={{ maxWidth: '240px' }} />
+        ) : (
+          <span className={styles.courseName}>{course.name}</span>
+        )}
+        <span className={styles.coursePar}>Par {totalPar}</span>
+        {!editing && (
+          <button className={styles.btnOutline} onClick={() => setEditing(true)} style={{ marginLeft: 'auto', padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}>
+            Edit
+          </button>
+        )}
+      </div>
+      <div className={styles.holeGrid}>
+        <div className={styles.holeHeader}>
+          <span>Hole</span>
+          {course.holes.map((_, i) => <span key={i}>{i + 1}</span>)}
+        </div>
+        <div className={styles.holeRow}>
+          <span className={styles.holeRowLabel}>Par</span>
+          {pars.map((par, i) => (
+            <input
+              key={i}
+              type="number"
+              min={3}
+              max={5}
+              className={styles.holeInput}
+              value={par}
+              disabled={!editing}
+              onChange={e => { const next = [...pars]; next[i] = e.target.value; setPars(next) }}
+            />
+          ))}
+        </div>
+        <div className={styles.holeRow}>
+          <span className={styles.holeRowLabel}>Yds</span>
+          {yardages.map((yds, i) => (
+            <input
+              key={i}
+              type="number"
+              min={50}
+              max={700}
+              className={styles.holeInput}
+              value={yds}
+              disabled={!editing}
+              placeholder="—"
+              onChange={e => { const next = [...yardages]; next[i] = e.target.value; setYardages(next) }}
+            />
+          ))}
+        </div>
+      </div>
+      {editing && (
+        <div className={styles.formActions}>
+          <button className={styles.btnPrimary} onClick={save} disabled={saving || !name.trim()}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button className={styles.btnSecondary} onClick={reset}>Cancel</button>
+        </div>
       )}
     </div>
   )

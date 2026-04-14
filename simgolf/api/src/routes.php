@@ -581,6 +581,31 @@ return [
         return $courses;
     },
 
+    // ── Update course ────────────────────────────────────────
+    'PUT /courses/{courseId}' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $courseId = (int)$p['courseId'];
+        $name = trim($body['name'] ?? '');
+        $holes = $body['holes'] ?? [];
+        if (!$name) { http_response_code(400); return ['error' => 'name required']; }
+
+        $stmt = $db->prepare("UPDATE courses SET name = ? WHERE id = ? RETURNING *");
+        $stmt->execute([$name, $courseId]);
+        $course = $stmt->fetch();
+        if (!$course) { http_response_code(404); return ['error' => 'Not found']; }
+
+        foreach ($holes as $h) {
+            $stmt = $db->prepare(
+                "UPDATE holes SET par = ?, yardage = ? WHERE course_id = ? AND hole_number = ?"
+            );
+            $stmt->execute([(int)$h['par'], (int)$h['yardage'], $courseId, (int)$h['hole_number']]);
+        }
+
+        $stmt = $db->prepare("SELECT * FROM holes WHERE course_id = ? ORDER BY hole_number");
+        $stmt->execute([$courseId]);
+        return ['course' => $course, 'holes' => $stmt->fetchAll()];
+    },
+
     // ── Update tournament name ────────────────────────────────
     'PUT /tournaments/{tournamentId}' => function (PDO $db, array $p): array {
         $body = json_decode(file_get_contents('php://input'), true);

@@ -416,3 +416,32 @@
   padding: 3rem;
   font-style: italic;
 }
+
+/* Course cards */
+.courseCard {
+  background: white;
+  border: 1px solid var(--color-gold);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.courseHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.courseName {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-green);
+}
+
+.coursePar {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  font-family: var(--font-serif);
+}
