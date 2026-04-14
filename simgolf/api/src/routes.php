@@ -652,7 +652,7 @@ return [
             RETURNING id
         ");
         $stmt->execute([$seasonId, $tournamentId, $roundNumber, $courseId, $nine, $playedDate,
-                        $isPractice, $ctpHole, $ctpYardage, $ctpPrize, $chipInPot]);
+                        $isPractice ? 'true' : 'false', $ctpHole, $ctpYardage, $ctpPrize, $chipInPot]);
         $id = $stmt->fetchColumn();
 
         $stmt = $db->prepare("
