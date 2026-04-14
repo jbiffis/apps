@@ -24,8 +24,16 @@ return [
         $stmt->execute([$seasonId]);
         $tournaments = $stmt->fetchAll();
 
-        // Get all players
-        $players = $db->query("SELECT * FROM players ORDER BY name")->fetchAll();
+        // Get players for this season (only those with scores in this season)
+        $stmt = $db->prepare("
+            SELECT DISTINCT p.* FROM players p
+            JOIN scores s ON s.player_id = p.id
+            JOIN rounds r ON r.id = s.round_id
+            WHERE r.season_id = ?
+            ORDER BY p.name
+        ");
+        $stmt->execute([$seasonId]);
+        $players = $stmt->fetchAll();
 
         // For each tournament, sum points for each player
         $playerTotals = [];
@@ -113,7 +121,16 @@ return [
         $stmt->execute([$tid]);
         $rounds = $stmt->fetchAll();
 
-        $players = $db->query("SELECT * FROM players ORDER BY name")->fetchAll();
+        // Get players for this season (only those with scores)
+        $stmt = $db->prepare("
+            SELECT DISTINCT p.* FROM players p
+            JOIN scores s ON s.player_id = p.id
+            JOIN rounds r ON r.id = s.round_id
+            WHERE r.season_id = ?
+            ORDER BY p.name
+        ");
+        $stmt->execute([$tournament['season_id']]);
+        $players = $stmt->fetchAll();
 
         // Build per-round points
         $playerData = [];
@@ -312,7 +329,16 @@ return [
         $stmt->execute([$seasonId]);
         $tournaments = $stmt->fetchAll();
 
-        $players = $db->query("SELECT * FROM players ORDER BY name")->fetchAll();
+        // Get players for this season
+        $stmt = $db->prepare("
+            SELECT DISTINCT p.* FROM players p
+            JOIN scores s ON s.player_id = p.id
+            JOIN rounds r ON r.id = s.round_id
+            WHERE r.season_id = ?
+            ORDER BY p.name
+        ");
+        $stmt->execute([$seasonId]);
+        $players = $stmt->fetchAll();
 
         $result = [];
         foreach ($tournaments as $tournament) {
@@ -337,11 +363,13 @@ return [
         $stmt = $db->prepare("
             SELECT p.id, p.name, COALESCE(SUM(pw.amount), 0) as total
             FROM players p
+            JOIN scores s ON s.player_id = p.id
+            JOIN rounds r ON r.id = s.round_id AND r.season_id = ?
             LEFT JOIN prize_winnings pw ON pw.player_id = p.id AND pw.season_id = ?
             GROUP BY p.id, p.name
             ORDER BY total DESC
         ");
-        $stmt->execute([$seasonId]);
+        $stmt->execute([$seasonId, $seasonId]);
         return $stmt->fetchAll();
     },
 
@@ -465,7 +493,9 @@ return [
     // ── Handicap recalculation ────────────────────────────────
     'POST /seasons/{seasonId}/recalculate-handicaps' => function (PDO $db, array $p): array {
         $seasonId = (int)$p['seasonId'];
-        $players = $db->query("SELECT * FROM players")->fetchAll();
+        $stmt = $db->prepare("SELECT DISTINCT p.* FROM players p JOIN scores s ON s.player_id = p.id JOIN rounds r ON r.id = s.round_id WHERE r.season_id = ? ORDER BY p.name");
+        $stmt->execute([$seasonId]);
+        $players = $stmt->fetchAll();
         $stmt = $db->prepare("SELECT * FROM tournaments WHERE season_id = ? ORDER BY number");
         $stmt->execute([$seasonId]);
         $tournaments = $stmt->fetchAll();
@@ -801,7 +831,9 @@ return [
         // For T3: use T1+T2 rounds
         if ($tNum === 1) {
             // Delegate to existing T1 logic via the existing endpoint logic
-            $players = $db->query("SELECT * FROM players")->fetchAll();
+            $stmt = $db->prepare("SELECT DISTINCT p.* FROM players p JOIN scores s ON s.player_id = p.id JOIN rounds r ON r.id = s.round_id WHERE r.season_id = ? ORDER BY p.name");
+            $stmt->execute([$seasonId]);
+            $players = $stmt->fetchAll();
             $stmt = $db->prepare("SELECT * FROM tournaments WHERE season_id = ? ORDER BY number");
             $stmt->execute([$seasonId]);
             $tournaments = $stmt->fetchAll();
@@ -834,7 +866,9 @@ return [
 
         if (!$targetTournament) { http_response_code(404); return ['error' => "Tournament $tNum not found"]; }
 
-        $players = $db->query("SELECT * FROM players")->fetchAll();
+        $stmt = $db->prepare("SELECT DISTINCT p.* FROM players p JOIN scores s ON s.player_id = p.id JOIN rounds r ON r.id = s.round_id WHERE r.season_id = ? ORDER BY p.name");
+        $stmt->execute([$seasonId]);
+        $players = $stmt->fetchAll();
         $updated = [];
 
         foreach ($players as $player) {
@@ -896,7 +930,9 @@ return [
         $roundIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
         $playerPoints = [];
-        $players = $db->query("SELECT * FROM players")->fetchAll();
+        $stmt = $db->prepare("SELECT DISTINCT p.* FROM players p JOIN scores s ON s.player_id = p.id JOIN rounds r ON r.id = s.round_id WHERE r.season_id = ? ORDER BY p.name");
+        $stmt->execute([$tournament['season_id']]);
+        $players = $stmt->fetchAll();
         foreach ($players as $p2) { $playerPoints[$p2['id']] = ['name' => $p2['name'], 'points' => 0]; }
 
         foreach ($roundIds as $rid) {
