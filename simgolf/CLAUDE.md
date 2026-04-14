@@ -50,24 +50,74 @@ bd close <id>         # Complete work
 <!-- END BEADS INTEGRATION -->
 
 
-## Build & Test
-
-_Add your build and test commands here_
-
-```bash
-# Example:
-# npm install
-# npm test
-```
-
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+- **Frontend**: React SPA in `frontend/`, served at `/simgolf/`
+- **API**: PHP REST API in `api/`, served at `/simgolf/api/`
+- **Database**: PostgreSQL, schema in `postgres/initdb.d/001_schema.sql`
+- API base URL: `https://apps.biffis.com/simgolf/api`
 
-## Conventions & Patterns
+## Player IDs
 
-### Adding Courses via API
+| ID | Name    |
+|----|---------|
+| 1  | Shea    |
+| 2  | Sonat   |
+| 3  | Michael |
+| 4  | Cody    |
+| 5  | Jeremy  |
+| 6  | Lance   |
+| 7  | Tim     |
+| 8  | Lindsay |
 
-When creating a golf course, add holes in two separate API calls:
-1. `POST /courses` with the front 9 holes (holes 1–9)
-2. Then add the back 9 holes (holes 10–18) in a second call
+## Entering Scorecard Data from Screenshots
+
+When the user provides a SimGolf scorecard screenshot, follow this workflow:
+
+### 1. Extract data from the image
+- **Course name** (may be partially hidden at top)
+- **Hole data**: par and yardage for all 18 holes (front + back nine)
+- **Player scores**: hole-by-hole strokes for the front or back nine played
+- **Round settings**: date, nine played (front/back), tees
+- **Verify** each player's hole scores sum to the displayed OUT/IN total
+
+### 2. Check existing state
+Fetch in parallel:
+```
+GET /courses          — check if course already exists
+GET /tournaments/{id} — get tournament details, existing rounds, season_id
+```
+
+### 3. Create course (if new)
+Two separate API calls (required):
+1. `POST /courses` with front 9 holes (1–9) and name
+2. `PUT /courses/{id}` with back 9 holes (10–18) — uses upsert
+
+### 4. Create the round
+```
+POST /rounds
+{
+  "season_id": <from tournament>,
+  "tournament_id": <given by user>,
+  "course_id": <from step 3 or existing>,
+  "nine": "front" or "back",
+  "played_date": "YYYY-MM-DD",  (from round settings DATE field)
+  "round_number": <given by user>,
+  "is_practice": false
+}
+```
+
+### 5. Enter scores (parallel calls)
+For each player shown on the scorecard:
+```
+POST /rounds/{roundId}/scores
+{ "player_id": <id>, "holes": {"1": 5, "2": 4, ...} }
+```
+- Only enter scores for players who have scores (not `--`)
+- Players not on the scorecard are automatically marked absent
+
+### 6. Verify
+```
+GET /rounds/{roundId}
+```
+Check gross totals match the scorecard image.
