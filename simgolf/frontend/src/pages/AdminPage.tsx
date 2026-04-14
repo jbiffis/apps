@@ -344,7 +344,7 @@ export function AdminPage() {
               <label className={styles.label}>
                 Tournament
                 <select className={styles.select} value={formTournamentId} onChange={e => setFormTournamentId(e.target.value)}>
-                  {tournaments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {tournaments.map(t => <option key={t.id} value={t.id}>Tournament {t.number}</option>)}
                 </select>
               </label>
             )}

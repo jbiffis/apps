@@ -25,7 +25,7 @@ export function HandicapPage() {
 
       {data.map(block => (
         <div key={block.tournament.id} className={styles.block}>
-          <h2 className={styles.tournamentTitle}>{block.tournament.name}</h2>
+          <h2 className={styles.tournamentTitle}>Tournament {block.tournament.number}</h2>
           <table className={styles.table}>
             <thead>
               <tr>

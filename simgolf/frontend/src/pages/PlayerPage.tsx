@@ -66,7 +66,7 @@ export function PlayerPage() {
           {/* Tournaments */}
           {data.tournaments.map(t => (
             <div key={t.tournament.id} className={styles.tournamentBlock}>
-              <h2 className={styles.tournamentTitle}>{t.tournament.name}</h2>
+              <h2 className={styles.tournamentTitle}>Tournament {t.tournament.number}</h2>
               <table className={styles.roundTable}>
                 <thead>
                   <tr>

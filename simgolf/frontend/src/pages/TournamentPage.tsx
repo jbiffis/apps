@@ -23,9 +23,9 @@ export function TournamentPage() {
   return (
     <div>
       <div className={styles.breadcrumb}>
-        <Link to="/">Season</Link> / {tournament.name}
+        <Link to="/">Season</Link> / Tournament {tournament.number}
       </div>
-      <h1 className={styles.title}>{tournament.name}</h1>
+      <h1 className={styles.title}>Tournament {tournament.number}</h1>
 
       <div className="table-scroll">
         <table className={`${styles.table} table-sticky`}>
