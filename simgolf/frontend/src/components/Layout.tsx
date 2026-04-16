@@ -21,7 +21,8 @@ export function Layout({ children }: LayoutProps) {
         <div className={styles.headerInner}>
           <Link to="/" className={styles.brand}>
             <span className={styles.brandIcon}>⛳</span>
-            <span className={styles.brandText}>Sim Golf League</span>
+            <span className={styles.brandText}>Creekside SIM Golf League</span>
+            <span className={styles.brandIcon}>⛳</span>
           </Link>
         </div>
       </header>
@@ -43,7 +44,7 @@ export function Layout({ children }: LayoutProps) {
       </main>
 
       <footer className={styles.footer}>
-        <p>Sim Golf League &copy; 2026</p>
+        <p>Creekside SIM Golf League &copy; 2026</p>
       </footer>
     </div>
   )
