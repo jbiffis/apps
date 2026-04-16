@@ -158,15 +158,17 @@ function getRoundScorecard(PDO $db, int $roundId): array
     $seasonId = $round['season_id'];
 
     // Get players for this season (only those with scores or handicaps in this season)
+    // Use handicap_overrides for this round if present, otherwise use tournament handicap
     $stmt = $db->prepare("
         SELECT p.id, p.name,
-               h.value as handicap
+               COALESCE(ho.value, h.value) as handicap
         FROM players p
         LEFT JOIN handicaps h ON h.player_id = p.id
             AND h.season_id = ?
             AND h.tournament_number = (
                 SELECT t.number FROM tournaments t WHERE t.id = ?
             )
+        LEFT JOIN handicap_overrides ho ON ho.player_id = p.id AND ho.round_id = ?
         WHERE p.id IN (
             SELECT DISTINCT s.player_id FROM scores s
             JOIN rounds r ON r.id = s.round_id
@@ -174,7 +176,7 @@ function getRoundScorecard(PDO $db, int $roundId): array
         )
         ORDER BY p.name
     ");
-    $stmt->execute([$seasonId, $tournamentId, $seasonId]);
+    $stmt->execute([$seasonId, $tournamentId, $roundId, $seasonId]);
     $players = $stmt->fetchAll();
 
     // Get all scores for this round

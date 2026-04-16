@@ -100,6 +100,15 @@ CREATE TABLE closest_to_pin (
     won BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- Per-round handicap overrides (one-time exceptions to tournament handicap)
+CREATE TABLE IF NOT EXISTS handicap_overrides (
+    round_id INT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+    player_id INT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    value NUMERIC(5,2) NOT NULL,
+    note TEXT,
+    PRIMARY KEY (round_id, player_id)
+);
+
 -- Score edit history
 CREATE TABLE score_edits (
     id SERIAL PRIMARY KEY,
