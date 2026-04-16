@@ -363,13 +363,11 @@ return [
         $stmt = $db->prepare("
             SELECT p.id, p.name, COALESCE(SUM(pw.amount), 0) as total
             FROM players p
-            JOIN scores s ON s.player_id = p.id
-            JOIN rounds r ON r.id = s.round_id AND r.season_id = ?
-            LEFT JOIN prize_winnings pw ON pw.player_id = p.id AND pw.season_id = ?
+            JOIN prize_winnings pw ON pw.player_id = p.id AND pw.season_id = ?
             GROUP BY p.id, p.name
             ORDER BY total DESC
         ");
-        $stmt->execute([$seasonId, $seasonId]);
+        $stmt->execute([$seasonId]);
         return $stmt->fetchAll();
     },
 
