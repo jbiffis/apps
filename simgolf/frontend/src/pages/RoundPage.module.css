@@ -204,6 +204,86 @@
   margin-bottom: 0.8rem;
 }
 
+.ctpHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.ctpHeader .sectionTitle {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.ctpEditBtn {
+  padding: 0.35rem 0.9rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1.5px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.ctpEditBtn:hover {
+  background: var(--green);
+  color: white;
+}
+
+.ctpSettingsForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--cream-dark);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.ctpLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ctpSelect, .ctpInput {
+  padding: 0.4rem 0.6rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  background: white;
+  font-family: inherit;
+}
+
+.ctpSelect { min-width: 160px; }
+.ctpInput  { width: 100px; }
+
+.ctpFormActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding-top: 1.3rem;
+}
+
+.ctpWinnerBanner {
+  background: #fffbea;
+  border: 2px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+  color: var(--text);
+}
+
 .ctpInfo {
   font-size: 0.9rem;
   color: var(--text-muted);
@@ -232,7 +312,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.ctpWinner td {
+.ctpWinnerRow td {
   font-weight: 700;
   color: var(--gold-dark);
 }

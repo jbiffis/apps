@@ -12,6 +12,10 @@ export function RoundPage() {
   const [editMode, setEditMode] = useState(false)
   const [confirmEdit, setConfirmEdit] = useState(false)
   const [editedScores, setEditedScores] = useState<Record<string, Record<number, string>>>({})
+  const [ctpEditing, setCtpEditing] = useState(false)
+  const [ctpHole, setCtpHole] = useState<string>('')
+  const [ctpYardage, setCtpYardage] = useState<string>('')
+  const [ctpPrize, setCtpPrize] = useState<string>('')
 
   useEffect(() => {
     if (!id) return
@@ -35,6 +39,25 @@ export function RoundPage() {
   }
 
   const { round, holes, players, ctp_entries, edits } = data
+
+  function openCtpEdit() {
+    setCtpHole(String(round.ctp_hole ?? ''))
+    setCtpYardage(String(round.ctp_yardage ?? ''))
+    setCtpPrize(String(round.ctp_prize_amount ?? '20'))
+    setCtpEditing(true)
+  }
+
+  async function saveCtpSettings() {
+    if (!id) return
+    await api.put(`/rounds/${id}`, {
+      ctp_hole: ctpHole ? Number(ctpHole) : null,
+      ctp_yardage: ctpYardage ? Number(ctpYardage) : null,
+      ctp_prize_amount: ctpPrize ? Number(ctpPrize) : 20,
+    })
+    const fresh = await api.get<Scorecard>(`/rounds/${id}`)
+    setData(fresh)
+    setCtpEditing(false)
+  }
 
   const parTotal = holes.reduce((sum, h) => sum + h.par, 0)
 
@@ -180,34 +203,97 @@ export function RoundPage() {
       </div>
 
       {/* Closest to pin */}
-      {(ctp_entries.length > 0 || round.ctp_hole) && (
-        <div className={styles.section}>
+      <div className={styles.section}>
+        <div className={styles.ctpHeader}>
           <h2 className={styles.sectionTitle}>Closest to the Pin</h2>
-          {round.ctp_hole && (
-            <p className={styles.ctpInfo}>Hole {round.ctp_hole} — {round.ctp_yardage} yards · Prize: ${round.ctp_prize_amount}</p>
-          )}
-          {ctp_entries.length > 0 ? (
-            <table className={styles.ctpTable}>
-              <thead>
-                <tr>
-                  <th>Player</th>
-                  <th>Distance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ctp_entries.map(e => (
-                  <tr key={e.id} className={e.won ? styles.ctpWinner : ''}>
-                    <td>{e.player_name}{e.won ? ' 🏆' : ''}</td>
-                    <td>{e.distance_feet} ft</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className={styles.muted}>No CTP entries yet.</p>
+          {!ctpEditing && (
+            <button className={styles.ctpEditBtn} onClick={openCtpEdit}>
+              {round.ctp_hole ? 'Edit Settings' : 'Set Up CTP'}
+            </button>
           )}
         </div>
-      )}
+
+        {ctpEditing && (
+          <div className={styles.ctpSettingsForm}>
+            <label className={styles.ctpLabel}>
+              Hole
+              <select
+                className={styles.ctpSelect}
+                value={ctpHole}
+                onChange={e => setCtpHole(e.target.value)}
+              >
+                <option value="">— none —</option>
+                {holes.map(h => (
+                  <option key={h.hole_number} value={h.hole_number}>
+                    Hole {h.hole_number} (Par {h.par})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.ctpLabel}>
+              Yardage
+              <input
+                type="number"
+                className={styles.ctpInput}
+                value={ctpYardage}
+                onChange={e => setCtpYardage(e.target.value)}
+                placeholder="e.g. 140"
+              />
+            </label>
+            <label className={styles.ctpLabel}>
+              Prize ($)
+              <input
+                type="number"
+                className={styles.ctpInput}
+                value={ctpPrize}
+                onChange={e => setCtpPrize(e.target.value)}
+                placeholder="20"
+              />
+            </label>
+            <div className={styles.ctpFormActions}>
+              <button className={styles.btnPrimary} onClick={saveCtpSettings}>Save</button>
+              <button className={styles.btnSecondary} onClick={() => setCtpEditing(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {round.ctp_hole && !ctpEditing && (
+          <p className={styles.ctpInfo}>
+            Hole {round.ctp_hole}{round.ctp_yardage ? ` — ${round.ctp_yardage} yards` : ''} · Prize: ${Number(round.ctp_prize_amount).toFixed(2)}
+          </p>
+        )}
+
+        {(() => {
+          const winner = ctp_entries.find(e => e.won)
+          return winner ? (
+            <div className={styles.ctpWinnerBanner}>
+              🏆 <strong>{winner.player_name}</strong> won CTP
+              {winner.distance_feet != null ? ` — ${winner.distance_feet} ft` : ''}
+            </div>
+          ) : null
+        })()}
+
+        {ctp_entries.length > 0 ? (
+          <table className={styles.ctpTable}>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Distance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ctp_entries.map(e => (
+                <tr key={e.id} className={e.won ? styles.ctpWinnerRow : ''}>
+                  <td>{e.player_name}</td>
+                  <td>{e.distance_feet != null ? `${e.distance_feet} ft` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : !ctpEditing && (
+          <p className={styles.muted}>No CTP entries yet.</p>
+        )}
+      </div>
 
       {/* Edit history */}
       {edits.length > 0 && (
