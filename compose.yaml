@@ -7,7 +7,9 @@ services:
       - ./beer:/var/www/html/beer
       - /var/lib/docker/volumes/apps/beer:/var/www/data/beer
       - ./simgolf/frontend/dist:/var/www/html/simgolf
+      - ./book-log/dist:/var/www/html/book-log
       - ./webapp-proxy.conf:/etc/apache2/conf-enabled/webapp-proxy.conf:ro
+      - ./book-log-proxy.conf:/etc/apache2/conf-enabled/book-log-proxy.conf:ro
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
     depends_on:
