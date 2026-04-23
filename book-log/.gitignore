@@ -8,7 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+# dist is committed so Komodo (restart-only) can bind-mount it; see compose.yaml
 dist-ssr
 *.local
 
