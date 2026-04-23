@@ -7,10 +7,14 @@ services:
       - ./beer:/var/www/html/beer
       - /var/lib/docker/volumes/apps/beer:/var/www/data/beer
       - ./simgolf/frontend/dist:/var/www/html/simgolf
+      - ./webapp-proxy.conf:/etc/apache2/conf-enabled/webapp-proxy.conf:ro
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
     depends_on:
       - simgolf-php
+    networks:
+      - default
+      - data-tracking-globe
     restart: unless-stopped
 
   simgolf-php:
@@ -21,3 +25,7 @@ services:
       - ./simgolf/api:/var/www/api
     env_file: ./.env
     restart: unless-stopped
+
+networks:
+  data-tracking-globe:
+    external: true
