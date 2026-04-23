@@ -2,13 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deleteBook, updateBook } from '../lib/db'
 import { useBook } from '../hooks/useBooks'
+import { STATUS_META, STATUS_ORDER } from '../lib/status'
 import type { Book, ReadingStatus } from '../lib/types'
-
-const STATUSES: { value: ReadingStatus; label: string }[] = [
-  { value: 'want-to-read', label: 'Want to read' },
-  { value: 'reading', label: 'Reading' },
-  { value: 'read', label: 'Read' },
-]
 
 export default function BookDetail() {
   const { id } = useParams()
@@ -19,6 +14,7 @@ export default function BookDetail() {
   const [tagsText, setTagsText] = useState('')
   const [notesDirty, setNotesDirty] = useState(false)
   const [tagsDirty, setTagsDirty] = useState(false)
+  const [celebrate, setCelebrate] = useState(false)
 
   useEffect(() => {
     if (book) {
@@ -29,7 +25,7 @@ export default function BookDetail() {
 
   if (book === undefined) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-6 text-sm text-slate-500">
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 text-center text-base font-medium text-indigo-700">
         Loading…
       </div>
     )
@@ -37,11 +33,17 @@ export default function BookDetail() {
 
   if (book === null) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-6">
-        <Link to="/" className="text-sm text-slate-600 hover:underline">
-          ← Back to library
+      <div className="mx-auto w-full max-w-3xl px-4 py-6 text-center">
+        <div className="text-5xl">🤷</div>
+        <p className="mt-3 text-lg font-semibold text-indigo-900">
+          We couldn’t find that book.
+        </p>
+        <Link
+          to="/"
+          className="mt-4 inline-flex items-center gap-1 rounded-full bg-brand-600 px-4 py-2 text-sm font-bold text-white shadow-chunkySm hover:bg-brand-500"
+        >
+          ← Back to bookshelf
         </Link>
-        <p className="mt-4 text-slate-700">Book not found.</p>
       </div>
     )
   }
@@ -49,10 +51,15 @@ export default function BookDetail() {
   async function setStatus(status: ReadingStatus) {
     if (!book) return
     const changes: Partial<Book> = { status }
-    if (status === 'read' && !book.dateFinished) {
+    const becameRead = status === 'read' && book.status !== 'read'
+    if (becameRead && !book.dateFinished) {
       changes.dateFinished = Date.now()
     }
     await updateBook(book.id, changes)
+    if (becameRead) {
+      setCelebrate(true)
+      setTimeout(() => setCelebrate(false), 1800)
+    }
   }
 
   async function setRating(rating: Book['rating']) {
@@ -78,86 +85,121 @@ export default function BookDetail() {
 
   async function onDelete() {
     if (!book) return
-    if (!confirm(`Delete "${book.title}" from your library?`)) return
+    if (!confirm(`Remove "${book.title}" from your bookshelf?`)) return
     await deleteBook(book.id)
     navigate('/')
   }
 
+  const currentMeta = STATUS_META[book.status]
+
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6">
+    <div className="mx-auto w-full max-w-3xl px-4 pb-12 pt-6">
+      {celebrate && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+          <div className="animate-pop-in rounded-3xl bg-white px-8 py-6 text-center shadow-chunky">
+            <div className="text-6xl">🎉</div>
+            <p className="mt-2 text-2xl font-bold text-emerald-600">
+              You finished a book!
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="mb-4">
-        <Link to="/" className="text-sm text-slate-600 hover:underline">
-          ← Back to library
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1 rounded-full border-2 border-brand-200 bg-white px-3 py-1.5 text-sm font-bold text-brand-700 hover:bg-brand-50"
+        >
+          ← Bookshelf
         </Link>
       </div>
 
-      <div className="flex flex-col gap-6 sm:flex-row">
+      <div
+        className={`flex flex-col gap-6 rounded-3xl border-4 bg-white p-5 shadow-chunky sm:flex-row ${currentMeta.cardBorder}`}
+      >
         <div className="w-full sm:w-48">
           {book.coverUrl ? (
             <img
               src={book.coverUrl}
               alt={`Cover of ${book.title}`}
-              className="w-full rounded-lg bg-slate-100 object-cover shadow"
+              className="w-full rounded-2xl bg-amber-100 object-cover shadow"
             />
           ) : (
-            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-lg bg-slate-100 text-sm text-slate-400">
-              No cover
+            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl bg-amber-100 text-5xl">
+              📖
             </div>
           )}
         </div>
 
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-900">{book.title}</h1>
-          <p className="mt-1 text-slate-600">{book.authors.join(', ')}</p>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-500">
-            {book.publisher && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${currentMeta.cardBadge}`}
+          >
+            <span aria-hidden>{currentMeta.emoji}</span>
+            {currentMeta.label}
+          </span>
+          <h1 className="mt-2 text-2xl font-bold leading-tight text-indigo-950">
+            {book.title}
+          </h1>
+          <p className="mt-1 text-base font-medium text-indigo-700">
+            by {book.authors.join(', ') || 'unknown'}
+          </p>
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+            {book.pageCount && (
               <>
-                <dt>Publisher</dt>
-                <dd className="text-slate-700">{book.publisher}</dd>
+                <dt className="text-indigo-500">Pages</dt>
+                <dd className="font-semibold text-indigo-900">
+                  {book.pageCount}
+                </dd>
               </>
             )}
             {book.publishDate && (
               <>
-                <dt>Published</dt>
-                <dd className="text-slate-700">{book.publishDate}</dd>
+                <dt className="text-indigo-500">Published</dt>
+                <dd className="font-semibold text-indigo-900">
+                  {book.publishDate}
+                </dd>
               </>
             )}
-            {book.pageCount && (
+            {book.publisher && (
               <>
-                <dt>Pages</dt>
-                <dd className="text-slate-700">{book.pageCount}</dd>
+                <dt className="text-indigo-500">Publisher</dt>
+                <dd className="font-semibold text-indigo-900">
+                  {book.publisher}
+                </dd>
               </>
             )}
-            <dt>ISBN</dt>
-            <dd className="font-mono text-slate-700">{book.isbn13}</dd>
           </dl>
         </div>
       </div>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-500">
-          Status
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-indigo-600">
+          What’s the deal?
         </h2>
         <div className="flex flex-wrap gap-2">
-          {STATUSES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setStatus(s.value)}
-              className={
-                book.status === s.value
-                  ? 'rounded-full bg-slate-900 px-3 py-1 text-sm font-medium text-white'
-                  : 'rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50'
-              }
-            >
-              {s.label}
-            </button>
-          ))}
+          {STATUS_ORDER.map((s) => {
+            const meta = STATUS_META[s]
+            const active = book.status === s
+            return (
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                className={`inline-flex items-center gap-1 rounded-full border-2 px-4 py-2 text-sm font-bold transition ${
+                  active ? meta.chipActive : meta.chip
+                }`}
+              >
+                <span aria-hidden>{meta.emoji}</span>
+                {meta.label}
+              </button>
+            )
+          })}
         </div>
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-500">
-          Rating
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-indigo-600">
+          How good was it?
         </h2>
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((n) => {
@@ -166,14 +208,16 @@ export default function BookDetail() {
               <button
                 key={n}
                 onClick={() =>
-                  setRating(book.rating === n ? undefined : (n as 1 | 2 | 3 | 4 | 5))
+                  setRating(
+                    book.rating === n ? undefined : (n as 1 | 2 | 3 | 4 | 5),
+                  )
                 }
                 aria-label={`${n} star${n > 1 ? 's' : ''}`}
-                className={
+                className={`text-4xl transition ${
                   active
-                    ? 'text-2xl text-amber-500'
-                    : 'text-2xl text-slate-300 hover:text-amber-400'
-                }
+                    ? 'text-amber-400 drop-shadow hover:scale-110'
+                    : 'text-indigo-200 hover:text-amber-300'
+                }`}
               >
                 ★
               </button>
@@ -182,7 +226,7 @@ export default function BookDetail() {
           {book.rating && (
             <button
               onClick={() => setRating(undefined)}
-              className="ml-2 text-xs text-slate-500 hover:underline"
+              className="ml-2 text-xs font-semibold text-indigo-500 hover:underline"
             >
               clear
             </button>
@@ -191,8 +235,8 @@ export default function BookDetail() {
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-500">
-          Notes
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-indigo-600">
+          My thoughts
         </h2>
         <textarea
           value={notes}
@@ -204,23 +248,13 @@ export default function BookDetail() {
             if (notesDirty) saveNotes()
           }}
           rows={4}
-          placeholder="Your thoughts…"
-          className="w-full rounded-md border border-slate-300 bg-white p-3 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          placeholder="Best part? Favorite character? Write it down!"
+          className="w-full rounded-2xl border-4 border-brand-200 bg-white p-3 text-sm font-medium text-indigo-900 shadow-chunkySm placeholder:text-indigo-400 focus:border-brand-500 focus:outline-none"
         />
-        {notesDirty && (
-          <div className="mt-1 flex justify-end">
-            <button
-              onClick={saveNotes}
-              className="text-xs text-slate-600 hover:underline"
-            >
-              Save notes
-            </button>
-          </div>
-        )}
       </section>
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-500">
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-indigo-600">
           Tags
         </h2>
         <input
@@ -233,18 +267,20 @@ export default function BookDetail() {
           onBlur={() => {
             if (tagsDirty) saveTags()
           }}
-          placeholder="fantasy, favourite"
-          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          placeholder="funny, magic, mystery…"
+          className="w-full rounded-2xl border-4 border-brand-200 bg-white px-3 py-2 text-sm font-medium text-indigo-900 shadow-chunkySm placeholder:text-indigo-400 focus:border-brand-500 focus:outline-none"
         />
-        <p className="mt-1 text-xs text-slate-500">Comma-separated.</p>
+        <p className="mt-1 text-xs font-medium text-indigo-500">
+          Separate with commas.
+        </p>
       </section>
 
-      <section className="mt-10 border-t border-slate-200 pt-6">
+      <section className="mt-10">
         <button
           onClick={onDelete}
-          className="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          className="rounded-full border-2 border-rose-300 bg-white px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50"
         >
-          Delete from library
+          🗑️ Remove from shelf
         </button>
       </section>
     </div>

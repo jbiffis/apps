@@ -20,12 +20,15 @@ export default function ManualAdd() {
     e.preventDefault()
     const raw = normalizeIsbn(isbn)
     if (!isValidIsbn(raw)) {
-      setState({ kind: 'error', message: 'That ISBN doesn’t look valid.' })
+      setState({
+        kind: 'error',
+        message: 'That number doesn’t look right — check it again?',
+      })
       return
     }
     const isbn13 = toIsbn13(raw)
     if (!isbn13) {
-      setState({ kind: 'error', message: 'Could not parse ISBN.' })
+      setState({ kind: 'error', message: 'Could not read that number.' })
       return
     }
 
@@ -40,7 +43,7 @@ export default function ManualAdd() {
     if (!lookup) {
       setState({
         kind: 'error',
-        message: 'No book found for that ISBN. Try another?',
+        message: 'We couldn’t find that book. Double-check the number!',
       })
       return
     }
@@ -61,18 +64,28 @@ export default function ManualAdd() {
   return (
     <div className="mx-auto w-full max-w-md px-4 py-6">
       <div className="mb-4">
-        <Link to="/" className="text-sm text-slate-600 hover:underline">
-          ← Back to library
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1 rounded-full border-2 border-brand-200 bg-white px-3 py-1.5 text-sm font-bold text-brand-700 hover:bg-brand-50"
+        >
+          ← Bookshelf
         </Link>
       </div>
-      <h1 className="text-2xl font-bold text-slate-900">Add by ISBN</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Paste or type an ISBN-10 or ISBN-13.
+      <h1 className="text-3xl font-bold text-indigo-950">
+        Type the book number <span aria-hidden>✏️</span>
+      </h1>
+      <p className="mt-2 text-base font-medium text-indigo-700">
+        On the back of the book, near the barcode, you’ll see a number that
+        starts with <span className="font-mono font-bold">978</span>. Type it in
+        here!
       </p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         <div>
-          <label htmlFor="isbn" className="block text-sm font-medium text-slate-700">
-            ISBN
+          <label
+            htmlFor="isbn"
+            className="block text-sm font-bold text-indigo-600"
+          >
+            Book number (ISBN)
           </label>
           <input
             id="isbn"
@@ -86,22 +99,24 @@ export default function ManualAdd() {
               if (state.kind === 'error') setState({ kind: 'idle' })
             }}
             placeholder="9780441172719"
-            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="mt-1 w-full rounded-2xl border-4 border-brand-200 bg-white px-4 py-3 text-lg font-semibold text-indigo-900 shadow-chunkySm focus:border-brand-500 focus:outline-none"
           />
         </div>
         {state.kind === 'error' && (
-          <p className="text-sm text-red-600">{state.message}</p>
+          <p className="rounded-xl bg-rose-100 px-3 py-2 text-sm font-semibold text-rose-800">
+            {state.message}
+          </p>
         )}
         <button
           type="submit"
           disabled={busy || isbn.trim() === ''}
-          className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-4 py-3 text-base font-bold text-white shadow-chunky hover:-translate-y-0.5 hover:bg-brand-500 disabled:cursor-not-allowed disabled:bg-indigo-300 disabled:shadow-none"
         >
           {state.kind === 'looking-up'
-            ? 'Looking up…'
+            ? '🔎 Looking…'
             : state.kind === 'saving'
-              ? 'Saving…'
-              : 'Look up and save'}
+              ? '✨ Saving…'
+              : '🔎 Find my book'}
         </button>
       </form>
     </div>
