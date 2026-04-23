@@ -4,6 +4,7 @@ export interface LibraryStats {
   total: number
   reading: number
   tbr: number
+  wishlist: number
   finished: number
   finishedThisYear: number
   totalPagesRead: number
@@ -29,6 +30,7 @@ export function computeStats(books: Book[]): LibraryStats {
   const year = now.getFullYear()
   let reading = 0
   let tbr = 0
+  let wishlist = 0
   let finished = 0
   let finishedThisYear = 0
   let totalPagesRead = 0
@@ -40,6 +42,7 @@ export function computeStats(books: Book[]): LibraryStats {
   for (const b of books) {
     if (b.status === 'reading') reading++
     else if (b.status === 'want-to-read') tbr++
+    else if (b.status === 'wishlist') wishlist++
     else if (b.status === 'read') {
       finished++
       if (b.pageCount) totalPagesRead += b.pageCount
@@ -71,6 +74,7 @@ export function computeStats(books: Book[]): LibraryStats {
     total: books.length,
     reading,
     tbr,
+    wishlist,
     finished,
     finishedThisYear,
     totalPagesRead,
@@ -161,10 +165,13 @@ export const BADGE_RULES: BadgeRule[] = [
   {
     id: 'library-legend',
     name: 'Library Legend',
-    desc: 'Add 20 books to your TBR',
+    desc: 'Save 20 books to read someday',
     emoji: '📚',
     colorVar: 'var(--sticker-green)',
-    check: (s) => ({ progress: Math.min(1, s.tbr / 20), label: `${s.tbr}/20` }),
+    check: (s) => {
+      const saved = s.tbr + s.wishlist
+      return { progress: Math.min(1, saved / 20), label: `${saved}/20` }
+    },
   },
   {
     id: 'critic-mode',
