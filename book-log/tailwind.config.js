@@ -2,8 +2,12 @@
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: ['Nunito', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        serif: ['Fraunces', 'Georgia', 'serif'],
+      },
+    },
   },
   plugins: [],
 }
-

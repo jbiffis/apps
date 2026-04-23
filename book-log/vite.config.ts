@@ -15,15 +15,15 @@ export default defineConfig({
       ],
       manifest: {
         id: '/book-log/',
-        name: 'BookLog',
-        short_name: 'BookLog',
-        description: 'Scan and track the books you read.',
+        name: 'BookStory — A cozy reading clubhouse',
+        short_name: 'BookStory',
+        description: 'Track books, earn badges, conquer your reading quest!',
         start_url: '/book-log/',
         scope: '/book-log/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#f8fafc',
-        theme_color: '#0f172a',
+        background_color: '#FBF3E4',
+        theme_color: '#D9613A',
         icons: [
           {
             src: 'icons/icon-192.png',

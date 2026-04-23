@@ -13,18 +13,37 @@ export default function UpdatePrompt() {
   if (!needRefresh) return null
 
   return (
-    <div className="fixed inset-x-0 bottom-4 z-50 mx-auto flex w-[min(calc(100%-2rem),28rem)] items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-lg">
-      <span className="text-sm text-slate-700">New version available.</span>
-      <div className="flex gap-2">
+    <div
+      className="card"
+      style={{
+        position: 'fixed',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+        zIndex: 50,
+        width: 'min(calc(100% - 24px), 360px)',
+        padding: 12,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+      }}
+    >
+      <span style={{ fontSize: 13, fontWeight: 800 }}>
+        ✨ A new version is ready!
+      </span>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         <button
           onClick={() => setNeedRefresh(false)}
-          className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          className="btn"
+          style={{ padding: '6px 10px', fontSize: 11 }}
         >
           Later
         </button>
         <button
           onClick={() => updateServiceWorker(true)}
-          className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800"
+          className="btn btn-primary"
+          style={{ padding: '6px 10px', fontSize: 11 }}
         >
           Reload
         </button>

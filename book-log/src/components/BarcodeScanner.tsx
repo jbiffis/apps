@@ -57,11 +57,9 @@ export default function BarcodeScanner({
           }
         },
       )
-      .catch((e: unknown) => {
+      .catch(() => {
         if (cancelled) return
-        const message =
-          e instanceof Error ? e.message : 'Could not access camera.'
-        setError(message)
+        setError('We couldn’t turn on the camera.')
         setStarting(false)
       })
 
@@ -84,15 +82,18 @@ export default function BarcodeScanner({
         <div className="h-1/3 w-5/6 rounded-md border-2 border-white/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
       </div>
       {starting && !error && (
-        <div className="absolute inset-0 flex items-center justify-center text-white/90">
-          Starting camera…
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/90">
+          <div className="animate-pulse text-4xl">📷</div>
+          <p className="font-semibold">Turning on the camera…</p>
         </div>
       )}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 px-6 text-center text-sm text-white">
-          <p>{error}</p>
-          <p className="text-white/70">
-            Make sure camera access is allowed and you’re on HTTPS.
+          <div className="text-4xl">😟</div>
+          <p className="font-bold">{error}</p>
+          <p className="text-white/80">
+            Ask a grown-up to allow camera access, or tap “Type the number”
+            above.
           </p>
         </div>
       )}

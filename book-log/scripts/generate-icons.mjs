@@ -28,7 +28,7 @@ async function main() {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
     [
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
-      '<rect width="64" height="64" fill="#0f172a"/>',
+      '<rect width="64" height="64" fill="#FBF3E4"/>',
       '<g transform="translate(10 10) scale(0.6875)">',
     ].join(''),
   ).replace('</svg>', '</g></svg>')
@@ -39,7 +39,7 @@ async function main() {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
     [
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
-      '<rect width="64" height="64" fill="#0f172a"/>',
+      '<rect width="64" height="64" fill="#FBF3E4"/>',
     ].join(''),
   )
   await render(appleSvg, 180, resolve(OUT_DIR, 'apple-touch-icon.png'))

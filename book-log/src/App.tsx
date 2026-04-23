@@ -1,33 +1,36 @@
-import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
-import Library from './routes/Library'
-import ManualAdd from './routes/ManualAdd'
+import Add from './routes/Add'
 import BookDetail from './routes/BookDetail'
-import Stats from './routes/Stats'
+import Home from './routes/Home'
+import Profile from './routes/Profile'
+import Quest from './routes/Quest'
+import Shelves from './routes/Shelves'
+import BottomNav from './components/BottomNav'
 import OfflineBanner from './components/OfflineBanner'
 import UpdatePrompt from './components/UpdatePrompt'
 
-const Scanner = lazy(() => import('./routes/Scanner'))
-
 export default function App() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div
+      style={{
+        minHeight: '100svh',
+        maxWidth: 560,
+        margin: '0 auto',
+        position: 'relative',
+        background: 'var(--bg)',
+        boxShadow: '0 0 40px rgba(0,0,0,0.06)',
+      }}
+    >
       <OfflineBanner />
-      <Suspense
-        fallback={
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 text-sm text-slate-500">
-            Loading…
-          </div>
-        }
-      >
-        <Routes>
-          <Route path="/" element={<Library />} />
-          <Route path="/scan" element={<Scanner />} />
-          <Route path="/add" element={<ManualAdd />} />
-          <Route path="/book/:id" element={<BookDetail />} />
-          <Route path="/stats" element={<Stats />} />
-        </Routes>
-      </Suspense>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/shelves" element={<Shelves />} />
+        <Route path="/add" element={<Add />} />
+        <Route path="/quest" element={<Quest />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/book/:id" element={<BookDetail />} />
+      </Routes>
+      <BottomNav />
       <UpdatePrompt />
     </div>
   )

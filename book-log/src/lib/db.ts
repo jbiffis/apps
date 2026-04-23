@@ -9,6 +9,10 @@ class BookLogDB extends Dexie {
     this.version(1).stores({
       books: 'id, status, dateAdded, *tags',
     })
+    // v2: no index changes; progress field is not indexed.
+    this.version(2).stores({
+      books: 'id, status, dateAdded, *tags',
+    })
   }
 }
 
@@ -26,9 +30,6 @@ export async function deleteBook(id: string): Promise<void> {
   await db.books.delete(id)
 }
 
-export async function updateBook(
-  id: string,
-  changes: Partial<Book>,
-): Promise<void> {
+export async function updateBook(id: string, changes: Partial<Book>): Promise<void> {
   await db.books.update(id, changes)
 }
