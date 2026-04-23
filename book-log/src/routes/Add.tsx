@@ -27,7 +27,7 @@ export default function Add() {
   const [mode, setMode] = useState<Mode>('choose')
   const [isbn, setIsbn] = useState('')
   const [state, setState] = useState<State>({ kind: 'idle' })
-  const [shelf, setShelf] = useState<'reading' | 'tbr' | 'finished'>('reading')
+  const [shelf, setShelf] = useState<'reading' | 'tbr' | 'wishlist' | 'finished'>('reading')
   const [page, setPage] = useState(0)
 
   async function handleIsbn(raw: string) {
@@ -500,8 +500,8 @@ function ShelfPicker({
   onConfirm,
 }: {
   lookup: BookLookup
-  shelf: 'reading' | 'tbr' | 'finished'
-  setShelf: (s: 'reading' | 'tbr' | 'finished') => void
+  shelf: 'reading' | 'tbr' | 'wishlist' | 'finished'
+  setShelf: (s: 'reading' | 'tbr' | 'wishlist' | 'finished') => void
   page: number
   setPage: (p: number) => void
   onConfirm: () => void
@@ -516,10 +516,17 @@ function ShelfPicker({
     },
     {
       id: 'tbr' as const,
-      label: 'I wanna read it later',
+      label: 'I wanna read it next',
       desc: 'Save it for future you',
       icon: 'bookmark' as const,
       color: 'var(--accent-3)',
+    },
+    {
+      id: 'wishlist' as const,
+      label: 'Just wishing for this one',
+      desc: 'On my someday-dream list',
+      icon: 'heart' as const,
+      color: 'var(--accent-4)',
     },
     {
       id: 'finished' as const,
@@ -707,7 +714,7 @@ function ShelfPicker({
           fontSize: 15,
         }}
       >
-        Add to my {shelf === 'tbr' ? 'wishlist' : 'shelves'}
+        Add to my {shelf === 'wishlist' ? 'wishlist' : 'shelves'}
         <Icon name="arrow-right" size={16} stroke="#fff" />
       </button>
     </div>

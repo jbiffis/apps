@@ -2,7 +2,7 @@ import type { ReadingStatus } from './types'
 
 export interface StatusMeta {
   /** Design-shelf id matching the BookStory mockups. */
-  shelf: 'reading' | 'tbr' | 'finished'
+  shelf: 'reading' | 'tbr' | 'finished' | 'wishlist'
   label: string
   shortLabel: string
   emoji: string
@@ -31,12 +31,27 @@ export const STATUS_META: Record<ReadingStatus, StatusMeta> = {
     emoji: '⭐',
     colorVar: 'var(--accent-2)',
   },
+  wishlist: {
+    shelf: 'wishlist',
+    label: 'Dreaming about',
+    shortLabel: 'Wishlist',
+    emoji: '💭',
+    colorVar: 'var(--accent-4)',
+  },
 }
 
-export const STATUS_ORDER: ReadingStatus[] = ['reading', 'want-to-read', 'read']
+export const STATUS_ORDER: ReadingStatus[] = [
+  'reading',
+  'want-to-read',
+  'wishlist',
+  'read',
+]
 
-export function statusFromShelf(shelf: 'reading' | 'tbr' | 'finished'): ReadingStatus {
+export function statusFromShelf(
+  shelf: 'reading' | 'tbr' | 'finished' | 'wishlist',
+): ReadingStatus {
   if (shelf === 'tbr') return 'want-to-read'
   if (shelf === 'finished') return 'read'
+  if (shelf === 'wishlist') return 'wishlist'
   return 'reading'
 }

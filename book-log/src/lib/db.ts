@@ -9,8 +9,11 @@ class BookLogDB extends Dexie {
     this.version(1).stores({
       books: 'id, status, dateAdded, *tags',
     })
-    // v2: no index changes; progress field is not indexed.
     this.version(2).stores({
+      books: 'id, status, dateAdded, *tags',
+    })
+    // v3: 'wishlist' added to ReadingStatus. No index changes.
+    this.version(3).stores({
       books: 'id, status, dateAdded, *tags',
     })
   }

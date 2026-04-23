@@ -67,6 +67,7 @@ export default function BookDetail() {
   const isReading = book.status === 'reading'
   const isFinished = book.status === 'read'
   const isTbr = book.status === 'want-to-read'
+  const isWishlist = book.status === 'wishlist'
   const pages = book.pageCount ?? 0
   const progress = book.progress ?? 0
   const pct = pages > 0 ? Math.round((progress / pages) * 100) : 0
@@ -195,7 +196,7 @@ export default function BookDetail() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: isFinished ? '1fr' : '1fr 1fr',
+            gridTemplateColumns: isReading ? '1fr 1fr' : '1fr',
             gap: 8,
             marginBottom: 20,
           }}
@@ -204,10 +205,28 @@ export default function BookDetail() {
             <button
               className="btn btn-primary"
               onClick={() => setStatus('reading')}
-              style={{ justifyContent: 'center', gridColumn: '1 / -1' }}
+              style={{ justifyContent: 'center' }}
             >
               <Icon name="book-open" size={16} stroke="#fff" /> Start reading
             </button>
+          )}
+          {isWishlist && (
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={() => setStatus('reading')}
+                style={{ justifyContent: 'center' }}
+              >
+                <Icon name="book-open" size={16} stroke="#fff" /> Got it — start reading
+              </button>
+              <button
+                className="btn"
+                onClick={() => setStatus('want-to-read')}
+                style={{ justifyContent: 'center' }}
+              >
+                <Icon name="bookmark" size={14} /> Move to Up next
+              </button>
+            </>
           )}
           {isReading && (
             <>

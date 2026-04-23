@@ -6,12 +6,12 @@ import StarRating from '../components/StarRating'
 import { useBooks } from '../hooks/useBooks'
 import type { Book, ReadingStatus } from '../lib/types'
 
-type Shelf = 'reading' | 'tbr' | 'finished'
+type Shelf = 'reading' | 'tbr' | 'wishlist' | 'finished'
 
 const TABS: {
   id: Shelf
   label: string
-  icon: 'book-open' | 'bookmark' | 'check'
+  icon: 'book-open' | 'bookmark' | 'heart' | 'check'
   color: string
   status: ReadingStatus
 }[] = [
@@ -28,6 +28,13 @@ const TABS: {
     icon: 'bookmark',
     color: 'var(--accent-3)',
     status: 'want-to-read',
+  },
+  {
+    id: 'wishlist',
+    label: 'Wishlist',
+    icon: 'heart',
+    color: 'var(--accent-4)',
+    status: 'wishlist',
   },
   {
     id: 'finished',
@@ -48,6 +55,7 @@ export default function Shelves() {
   const counts = {
     reading: list.filter((b) => b.status === 'reading').length,
     tbr: list.filter((b) => b.status === 'want-to-read').length,
+    wishlist: list.filter((b) => b.status === 'wishlist').length,
     finished: list.filter((b) => b.status === 'read').length,
   }
 
@@ -166,7 +174,17 @@ export default function Shelves() {
         ) : tab === 'reading' ? (
           <ReadingList books={books_} />
         ) : tab === 'tbr' ? (
-          <TbrGrid books={books_} />
+          <CoverGrid
+            books={books_}
+            heading="Future you says thanks"
+            countLabel={`${books_.length} waiting`}
+          />
+        ) : tab === 'wishlist' ? (
+          <CoverGrid
+            books={books_}
+            heading="Dreaming about these 💭"
+            countLabel={`${books_.length} on the list`}
+          />
         ) : (
           <FinishedList books={books_} />
         )}
@@ -182,8 +200,12 @@ function EmptyShelf({ tab }: { tab: Shelf }) {
       desc: 'Start a book and it’ll show up here.',
     },
     tbr: {
+      title: 'Nothing up next yet',
+      desc: 'Save books you can’t wait to crack open.',
+    },
+    wishlist: {
       title: 'Your wishlist is empty',
-      desc: 'Save books for future-you to read.',
+      desc: 'Add books you’d love to get your hands on someday.',
     },
     finished: {
       title: 'No conquered books yet',
@@ -288,7 +310,15 @@ function ReadingList({ books }: { books: Book[] }) {
   )
 }
 
-function TbrGrid({ books }: { books: Book[] }) {
+function CoverGrid({
+  books,
+  heading,
+  countLabel,
+}: {
+  books: Book[]
+  heading: string
+  countLabel: string
+}) {
   return (
     <div>
       <div
@@ -301,10 +331,10 @@ function TbrGrid({ books }: { books: Book[] }) {
         }}
       >
         <div className="serif" style={{ fontSize: 16, fontWeight: 700 }}>
-          Future you says thanks
+          {heading}
         </div>
         <div className="chip">
-          <Icon name="sparkle" size={12} /> {books.length} waiting
+          <Icon name="sparkle" size={12} /> {countLabel}
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
@@ -315,7 +345,7 @@ function TbrGrid({ books }: { books: Book[] }) {
             style={{ textDecoration: 'none', color: 'inherit', textAlign: 'center' }}
           >
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-              <BookCover book={b} size="sm" tilt={(i % 3) - 1 * 2} />
+              <BookCover book={b} size="sm" tilt={((i % 3) - 1) * 2} />
             </div>
             <div
               className="serif"
