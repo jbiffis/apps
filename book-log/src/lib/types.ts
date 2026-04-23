@@ -16,4 +16,6 @@ export interface Book {
   dateAdded: number
   dateFinished?: number
   tags: string[]
+  /** Current page (only meaningful when status === 'reading'). */
+  progress?: number
 }
