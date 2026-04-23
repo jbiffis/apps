@@ -1,44 +1,12 @@
 import { Link } from 'react-router-dom'
 import BookGrid from '../components/BookGrid'
 import EmptyState from '../components/EmptyState'
-import type { Book } from '../lib/types'
-
-const DUMMY_BOOKS: Book[] = [
-  {
-    id: '9780261103573',
-    isbn13: '9780261103573',
-    title: 'The Fellowship of the Ring',
-    authors: ['J.R.R. Tolkien'],
-    coverUrl: 'https://covers.openlibrary.org/b/isbn/9780261103573-L.jpg',
-    status: 'read',
-    rating: 5,
-    dateAdded: Date.now(),
-    tags: ['fantasy'],
-  },
-  {
-    id: '9780441172719',
-    isbn13: '9780441172719',
-    title: 'Dune',
-    authors: ['Frank Herbert'],
-    coverUrl: 'https://covers.openlibrary.org/b/isbn/9780441172719-L.jpg',
-    status: 'reading',
-    dateAdded: Date.now(),
-    tags: ['sci-fi'],
-  },
-  {
-    id: '9780140449136',
-    isbn13: '9780140449136',
-    title: 'Crime and Punishment',
-    authors: ['Fyodor Dostoevsky'],
-    coverUrl: 'https://covers.openlibrary.org/b/isbn/9780140449136-L.jpg',
-    status: 'want-to-read',
-    dateAdded: Date.now(),
-    tags: ['classic'],
-  },
-]
+import { useBooks } from '../hooks/useBooks'
 
 export default function Library() {
-  const books = DUMMY_BOOKS
+  const books = useBooks()
+  const loading = books === undefined
+  const count = books?.length ?? 0
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6">
@@ -46,7 +14,7 @@ export default function Library() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">My Library</h1>
           <p className="text-sm text-slate-500">
-            {books.length} {books.length === 1 ? 'book' : 'books'}
+            {loading ? ' ' : `${count} ${count === 1 ? 'book' : 'books'}`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -64,10 +32,12 @@ export default function Library() {
           </Link>
         </div>
       </header>
-      {books.length === 0 ? (
-        <EmptyState message="No books yet — tap Scan to add your first one." />
+      {loading ? (
+        <EmptyState message="Loading…" />
+      ) : count === 0 ? (
+        <EmptyState message="No books yet — tap Add manually or Scan to add your first one." />
       ) : (
-        <BookGrid books={books} />
+        <BookGrid books={books!} />
       )}
     </div>
   )
