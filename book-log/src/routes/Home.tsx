@@ -3,6 +3,7 @@ import BookCover from '../components/BookCover'
 import Icon from '../components/Icon'
 import OwlMascot from '../components/OwlMascot'
 import { useBooks } from '../hooks/useBooks'
+import { useProfile } from '../lib/profile'
 import { computeBadges, computeStats, YEAR_GOAL } from '../lib/stats'
 
 function timeOfDayLabel(): string {
@@ -16,6 +17,7 @@ function timeOfDayLabel(): string {
 
 export default function Home() {
   const books = useBooks()
+  const { profile } = useProfile()
   const loading = books === undefined
   const list = books ?? []
   const stats = computeStats(list)
@@ -25,6 +27,7 @@ export default function Home() {
     badges.filter((b) => b.unlocked).slice(-1)[0] ||
     badges.find((b) => !b.unlocked)
   const goalDone = Math.min(stats.finishedThisYear, YEAR_GOAL)
+  const displayName = profile?.name?.trim() || 'friend'
 
   return (
     <div className="paper-bg" style={{ minHeight: '100%', padding: '20px 16px 120px' }}>
@@ -46,7 +49,7 @@ export default function Home() {
             {timeOfDayLabel()}
           </div>
           <h1 className="serif" style={{ fontSize: 32, lineHeight: 1.05, marginTop: 2 }}>
-            Hey, <span className="wavy">friend!</span>
+            Hey, <span className="wavy">{displayName}!</span>
           </h1>
           <p
             style={{

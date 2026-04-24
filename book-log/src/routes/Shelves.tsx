@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BookCover from '../components/BookCover'
 import Icon from '../components/Icon'
@@ -6,12 +6,12 @@ import StarRating from '../components/StarRating'
 import { useBooks } from '../hooks/useBooks'
 import type { Book, ReadingStatus } from '../lib/types'
 
-type Shelf = 'reading' | 'tbr' | 'wishlist' | 'finished'
+type Shelf = 'reading' | 'tbr' | 'finished'
 
 const TABS: {
   id: Shelf
   label: string
-  icon: 'book-open' | 'bookmark' | 'heart' | 'check'
+  icon: 'book-open' | 'bookmark' | 'check'
   color: string
   status: ReadingStatus
 }[] = [
@@ -28,13 +28,6 @@ const TABS: {
     icon: 'bookmark',
     color: 'var(--accent-3)',
     status: 'want-to-read',
-  },
-  {
-    id: 'wishlist',
-    label: 'Wishlist',
-    icon: 'heart',
-    color: 'var(--accent-4)',
-    status: 'wishlist',
   },
   {
     id: 'finished',
@@ -55,21 +48,31 @@ export default function Shelves() {
   const counts = {
     reading: list.filter((b) => b.status === 'reading').length,
     tbr: list.filter((b) => b.status === 'want-to-read').length,
-    wishlist: list.filter((b) => b.status === 'wishlist').length,
     finished: list.filter((b) => b.status === 'read').length,
   }
 
   const activeStatus = TABS.find((t) => t.id === tab)!.status
   const q = query.trim().toLowerCase()
-  const books_ = list.filter((b) => {
-    if (b.status !== activeStatus) return false
+
+  const matches = (b: Book) => {
     if (!q) return true
     return (
       b.title.toLowerCase().includes(q) ||
       b.authors.join(' ').toLowerCase().includes(q) ||
       b.tags.join(' ').toLowerCase().includes(q)
     )
-  })
+  }
+
+  const shelfBooks = useMemo(
+    () => list.filter((b) => b.status === activeStatus && matches(b)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [list, activeStatus, q],
+  )
+  const wishlistBooks = useMemo(
+    () => list.filter((b) => b.status === 'wishlist' && matches(b)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [list, q],
+  )
 
   return (
     <div className="paper-bg" style={{ minHeight: '100%', padding: '20px 16px 120px' }}>
@@ -169,26 +172,82 @@ export default function Shelves() {
       >
         {loading ? (
           <p style={{ color: 'var(--ink-mute)', fontWeight: 700 }}>Loading…</p>
-        ) : books_.length === 0 ? (
+        ) : shelfBooks.length === 0 ? (
           <EmptyShelf tab={tab} />
         ) : tab === 'reading' ? (
-          <ReadingList books={books_} />
+          <ReadingList books={shelfBooks} />
         ) : tab === 'tbr' ? (
           <CoverGrid
-            books={books_}
+            books={shelfBooks}
             heading="Future you says thanks"
-            countLabel={`${books_.length} waiting`}
-          />
-        ) : tab === 'wishlist' ? (
-          <CoverGrid
-            books={books_}
-            heading="Dreaming about these 💭"
-            countLabel={`${books_.length} on the list`}
+            countLabel={`${shelfBooks.length} waiting`}
           />
         ) : (
-          <FinishedList books={books_} />
+          <FinishedList books={shelfBooks} />
         )}
       </div>
+
+      {/* My Wishlist — separate section below the shelves card */}
+      <section style={{ marginTop: 28 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 8,
+            marginBottom: 10,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-mute)',
+              }}
+            >
+              Dreaming about 💭
+            </div>
+            <h2 className="serif" style={{ fontSize: 24, lineHeight: 1.1 }}>
+              My Wishlist
+            </h2>
+          </div>
+          <span
+            className="chip"
+            style={{
+              background: 'var(--accent-4)',
+              color: '#fff',
+              borderColor: 'var(--line)',
+            }}
+          >
+            <Icon name="heart" size={12} stroke="#fff" /> {wishlistBooks.length}
+          </span>
+        </div>
+
+        <div
+          className="card"
+          style={{
+            padding: 18,
+            minHeight: 140,
+            background: 'var(--paper)',
+          }}
+        >
+          {loading ? (
+            <p style={{ color: 'var(--ink-mute)', fontWeight: 700 }}>Loading…</p>
+          ) : wishlistBooks.length === 0 ? (
+            <EmptyWishlist />
+          ) : (
+            <CoverGrid
+              books={wishlistBooks}
+              heading="Books to dream about"
+              countLabel={`${wishlistBooks.length} on the list`}
+              showHeader={false}
+            />
+          )}
+        </div>
+      </section>
     </div>
   )
 }
@@ -202,10 +261,6 @@ function EmptyShelf({ tab }: { tab: Shelf }) {
     tbr: {
       title: 'Nothing up next yet',
       desc: 'Save books you can’t wait to crack open.',
-    },
-    wishlist: {
-      title: 'Your wishlist is empty',
-      desc: 'Add books you’d love to get your hands on someday.',
     },
     finished: {
       title: 'No conquered books yet',
@@ -230,6 +285,30 @@ function EmptyShelf({ tab }: { tab: Shelf }) {
       </p>
       <Link to="/add" className="btn btn-primary">
         <Icon name="plus" size={16} stroke="#fff" /> Add a book
+      </Link>
+    </div>
+  )
+}
+
+function EmptyWishlist() {
+  return (
+    <div style={{ textAlign: 'center', padding: '10px 0' }}>
+      <div style={{ fontSize: 36 }}>💭</div>
+      <div className="serif" style={{ fontSize: 17, marginTop: 4 }}>
+        Your wishlist is empty
+      </div>
+      <p
+        style={{
+          fontSize: 12,
+          color: 'var(--ink-soft)',
+          fontWeight: 700,
+          margin: '4px 0 12px',
+        }}
+      >
+        Add books you’d love to get your hands on someday.
+      </p>
+      <Link to="/add" className="btn">
+        <Icon name="heart" size={14} /> Add to wishlist
       </Link>
     </div>
   )
@@ -314,29 +393,33 @@ function CoverGrid({
   books,
   heading,
   countLabel,
+  showHeader = true,
 }: {
   books: Book[]
   heading: string
   countLabel: string
+  showHeader?: boolean
 }) {
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginBottom: 14,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div className="serif" style={{ fontSize: 16, fontWeight: 700 }}>
-          {heading}
+      {showHeader && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 14,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div className="serif" style={{ fontSize: 16, fontWeight: 700 }}>
+            {heading}
+          </div>
+          <div className="chip">
+            <Icon name="sparkle" size={12} /> {countLabel}
+          </div>
         </div>
-        <div className="chip">
-          <Icon name="sparkle" size={12} /> {countLabel}
-        </div>
-      </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
         {books.map((b, i) => (
           <Link
