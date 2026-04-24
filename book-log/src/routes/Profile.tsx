@@ -5,6 +5,7 @@ import Icon from '../components/Icon'
 import PaperScraps from '../components/PaperScraps'
 import { useBooks } from '../hooks/useBooks'
 import { exportLibrary, importLibrary } from '../lib/exportImport'
+import { AVATAR_CHOICES, useProfile } from '../lib/profile'
 import { computeBadges, computeStats } from '../lib/stats'
 
 export default function Profile() {
@@ -14,6 +15,23 @@ export default function Profile() {
   const unlocked = badges.filter((b) => b.unlocked)
   const locked = badges.filter((b) => !b.unlocked)
   const fives = books.filter((b) => b.rating === 5)
+
+  const { profile, update } = useProfile()
+  const [editing, setEditing] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+
+  const displayName = profile?.name?.trim() || 'Bookworm'
+  const avatar = profile?.avatar || '🦊'
+
+  function openEdit() {
+    setNameDraft(profile?.name ?? '')
+    setEditing(true)
+  }
+
+  function saveEdit() {
+    update({ name: nameDraft.trim() || 'Bookworm' })
+    setEditing(false)
+  }
 
   const fileRef = useRef<HTMLInputElement>(null)
   const [importMsg, setImportMsg] = useState<string | null>(null)
@@ -62,7 +80,9 @@ export default function Profile() {
             position: 'relative',
           }}
         >
-          <div
+          <button
+            onClick={openEdit}
+            aria-label="Change avatar"
             style={{
               width: 82,
               height: 82,
@@ -75,10 +95,12 @@ export default function Profile() {
               justifyContent: 'center',
               fontSize: 44,
               flexShrink: 0,
+              cursor: 'pointer',
+              padding: 0,
             }}
           >
-            🦊
-          </div>
+            {avatar}
+          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
@@ -92,7 +114,7 @@ export default function Profile() {
               Your clubhouse profile
             </div>
             <h1 className="serif" style={{ fontSize: 24, lineHeight: 1.05, marginTop: 2 }}>
-              Bookworm
+              {displayName}
             </h1>
             <div
               style={{
@@ -105,8 +127,127 @@ export default function Profile() {
               Level {Math.max(1, Math.floor(stats.finished / 3) + 1)} reader
             </div>
           </div>
+          <button
+            onClick={openEdit}
+            className="btn"
+            style={{
+              background: 'var(--paper)',
+              color: 'var(--ink)',
+              padding: '8px 12px',
+              fontSize: 12,
+            }}
+          >
+            <Icon name="edit" size={12} /> Edit
+          </button>
         </div>
       </div>
+
+      {editing && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 120,
+          }}
+          onClick={() => setEditing(false)}
+        >
+          <div
+            className="card pop-in"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              padding: 18,
+              maxWidth: 420,
+              width: '100%',
+              background: 'var(--paper)',
+            }}
+          >
+            <h2 className="serif" style={{ fontSize: 22, marginBottom: 10 }}>
+              Your clubhouse name
+            </h2>
+            <input
+              className="input"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="What should we call you?"
+              maxLength={24}
+              autoFocus
+              style={{
+                textAlign: 'center',
+                fontSize: 18,
+                fontFamily: 'Fraunces, serif',
+                fontWeight: 700,
+                marginBottom: 14,
+              }}
+            />
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-mute)',
+                marginBottom: 8,
+              }}
+            >
+              Sidekick
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, 1fr)',
+                gap: 8,
+                marginBottom: 14,
+              }}
+            >
+              {AVATAR_CHOICES.map((a) => {
+                const active = avatar === a
+                return (
+                  <button
+                    key={a}
+                    onClick={() => update({ avatar: a })}
+                    style={{
+                      width: '100%',
+                      aspectRatio: '1 / 1',
+                      borderRadius: '50%',
+                      border: '2px solid var(--line)',
+                      background: active ? 'var(--accent-2)' : 'var(--paper)',
+                      fontSize: 22,
+                      cursor: 'pointer',
+                      boxShadow: active ? 'var(--shadow-sm)' : 'none',
+                      padding: 0,
+                    }}
+                    aria-label={`Pick ${a}`}
+                    aria-pressed={active}
+                  >
+                    {a}
+                  </button>
+                )
+              })}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}
+            >
+              <button className="btn" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={saveEdit}>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div
