@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import AppHeader from '../components/AppHeader'
 import Icon from '../components/Icon'
 import Knob from '../components/Knob'
-import VuMeter from '../components/VuMeter'
 import { useSongs } from '../hooks/useSongs'
 import { vote, ApiError } from '../lib/api'
 import type { Song } from '../lib/types'
@@ -41,10 +40,6 @@ export default function Audience() {
   }, [songs])
 
   const list = songs ?? []
-  const maxVotes = useMemo(
-    () => list.reduce((m, s) => Math.max(m, s.votes), 0),
-    [list],
-  )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -253,10 +248,10 @@ export default function Audience() {
                 key={s.id}
                 className={`panel ${nudgeId === s.id ? 'nudge' : ''}`}
                 style={{
-                  padding: 14,
+                  padding: '10px 12px',
                   display: 'grid',
                   gridTemplateColumns: '1fr auto',
-                  gap: 12,
+                  gap: 10,
                   alignItems: 'center',
                 }}
               >
@@ -265,16 +260,17 @@ export default function Audience() {
                     style={{
                       display: 'flex',
                       alignItems: 'baseline',
-                      gap: 8,
+                      gap: 7,
                       marginBottom: 2,
                     }}
                   >
                     <span
                       className="mono"
                       style={{
-                        fontSize: 11,
-                        color: 'rgba(244,229,200,0.4)',
+                        fontSize: 10,
+                        color: 'rgba(244,229,200,0.35)',
                         fontWeight: 700,
+                        flexShrink: 0,
                       }}
                     >
                       {String(i + 1).padStart(2, '0')}
@@ -282,9 +278,9 @@ export default function Audience() {
                     <h3
                       className="serif"
                       style={{
-                        fontSize: 17,
+                        fontSize: 16,
                         color: 'var(--cream)',
-                        lineHeight: 1.15,
+                        lineHeight: 1.2,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
@@ -295,35 +291,45 @@ export default function Audience() {
                   </div>
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: 600,
-                      color: 'rgba(244,229,200,0.55)',
-                      marginBottom: 8,
+                      color: 'rgba(244,229,200,0.5)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      paddingLeft: 22,
+                      paddingLeft: 20,
                     }}
                   >
                     {s.artist}
                   </div>
-                  <div style={{ paddingLeft: 22 }}>
-                    <VuMeter value={s.votes} max={maxVotes || 1} showNumeric />
-                  </div>
                 </div>
 
-                <Knob
-                  size={64}
-                  rotation={baseRot}
-                  on={voted}
-                  showTicks
-                  label={voted ? 'VOTED' : 'VOTE'}
-                  onClick={() => handleVote(s)}
-                  disabled={voted || isPending}
-                  aria-label={voted ? 'Already voted' : `Vote for ${s.title}`}
-                >
-                  {voted ? <Icon name="check" size={18} stroke="#1a0f08" /> : null}
-                </Knob>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: voted ? 'var(--orange-bright)' : 'rgba(244,229,200,0.5)',
+                      textShadow: voted ? '0 0 8px var(--orange-glow)' : 'none',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {s.votes}
+                  </span>
+                  <Knob
+                    size={52}
+                    rotation={baseRot}
+                    on={voted}
+                    showTicks
+                    label={voted ? 'VOTED' : 'VOTE'}
+                    onClick={() => handleVote(s)}
+                    disabled={voted || isPending}
+                    aria-label={voted ? 'Already voted' : `Vote for ${s.title}`}
+                  >
+                    {voted ? <Icon name="check" size={15} stroke="#1a0f08" /> : null}
+                  </Knob>
+                </div>
               </article>
             )
           })}
