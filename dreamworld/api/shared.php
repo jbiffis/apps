@@ -10,16 +10,48 @@
 
 const DATA_FILE = '/var/www/data/dreamworld/songs.json';
 
+// Never let PHP leak HTML warnings into the response body — clients parse
+// these as JSON and the resulting "Unexpected token '<'" error hides the
+// real problem.
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL);
+
+set_exception_handler(function ($e) {
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json');
+    }
+    echo json_encode([
+        'error' => 'server_exception',
+        'message' => $e->getMessage(),
+    ]);
+    exit;
+});
+
+set_error_handler(function ($severity, $message, $file, $line) {
+    if (!(error_reporting() & $severity)) return false;
+    throw new ErrorException($message, 0, $severity, $file, $line);
+});
+
 function ensure_data_file(): void {
     $dir = dirname(DATA_FILE);
     if (!is_dir($dir)) {
-        @mkdir($dir, 0775, true);
+        if (!@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            json_error(500, 'storage_mkdir_failed', "Cannot create $dir");
+        }
+    }
+    if (!is_writable($dir)) {
+        json_error(500, 'storage_not_writable', "$dir is not writable by " . get_current_user());
     }
     if (!file_exists(DATA_FILE)) {
-        file_put_contents(DATA_FILE, json_encode([
+        $ok = @file_put_contents(DATA_FILE, json_encode([
             'songs' => [],
             'createdAt' => time() * 1000,
         ], JSON_PRETTY_PRINT));
+        if ($ok === false) {
+            json_error(500, 'storage_init_failed', 'Could not create songs.json');
+        }
         @chmod(DATA_FILE, 0664);
     }
 }
