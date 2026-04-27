@@ -7,17 +7,18 @@
   --orange: #F95B0F;
   --orange-bright: #FF7A29;
   --orange-deep: #C84509;
-  --orange-glow: rgba(249, 91, 15, 0.45);
+  --orange-darker: #8a2e05;
+  --orange-glow: rgba(249, 91, 15, 0.55);
   --led: #FFB347;
   --cream: #F4E5C8;
   --cream-soft: #EAD8B1;
   --paper: #FBF1D9;
-  --black: #0a0a0a;
-  --chassis: #161311;
-  --panel: #221d1a;
-  --panel-edge: #3a312c;
-  --ink: #1a0f08;
-  --ink-soft: #4a3a30;
+  --black: #050403;
+  --chassis: #0a0807;
+  --panel: #0f0b09;
+  --panel-edge: #2a1e15;
+  --ink: #0a0604;
+  --ink-soft: #2a1c12;
 }
 
 html,
@@ -30,25 +31,42 @@ body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-weight: 500;
-  background: var(--black);
+  /* Orange tolex — the page itself wears the amp's vinyl skin */
+  background:
+    radial-gradient(ellipse at 15% 0%, rgba(255, 140, 50, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 100%, rgba(0, 0, 0, 0.35) 0%, transparent 50%),
+    linear-gradient(180deg, var(--orange-deep) 0%, var(--orange) 50%, var(--orange-deep) 100%);
   color: var(--cream);
   -webkit-font-smoothing: antialiased;
-  /* Diagonal cross-hatch grille */
+  /* Tolex grain — diagonal cross-hatch in black */
+  background-attachment: fixed;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
   background-image:
     repeating-linear-gradient(
       45deg,
-      rgba(255, 255, 255, 0.012) 0,
-      rgba(255, 255, 255, 0.012) 1px,
+      rgba(0, 0, 0, 0.18) 0,
+      rgba(0, 0, 0, 0.18) 1px,
       transparent 1px,
-      transparent 6px
+      transparent 5px
     ),
     repeating-linear-gradient(
       -45deg,
-      rgba(255, 255, 255, 0.012) 0,
-      rgba(255, 255, 255, 0.012) 1px,
+      rgba(0, 0, 0, 0.12) 0,
+      rgba(0, 0, 0, 0.12) 1px,
       transparent 1px,
-      transparent 6px
+      transparent 5px
     );
+  mix-blend-mode: multiply;
+}
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 .serif {
@@ -68,20 +86,21 @@ h1, h2, h3 {
   letter-spacing: 0.005em;
 }
 
-/* Brushed-metal panel — for cards */
+/* Black grille panel — the speaker cloth on an Orange amp */
 .panel {
   background: linear-gradient(
     180deg,
-    #1f1a17 0%,
-    #161311 50%,
-    #1c1815 100%
+    #0e0a08 0%,
+    #050302 50%,
+    #0c0807 100%
   );
-  border: 1.5px solid var(--panel-edge);
+  border: 2px solid var(--ink);
   border-radius: 14px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    0 12px 24px rgba(0, 0, 0, 0.45);
+    inset 0 1px 0 rgba(255, 122, 41, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(255, 122, 41, 0.12),
+    0 12px 24px rgba(0, 0, 0, 0.55);
   position: relative;
   overflow: hidden;
 }
@@ -95,8 +114,15 @@ h1, h2, h3 {
       90deg,
       transparent 0,
       transparent 2px,
-      rgba(255, 255, 255, 0.014) 2px,
-      rgba(255, 255, 255, 0.014) 3px
+      rgba(255, 255, 255, 0.025) 2px,
+      rgba(255, 255, 255, 0.025) 3px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 0, 0, 0.4) 2px,
+      rgba(0, 0, 0, 0.4) 3px
     );
 }
 
@@ -172,14 +198,14 @@ h1, h2, h3 {
 .btn-primary:hover { box-shadow: 0 4px 0 rgba(0,0,0,0.6), 0 0 18px var(--orange-glow); }
 
 .btn-ghost {
-  background: transparent;
+  background: rgba(0, 0, 0, 0.35);
   color: var(--cream);
-  border-color: var(--panel-edge);
-  box-shadow: none;
+  border-color: var(--ink);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
 }
 .btn-ghost:hover {
-  background: rgba(244, 229, 200, 0.06);
-  box-shadow: none;
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.6);
 }
 
 /* Inputs styled like control-panel slots */
