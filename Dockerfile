@@ -13,8 +13,9 @@ COPY dreamworld-proxy.conf /etc/apache2/conf-enabled/dreamworld-proxy.conf
 # Disable PHP version header
 RUN echo "expose_php = Off" > /usr/local/etc/php/conf.d/security.ini
 
-# Create data directory outside web root
-RUN mkdir -p /var/www/data/beer && chown www-data:www-data /var/www/data/beer
+# Create data directories outside web root
+RUN mkdir -p /var/www/data/beer /var/www/data/dreamworld \
+ && chown www-data:www-data /var/www/data/beer /var/www/data/dreamworld
 
 # Copy all webapp folders into the web root
 COPY . /var/www/html/

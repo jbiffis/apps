@@ -2,8 +2,13 @@
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        serif: ['Yeseva One', 'Georgia', 'serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+      },
+    },
   },
   plugins: [],
 }
-
