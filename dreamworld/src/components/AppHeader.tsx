@@ -3,46 +3,70 @@ interface AppHeaderProps {
   rightSlot?: React.ReactNode
 }
 
-/**
- * Top "amp face" — Dreamworld plate plus a row of LEDs and a subtitle.
- */
 export default function AppHeader({ subtitle, rightSlot }: AppHeaderProps) {
   return (
-    <header
-      style={{
-        padding: '20px 16px 14px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        borderBottom: '3px solid var(--ink)',
-        background:
-          'linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.18) 100%)',
-        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.45)',
-        position: 'relative',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span className="led" />
-        <span className="brand-plate">Dreamworld</span>
+    <header>
+      {/* Chrome nameplate zone */}
+      <div
+        className="chrome-face"
+        style={{
+          padding: '14px 16px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="led" />
+          <span className="brand-plate">Dreamworld</span>
+        </div>
+        {rightSlot && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {rightSlot}
+          </div>
+        )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {subtitle && (
+
+      {/* Orange control strip */}
+      {subtitle && (
+        <div
+          className="orange-strip"
+          style={{
+            padding: '7px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
           <span
-            className="dial-label"
             style={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 800,
               fontSize: 10,
-              letterSpacing: '0.22em',
-              color: 'var(--ink)',
-              opacity: 0.78,
-              fontWeight: 700,
+              letterSpacing: '0.24em',
+              textTransform: 'uppercase',
+              color: 'rgba(20,8,2,0.75)',
             }}
           >
             {subtitle}
           </span>
-        )}
-        {rightSlot}
-      </div>
+          {/* Decorative tick marks */}
+          <div style={{ flex: 1, display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'flex-end' }}>
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div
+                key={i}
+                style={{
+                  width: i % 4 === 0 ? 3 : 2,
+                  height: i % 4 === 0 ? 12 : 8,
+                  background: 'rgba(0,0,0,0.4)',
+                  borderRadius: 1,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   )
 }
