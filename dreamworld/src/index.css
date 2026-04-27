@@ -36,22 +36,22 @@ body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-weight: 500;
-  /* Black cabinet outer body */
-  background: var(--black);
+  background: var(--orange);
   color: var(--cream);
   -webkit-font-smoothing: antialiased;
+  /* Tolex grain — black diagonal cross-hatch on orange */
   background-image:
     repeating-linear-gradient(
       45deg,
-      rgba(255,255,255,0.008) 0,
-      rgba(255,255,255,0.008) 1px,
+      rgba(0,0,0,0.14) 0,
+      rgba(0,0,0,0.14) 1px,
       transparent 1px,
       transparent 5px
     ),
     repeating-linear-gradient(
       -45deg,
-      rgba(255,255,255,0.008) 0,
-      rgba(255,255,255,0.008) 1px,
+      rgba(0,0,0,0.09) 0,
+      rgba(0,0,0,0.09) 1px,
       transparent 1px,
       transparent 5px
     );
