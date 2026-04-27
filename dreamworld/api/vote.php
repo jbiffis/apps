@@ -26,8 +26,11 @@ foreach ($data['songs'] as &$s) {
     if (!isset($s['voters']) || !is_array($s['voters'])) {
         $s['voters'] = [];
     }
-    if (!in_array($voter, $s['voters'], true)) {
+    $pos = array_search($voter, $s['voters'], true);
+    if ($pos === false) {
         $s['voters'][] = $voter;
+    } else {
+        array_splice($s['voters'], $pos, 1);
     }
     save_and_unlock($fp, $data);
     json_ok(['song' => shape_for_voter($s, $voter)]);

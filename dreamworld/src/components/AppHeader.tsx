@@ -10,7 +10,7 @@ export default function AppHeader({ subtitle, rightSlot }: AppHeaderProps) {
       <div
         className="chrome-face"
         style={{
-          padding: '14px 16px 12px',
+          padding: '10px 14px 10px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -33,7 +33,7 @@ export default function AppHeader({ subtitle, rightSlot }: AppHeaderProps) {
         <div
           className="orange-strip"
           style={{
-            padding: '7px 18px',
+            padding: '5px 14px',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
