@@ -6,7 +6,7 @@ import PasswordGate from '../components/PasswordGate'
 import QrModal from '../components/QrModal'
 import VuMeter from '../components/VuMeter'
 import { useSongs } from '../hooks/useSongs'
-import { addSong, deleteSong, resetVotes } from '../lib/api'
+import { addSong, deleteSong, resetVotes, updateSong } from '../lib/api'
 import { clearAdminPassword, getAdminPassword } from '../lib/auth'
 
 export default function Musician() {
@@ -185,15 +185,19 @@ function Stage({ onLogout }: { onLogout: () => void }) {
           {songs && songs.length === 0 && <EmptySetlist />}
 
           {songs &&
-            songs.map((s, i) => (
+            songs.map((s) => (
               <SongRow
                 key={s.id}
-                rank={i + 1}
+                id={s.id}
                 title={s.title}
                 artist={s.artist}
                 votes={s.votes}
                 maxVotes={maxVotes || 1}
                 onDelete={() => handleDelete(s.id, s.title)}
+                onEdit={async (title, artist) => {
+                  const updated = await updateSong(s.id, title, artist)
+                  if (songs) patch(songs.map((x) => (x.id === s.id ? { ...x, ...updated } : x)))
+                }}
               />
             ))}
         </section>
@@ -234,41 +238,90 @@ function Stat({
 }
 
 function SongRow({
-  rank,
+  id: _id,
   title,
   artist,
   votes,
   maxVotes,
   onDelete,
+  onEdit,
 }: {
-  rank: number
+  id: string
   title: string
   artist: string
   votes: number
   maxVotes: number
   onDelete: () => void
+  onEdit: (title: string, artist: string) => Promise<void>
 }) {
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState(title)
+  const [editArtist, setEditArtist] = useState(artist)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    const t = editTitle.trim()
+    const a = editArtist.trim()
+    if (!t || !a) return
+    setSaving(true)
+    try {
+      await onEdit(t, a)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleCancel() {
+    setEditTitle(title)
+    setEditArtist(artist)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="panel" style={{ padding: 14, display: 'grid', gap: 8 }}>
+        <input
+          className="input"
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          placeholder="Title"
+          style={{ fontSize: 14, padding: '9px 12px' }}
+          autoFocus
+        />
+        <input
+          className="input"
+          value={editArtist}
+          onChange={(e) => setEditArtist(e.target.value)}
+          placeholder="Artist"
+          style={{ fontSize: 14, padding: '9px 12px' }}
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !editTitle.trim() || !editArtist.trim()}
+            className="btn btn-primary"
+            style={{ flex: 1, justifyContent: 'center', padding: '10px 14px' }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="btn btn-ghost"
+            style={{ padding: '10px 14px' }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="panel" style={{ padding: 14 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 12,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: 'JetBrains Mono, monospace',
-            fontWeight: 700,
-            fontSize: 13,
-            color: 'rgba(244,229,200,0.45)',
-            minWidth: 22,
-            textAlign: 'right',
-          }}
-        >
-          {String(rank).padStart(2, '0')}
-        </span>
+    <div className="panel" style={{ padding: '12px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             className="serif"
@@ -297,19 +350,27 @@ function SongRow({
             {artist}
           </div>
         </div>
+        <VuMeter value={votes} max={maxVotes} showNumeric />
+        <button
+          type="button"
+          onClick={() => { setEditTitle(title); setEditArtist(artist); setEditing(true) }}
+          className="btn btn-ghost"
+          style={{ padding: '6px 8px', fontSize: 10, flexShrink: 0 }}
+          aria-label={`Edit ${title}`}
+          title="Edit"
+        >
+          <Icon name="edit" size={14} />
+        </button>
         <button
           type="button"
           onClick={onDelete}
           className="btn btn-ghost"
-          style={{ padding: '6px 8px', fontSize: 10 }}
+          style={{ padding: '6px 8px', fontSize: 10, flexShrink: 0 }}
           aria-label={`Remove ${title}`}
           title="Remove"
         >
           <Icon name="trash" size={14} />
         </button>
-      </div>
-      <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
-        <VuMeter value={votes} max={maxVotes} showNumeric />
       </div>
     </div>
   )

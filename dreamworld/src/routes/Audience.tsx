@@ -237,7 +237,7 @@ export default function Audience() {
               desc={`Nothing matches "${query}". Try a different search.`}
             />
           )}
-          {filtered.map((s, i) => {
+          {filtered.map((s) => {
             const voted = localVoted.has(s.id) || s.voted === true
             const isPending = pending.has(s.id)
             // Knob rotation: -135 unvoted → +135 voted, with progress
@@ -256,39 +256,20 @@ export default function Audience() {
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div
+                  <h3
+                    className="serif"
                     style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 7,
+                      fontSize: 16,
+                      color: 'var(--cream)',
+                      lineHeight: 1.2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                       marginBottom: 2,
                     }}
                   >
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: 10,
-                        color: 'rgba(244,229,200,0.35)',
-                        fontWeight: 700,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <h3
-                      className="serif"
-                      style={{
-                        fontSize: 16,
-                        color: 'var(--cream)',
-                        lineHeight: 1.2,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {s.title}
-                    </h3>
-                  </div>
+                    {s.title}
+                  </h3>
                   <div
                     style={{
                       fontSize: 11,

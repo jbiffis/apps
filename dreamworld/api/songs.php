@@ -5,7 +5,7 @@ require_once __DIR__ . '/shared.php';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'OPTIONS') {
-    header('Allow: GET, POST, DELETE');
+    header('Allow: GET, POST, PUT, DELETE');
     exit;
 }
 
@@ -57,6 +57,35 @@ if ($method === 'POST') {
     $data['songs'][] = $song;
     save_and_unlock($fp, $data);
     json_ok(['song' => shape_song($song)]);
+}
+
+if ($method === 'PUT') {
+    require_admin();
+    $body = read_json_body();
+    $id = trim((string)($body['id'] ?? ''));
+    $title = trim((string)($body['title'] ?? ''));
+    $artist = trim((string)($body['artist'] ?? ''));
+    if ($id === '' || $title === '' || $artist === '') {
+        json_error(400, 'missing_fields', 'id, title and artist are required');
+    }
+    if (mb_strlen($title) > 200 || mb_strlen($artist) > 200) {
+        json_error(400, 'too_long');
+    }
+
+    [$fp, $data] = lock_and_read();
+    $idx = null;
+    foreach ($data['songs'] as $i => $s) {
+        if (($s['id'] ?? '') === $id) { $idx = $i; break; }
+    }
+    if ($idx === null) {
+        unlock($fp);
+        json_error(404, 'not_found');
+    }
+    $data['songs'][$idx]['title'] = $title;
+    $data['songs'][$idx]['artist'] = $artist;
+    $updated = $data['songs'][$idx];
+    save_and_unlock($fp, $data);
+    json_ok(['song' => shape_song($updated)]);
 }
 
 if ($method === 'DELETE') {

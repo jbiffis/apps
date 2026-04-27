@@ -52,6 +52,20 @@ export async function addSong(title: string, artist: string): Promise<Song> {
   return data.song
 }
 
+export async function updateSong(id: string, title: string, artist: string): Promise<Song> {
+  const res = await fetch(`${BASE}/songs.php`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Password': getAdminPassword(),
+    },
+    body: JSON.stringify({ id, title, artist }),
+  })
+  if (!res.ok) throw await parseError(res)
+  const data = await res.json()
+  return data.song
+}
+
 export async function deleteSong(id: string): Promise<void> {
   const url = new URL(`${BASE}/songs.php`, window.location.origin)
   url.searchParams.set('id', id)
