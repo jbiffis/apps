@@ -2,9 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// Deployed at apps.biffis.com/book-log
+// Deployed at apps.biffis.com/bookstory
 export default defineConfig({
-  base: '/book-log/',
+  base: '/bookstory/',
   plugins: [
     react(),
     VitePWA({
@@ -17,12 +17,12 @@ export default defineConfig({
         'icons/apple-touch-icon.png',
       ],
       manifest: {
-        id: '/book-log/',
+        id: '/bookstory/',
         name: 'BookStory — A cozy reading clubhouse',
         short_name: 'BookStory',
         description: 'Track books, earn badges, conquer your reading quest!',
-        start_url: '/book-log/',
-        scope: '/book-log/',
+        start_url: '/bookstory/',
+        scope: '/bookstory/',
         display: 'standalone',
         orientation: 'portrait',
         background_color: '#FBF3E4',
@@ -50,8 +50,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
-        navigateFallback: '/book-log/index.html',
-        navigateFallbackDenylist: [/^\/book-log\/api\//],
+        navigateFallback: '/bookstory/index.html',
+        navigateFallbackDenylist: [/^\/bookstory\/api\//],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/covers\.openlibrary\.org\/.*/i,
