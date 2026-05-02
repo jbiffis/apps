@@ -337,7 +337,7 @@ export default function BookDetail() {
         {isFinished && (
           <div
             className="card"
-            style={{ padding: 18, marginBottom: 16, background: 'var(--accent-2)' }}
+            style={{ padding: 18, marginBottom: 16 }}
           >
             <h2 className="serif" style={{ fontSize: 18, marginBottom: 10 }}>
               Your rating
