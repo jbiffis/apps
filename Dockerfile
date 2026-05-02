@@ -7,7 +7,7 @@ RUN a2enmod rewrite headers proxy proxy_fcgi proxy_http
 COPY apache-security.conf /etc/apache2/conf-enabled/security.conf
 COPY simgolf-proxy.conf /etc/apache2/conf-enabled/simgolf-proxy.conf
 COPY webapp-proxy.conf /etc/apache2/conf-enabled/webapp-proxy.conf
-COPY book-log-proxy.conf /etc/apache2/conf-enabled/book-log-proxy.conf
+COPY bookstory-proxy.conf /etc/apache2/conf-enabled/bookstory-proxy.conf
 COPY dreamworld-proxy.conf /etc/apache2/conf-enabled/dreamworld-proxy.conf
 
 # Disable PHP version header

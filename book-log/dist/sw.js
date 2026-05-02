@@ -1,1 +1,25 @@
-if(!self.define){let e,n={};const s=(s,i)=>(s=new URL(s+".js",i).href,n[s]||new Promise(n=>{if("document"in self){const e=document.createElement("script");e.src=s,e.onload=n,document.head.appendChild(e)}else e=s,importScripts(s),n()}).then(()=>{let e=n[s];if(!e)throw new Error(`Module ${s} didn’t register its module`);return e}));self.define=(i,o)=>{const r=e||("document"in self?document.currentScript.src:"")||location.href;if(n[r])return;let c={};const a=e=>s(e,r),t={module:{uri:r},exports:c,require:a};n[r]=Promise.all(i.map(e=>t[e]||a(e))).then(e=>(o(...e),c))}}define(["./workbox-58bd4dca"],function(e){"use strict";self.skipWaiting(),e.clientsClaim(),e.precacheAndRoute([{url:"manifest.webmanifest",revision:"27ee4b8403804abe1f5579c2eef40b67"},{url:"index.html",revision:"d50e90e696abd08fc9bb2187e5b64e7b"},{url:"favicon.svg",revision:"d96a56cf224a15120f8fa61a5d5d90ea"},{url:"icons/maskable-512.png",revision:"cb55cb9c2be939429c6fbc8377d3065d"},{url:"icons/icon-512.png",revision:"136f5ae49c9048892643851e925eb494"},{url:"icons/icon-192.png",revision:"e852c488ee39bcf9998823988937ebe3"},{url:"icons/apple-touch-icon.png",revision:"a14b5fb499736679774a7c22397a2762"},{url:"assets/workbox-window.prod.es5-Bq4GJJid.js",revision:null},{url:"assets/index-CmhrjVu6.js",revision:null},{url:"assets/index-C1vrmnIm.css",revision:null},{url:"assets/BarcodeScanner-Czh7cR55.js",revision:null},{url:"favicon.svg",revision:"d96a56cf224a15120f8fa61a5d5d90ea"},{url:"icons/apple-touch-icon.png",revision:"a14b5fb499736679774a7c22397a2762"},{url:"icons/icon-192.png",revision:"e852c488ee39bcf9998823988937ebe3"},{url:"icons/icon-512.png",revision:"136f5ae49c9048892643851e925eb494"},{url:"icons/maskable-512.png",revision:"cb55cb9c2be939429c6fbc8377d3065d"},{url:"manifest.webmanifest",revision:"27ee4b8403804abe1f5579c2eef40b67"}],{}),e.cleanupOutdatedCaches(),e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("/book-log/index.html"),{denylist:[/^\/book-log\/api\//]})),e.registerRoute(/^https:\/\/covers\.openlibrary\.org\/.*/i,new e.CacheFirst({cacheName:"openlibrary-covers",plugins:[new e.ExpirationPlugin({maxEntries:500,maxAgeSeconds:7776e3}),new e.CacheableResponsePlugin({statuses:[0,200]})]}),"GET"),e.registerRoute(/^https:\/\/books\.google\.com\/books\/content.*/i,new e.CacheFirst({cacheName:"googlebooks-covers",plugins:[new e.ExpirationPlugin({maxEntries:500,maxAgeSeconds:7776e3}),new e.CacheableResponsePlugin({statuses:[0,200]})]}),"GET"),e.registerRoute(/^https:\/\/openlibrary\.org\/api\/books.*/i,new e.NetworkFirst({cacheName:"openlibrary-api",networkTimeoutSeconds:5,plugins:[new e.ExpirationPlugin({maxEntries:200,maxAgeSeconds:2592e3}),new e.CacheableResponsePlugin({statuses:[0,200]})]}),"GET")});
+
+self.addEventListener('install', (e) => {
+  self.skipWaiting();
+});
+self.addEventListener('activate', (e) => {
+  self.registration.unregister()
+    .then(() => self.clients.matchAll())
+    .then((clients) => {
+      clients.forEach((client) => {
+        if (client instanceof WindowClient)
+          client.navigate(client.url);
+      });
+      return Promise.resolve();
+    })
+    .then(() => {
+      self.caches.keys().then((cacheNames) => {
+        Promise.all(
+          cacheNames.map((cacheName) => {
+            return self.caches.delete(cacheName);
+          }),
+        );
+      })
+    });
+});
+    
