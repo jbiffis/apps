@@ -33,3 +33,7 @@ Easter beer order form for Dépanneur Rapido specials.
 ### Adding Beers
 
 Beer IDs are array indexes in `beers.php`. **Always append new beers to the end of the array** to avoid breaking existing orders that reference IDs.
+
+## Book-Log App workflow
+
+When making changes to the `book-log/` app on behalf of the owner's daughter, after committing and pushing to the feature branch, also merge the feature branch into `main` and push `main` so the auto-deploy is triggered. Sequence: commit on feature branch → push feature branch → checkout main → pull → merge feature branch (no-ff) → push main → checkout feature branch.
