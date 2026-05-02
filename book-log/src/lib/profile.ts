@@ -23,6 +23,18 @@ export const AVATAR_CHOICES = [
   '🐧',
   '🦉',
   '🐢',
+  '🐶',
+  '🐱',
+  '🐰',
+  '🦋',
+  '🦖',
+  '🐉',
+  '🌮',
+  '🍕',
+  '🍪',
+  '🍩',
+  '🍦',
+  '🍓',
 ] as const
 
 export function defaultProfile(): Profile {
