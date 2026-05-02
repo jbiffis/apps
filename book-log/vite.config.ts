@@ -9,6 +9,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Caching disabled for now so changes are visible immediately.
+      // The generated SW unregisters itself and clears caches on next visit.
+      selfDestroying: true,
       includeAssets: [
         'favicon.svg',
         'icons/apple-touch-icon.png',
