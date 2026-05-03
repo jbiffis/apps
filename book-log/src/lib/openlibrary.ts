@@ -91,14 +91,18 @@ export async function lookupGoogleBooks(
 }
 
 export async function lookupBook(isbn13: string): Promise<BookLookup | null> {
+  // Google Books first: cleaner titles for mainstream books. OpenLibrary
+  // is community-maintained and can have wonky entries (e.g. ISBN
+  // 9780810994737 returns "greg Rules" instead of "Diary of a Wimpy Kid:
+  // Rodrick Rules"). Fall back to OL when Google Books has no result.
   try {
-    const ol = await lookupOpenLibrary(isbn13)
-    if (ol) return ol
+    const gb = await lookupGoogleBooks(isbn13)
+    if (gb) return gb
   } catch {
-    // fall through to Google Books
+    // fall through to OpenLibrary
   }
   try {
-    return await lookupGoogleBooks(isbn13)
+    return await lookupOpenLibrary(isbn13)
   } catch {
     return null
   }
