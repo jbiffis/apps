@@ -1,2 +1,5 @@
 simgolf/
 .git/
+tracker/
+.env
+.env.local

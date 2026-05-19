@@ -14,6 +14,7 @@ services:
       - ./webapp-proxy.conf:/etc/apache2/conf-enabled/webapp-proxy.conf:ro
       - ./bookstory-proxy.conf:/etc/apache2/conf-enabled/bookstory-proxy.conf:ro
       - ./dreamworld-proxy.conf:/etc/apache2/conf-enabled/dreamworld-proxy.conf:ro
+      - ./tracker-proxy.conf:/etc/apache2/conf-enabled/tracker-proxy.conf:ro
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
     depends_on:
@@ -21,6 +22,7 @@ services:
     networks:
       - default
       - data-tracking-globe
+      - tracker-net
     restart: unless-stopped
 
   simgolf-php:
@@ -32,6 +34,47 @@ services:
     env_file: ./.env
     restart: unless-stopped
 
+  # --- Tracker app (apps.biffis.com/tracker) ---
+  # See tracker/README.md and tracker/docs/PRIVACY.md.
+  # tracker-db has no host port — only reachable inside tracker-net.
+
+  tracker-backend:
+    build: ./tracker/backend
+    networks:
+      - tracker-net
+    environment:
+      - APP_PORT=8080
+      - DB_HOST=tracker-db
+      - DB_PORT=5432
+      - DB_NAME=tracker
+      - DB_USERNAME=tracker
+      - DB_PASSWORD=${TRACKER_DB_PASSWORD:?TRACKER_DB_PASSWORD must be set}
+      - JWT_SECRET=${TRACKER_JWT_SECRET:?TRACKER_JWT_SECRET must be set (>=32 chars)}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
+      - UPLOAD_DIR=/uploads
+    volumes:
+      - tracker-uploads:/uploads
+    depends_on:
+      - tracker-db
+    restart: unless-stopped
+
+  tracker-db:
+    image: postgres:16-alpine
+    networks:
+      - tracker-net
+    environment:
+      - POSTGRES_DB=tracker
+      - POSTGRES_USER=tracker
+      - POSTGRES_PASSWORD=${TRACKER_DB_PASSWORD:?TRACKER_DB_PASSWORD must be set}
+    volumes:
+      - /var/lib/docker/volumes/apps/tracker-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  tracker-uploads:
+
 networks:
   data-tracking-globe:
     external: true
+  tracker-net:
+    driver: bridge

@@ -1,0 +1,19 @@
+# Top-level secrets — never commit
+.env
+.env.local
+*.env
+
+# Tracker dev artifacts (per-subdir .gitignores cover most; belt-and-braces)
+tracker/.local-data/
+tracker/backend/target/
+tracker/frontend/node_modules/
+tracker/frontend/dist/
+tracker/**/*.db
+tracker/**/*.sqlite*
+tracker/**/dump.sql
+
+# Editor / OS
+.DS_Store
+.idea/
+*.iml
+.vscode/

@@ -9,6 +9,7 @@ COPY simgolf-proxy.conf /etc/apache2/conf-enabled/simgolf-proxy.conf
 COPY webapp-proxy.conf /etc/apache2/conf-enabled/webapp-proxy.conf
 COPY bookstory-proxy.conf /etc/apache2/conf-enabled/bookstory-proxy.conf
 COPY dreamworld-proxy.conf /etc/apache2/conf-enabled/dreamworld-proxy.conf
+COPY tracker-proxy.conf /etc/apache2/conf-enabled/tracker-proxy.conf
 
 # Disable PHP version header
 RUN echo "expose_php = Off" > /usr/local/etc/php/conf.d/security.ini
