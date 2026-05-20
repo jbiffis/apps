@@ -10,12 +10,12 @@
 //   TRACKER_TEST_API   default http://localhost:18080/tracker/api
 //   TRACKER_TEST_DAYS  default 90
 //   TRACKER_TEST_USERS default carley,jeremy,morgan,dave
-//   TRACKER_TEST_PW     default changeme-on-first-login
+//   TRACKER_TEST_PW     default test123
 
 const BASE = process.env.TRACKER_TEST_API || 'http://localhost:18080/tracker/api'
 const DAYS = parseInt(process.env.TRACKER_TEST_DAYS || '90', 10)
 const USERS = (process.env.TRACKER_TEST_USERS || 'carley,jeremy,morgan,dave').split(',')
-const PASSWORD = process.env.TRACKER_TEST_PW || 'changeme-on-first-login'
+const PASSWORD = process.env.TRACKER_TEST_PW || 'test123'
 const CONCURRENCY = 16
 
 // Mean events per day. Slug overrides win; otherwise the leaf's top-level

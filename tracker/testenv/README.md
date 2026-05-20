@@ -16,7 +16,7 @@ Then open `http://<this-host-ip>:18080/tracker/` (the script prints the URL).
 
 ## Users
 
-Four seeded users, all with password `changeme-on-first-login`:
+Four seeded users, all with password `test123` (test-only; set by `run.sh`):
 
 | user   | gender | notes |
 |--------|--------|-------|
