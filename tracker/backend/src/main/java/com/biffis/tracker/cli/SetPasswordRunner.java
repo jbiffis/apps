@@ -47,7 +47,7 @@ public class SetPasswordRunner implements ApplicationRunner {
         }
         String username = nonOption.get(1);
 
-        User user = users.findByUsername(username).orElse(null);
+        User user = users.findByUsernameIgnoreCase(username).orElse(null);
         if (user == null) {
             // No PII: username is an account handle, not health data, and the
             // operator typed it. Safe to name it back so they know it missed.

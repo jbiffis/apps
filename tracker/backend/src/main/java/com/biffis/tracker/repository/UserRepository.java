@@ -8,5 +8,6 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    Optional<User> findByUsername(String username);
+    /** Case-insensitive: usernames are matched regardless of capitalization. */
+    Optional<User> findByUsernameIgnoreCase(String username);
 }

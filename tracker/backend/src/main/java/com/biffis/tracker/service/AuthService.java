@@ -28,7 +28,7 @@ public class AuthService {
     }
 
     public LoginResponse login(String username, String rawPassword) {
-        User user = users.findByUsername(username)
+        User user = users.findByUsernameIgnoreCase(username)
                 .orElseThrow(InvalidCredentialsException::new);
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             throw new InvalidCredentialsException();

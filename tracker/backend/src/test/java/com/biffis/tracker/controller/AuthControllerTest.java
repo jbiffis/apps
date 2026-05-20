@@ -46,6 +46,15 @@ class AuthControllerTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void login_usernameIsCaseInsensitive() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"CaRLeY\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.username", is("carley")));
+    }
+
+    @Test
     void login_wrongPassword_returns401() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
