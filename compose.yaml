@@ -14,6 +14,7 @@ services:
       - ./webapp-proxy.conf:/etc/apache2/conf-enabled/webapp-proxy.conf:ro
       - ./bookstory-proxy.conf:/etc/apache2/conf-enabled/bookstory-proxy.conf:ro
       - ./dreamworld-proxy.conf:/etc/apache2/conf-enabled/dreamworld-proxy.conf:ro
+      - ./tracker-proxy.conf:/etc/apache2/conf-enabled/tracker-proxy.conf:ro
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
     depends_on:
@@ -21,6 +22,7 @@ services:
     networks:
       - default
       - data-tracking-globe
+      - tracker-net
     restart: unless-stopped
 
   simgolf-php:
@@ -32,6 +34,17 @@ services:
     env_file: ./.env
     restart: unless-stopped
 
+  # The tracker app (tracker-backend + tracker-db) lives in its OWN Komodo
+  # stack — tracker/compose.yaml — so its secrets stay out of this stack's
+  # env and out of `docker inspect` for anyone (e.g. the agent API user) who
+  # has access to biffis-apps but not to the tracker stack. `web` above only
+  # reverse-proxies /tracker/api/* to tracker-backend over the shared external
+  # `tracker-net`; it holds no tracker secret. Deploy the tracker stack first
+  # (it creates tracker-net), then this one.
+
 networks:
   data-tracking-globe:
     external: true
+  tracker-net:
+    external: true
+    name: tracker-net

@@ -1,0 +1,51 @@
+# Tracker — its own Komodo stack, deliberately separate from biffis-apps so
+# its secrets can be isolated. Grant policy: do NOT give the agent API user
+# (opencode-homelab) any permission on this stack — that keeps TRACKER_JWT_SECRET
+# / TRACKER_DB_PASSWORD out of reach of `docker inspect` via the Komodo API.
+#
+# Secrets come from this stack's Komodo Environment (or a host .env). The
+# shared Apache `web` in biffis-apps proxies /tracker/api/* to tracker-backend
+# over the external `tracker-net` network (web carries no tracker secret).
+#
+# Deploy order: this stack first (it creates tracker-net), then biffis-apps
+# (its `web` joins tracker-net as external).
+
+services:
+  tracker-backend:
+    build: ./backend
+    networks:
+      - tracker-net
+    environment:
+      - APP_PORT=8080
+      - DB_HOST=tracker-db
+      - DB_PORT=5432
+      - DB_NAME=tracker
+      - DB_USERNAME=tracker
+      - DB_PASSWORD=${TRACKER_DB_PASSWORD:?TRACKER_DB_PASSWORD must be set}
+      - JWT_SECRET=${TRACKER_JWT_SECRET:?TRACKER_JWT_SECRET must be set (>=32 chars)}
+      - UPLOAD_DIR=/uploads
+    volumes:
+      - tracker-uploads:/uploads
+    depends_on:
+      - tracker-db
+    restart: unless-stopped
+
+  tracker-db:
+    image: postgres:16-alpine
+    networks:
+      - tracker-net
+    environment:
+      - POSTGRES_DB=tracker
+      - POSTGRES_USER=tracker
+      - POSTGRES_PASSWORD=${TRACKER_DB_PASSWORD:?TRACKER_DB_PASSWORD must be set}
+    volumes:
+      - /var/lib/docker/volumes/apps/tracker-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  tracker-uploads:
+
+networks:
+  tracker-net:
+    name: tracker-net
+    driver: bridge

@@ -10,7 +10,7 @@ Personal event-tracking app. Log anything — headaches, medications, water, moo
 
 ## At a glance
 
-- **Backend:** Spring Boot 3.4.1 · Java 17 · Spring Data JPA · Spring Security + JWT · Flyway · PostgreSQL
+- **Backend:** Spring Boot 3.4.1 · Java 21 · Spring Data JPA · Spring Security + JWT · Flyway · PostgreSQL
 - **Frontend:** React 19 + Vite · Tailwind · `vite-plugin-pwa`
 - **DB:** PostgreSQL 16 in its own Docker container, no host port, volume on prod only
 - **Auth:** Per-user password → JWT (Bearer). Two seeded users: Carley, Jeremy.
@@ -23,13 +23,15 @@ Mirrors the structure of [`jbiffis/hockeypool`](https://github.com/jbiffis/hocke
 ```
 tracker/
 ├── README.md                    ← this file
+├── compose.yaml                 ← the tracker's OWN Komodo stack (backend + db)
 ├── CLAUDE.md                    ← instructions for Claude when working on tracker
 ├── docs/
 │   ├── DATA_MODEL.md            ← schema + relationships + auth rules
 │   ├── SEED_CATALOG.md          ← starter event-type hierarchy
 │   ├── DESIGN.md                ← palette, typography, components
 │   ├── API.md                   ← REST endpoints
-│   └── PRIVACY.md               ← what lives where, what Claude can/can't see
+│   ├── PRIVACY.md               ← what lives where, what Claude can/can't see
+│   └── TEST_CASES.md            ← manual/acceptance test plan + deploy verification
 ├── backend/                     ← Spring Boot app
 │   ├── pom.xml
 │   ├── Dockerfile
@@ -84,9 +86,29 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build tracker-db tracker
 
 ## Deploy
 
+The tracker runs as its **own Komodo stack** (`tracker/compose.yaml`), separate
+from `biffis-apps`. This is deliberate: its secrets live in the tracker stack's
+own environment, and the agent API user (`opencode-homelab`) is **not** granted
+any permission on this stack — so `TRACKER_JWT_SECRET` / `TRACKER_DB_PASSWORD`
+can't be read back via `docker inspect` through the Komodo API. The shared
+Apache `web` in biffis-apps only reverse-proxies `/tracker/api/*` to
+`tracker-backend` over the external `tracker-net`; it holds no tracker secret.
+
+**One-time setup:**
+1. Register `tracker/compose.yaml` as a new Komodo stack (e.g. `tracker`).
+2. Set `TRACKER_DB_PASSWORD` + `TRACKER_JWT_SECRET` (≥32 chars) in **that stack's**
+   Environment — not biffis-apps.
+3. In Komodo, do **not** grant `opencode-homelab` access to this stack (leave
+   `base_permission: None`, no per-user grant).
+
+**Each deploy:**
 1. Push to `main`.
-2. SSH to prod, run `docker compose build tracker-backend tracker-frontend` (only when Java/Node sources or Dockerfiles changed).
-3. Komodo restart picks up the new images.
+2. On prod, build the image when Java/Dockerfile changed:
+   `docker compose -f tracker/compose.yaml build`.
+3. Deploy the **tracker** stack first (it creates `tracker-net`), then redeploy
+   **biffis-apps** if its `web`/proxy changed (it joins `tracker-net` as external).
 4. Flyway runs pending migrations on backend startup.
+5. First deploy only: set real passwords with the `set-password` CLI (see
+   PRIVACY.md) before exposing the public URL.
 
 See [docs/API.md](docs/API.md), [docs/DATA_MODEL.md](docs/DATA_MODEL.md), [docs/DESIGN.md](docs/DESIGN.md), [docs/PRIVACY.md](docs/PRIVACY.md), [docs/SEED_CATALOG.md](docs/SEED_CATALOG.md) for detail.
