@@ -11,14 +11,14 @@
 
 ## Current work
 
-**Epic:** 8 — Entry screen **(not started)**
-**Branch:** Epics 1-7 are merged to `main`.
+**Epic:** 9 — History screen **(not started)**
+**Branch:** Epics 1-8 are merged to `main`.
 
-**Epics 1–7 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main`, full suite green. Frontend on `main`: Epic 5 scaffold, Epic 6 login/guard/logout, Epic 7 Home (hero + all-trackers grid + today feed + FAB + picker sheet, real data). Also: case-insensitive login, catalog tree-truncation fix (Epic 3 note), and a local test env at `tracker/testenv` (4 users / `test123`, ~11.5k events across all 42 trackers — `./run.sh`). In-browser visual checks aren't done headless — owner confirms via the test env / deploy.
+**Epics 1–8 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main`, full suite green. Frontend on `main`: Epic 5 scaffold, Epic 6 login/guard/logout, Epic 7 Home, Epic 8 Entry screen (FieldRenderer per widget, TimeChips, save→toast w/ undo). Also: case-insensitive login, catalog tree-truncation fix (Epic 3 note), and a local test env at `tracker/testenv` (4 users / `test123`, ~11.5k events across all 42 trackers — `./run.sh`). In-browser visual checks aren't done headless — owner confirms via the test env / deploy.
 
 **Frontend data layer:** `hooks/useApi.js` (GET → `{data,loading,error,reload}`). Auth/token in `auth.js`; `api.js` attaches Bearer + clears session on 401. Catalog helpers in `lib/catalog.js`, formatting in `lib/format.js`.
 
-**Next (Epic 8): Entry screen** — replace the `pages/Entry.jsx` stub at `/log/:slug`. Fetch the type via `GET /api/event-types/{slug}`, render a `FieldRenderer` per `property.preset.widget` (step/single_select/multi_select/face_select → chips; number/dose/duration → stepper; text → textarea; bool → toggle), TimeChips, then `POST /api/logged-events` → navigate Home → toast w/ 5s undo (DELETE). See `docs/API.md` logged-events + `docs/DESIGN.md` fields/chips/buttons.
+**Next (Epic 9): History screen** — `pages/History.jsx` at `/history`, reachable from a bottom-nav tab (wire the inert one). List the user's entries grouped by day (Today / Yesterday / dated) from `GET /api/logged-events` (widen the window via `from`/`to`; default is last 24h, so pass ~30 days). Tap a row → read-only detail. Reuse `lib/format.js` + the catalog icon map pattern from Home. See `docs/API.md` logged-events + `docs/DESIGN.md`.
 
 **Test infra note:** the JUnit suite now runs two ways — Testcontainers (CI / Docker-compatible hosts) *or* against an external Postgres via `TRACKER_TEST_DB_URL` (this dev box, where Testcontainers can't talk to Docker 29.x). `AbstractIntegrationTest` picks automatically. The reproduce recipe is in the Epic 4 proof block.
 
@@ -246,20 +246,25 @@ Reproduce: `cd tracker/frontend && npm install && npm run build && npm run previ
 
 ---
 
-### Epic 8 — Entry screen ⚪
+### Epic 8 — Entry screen 🟢 (signed off 2026-05-20)
 
-- [ ] `pages/Entry.jsx` route `/log/:slug`
-- [ ] `components/FieldRenderer.jsx` — switch on `preset.widget`:
-    - `step`, `single_select`, `multi_select`, `face_select` → chip/pill groups
-    - `number`, `dose`, `duration` → stepper + free input
-    - `text` → textarea
-    - `bool` → toggle
-- [ ] `components/TimeChips.jsx` (Just now / 15m / 1h / Yesterday / Pick) + native datetime picker fallback
-- [ ] Save flow: POST → navigate home → toast with 5s undo (DELETE on undo, no network call if not undone within the window)
-- [ ] "Save another" — stays on screen, resets form
-- [ ] Validation errors surfaced inline
+- [x] `pages/Entry.jsx` route `/log/:slug` (replaces the Epic 7 stub) — loads the type via `GET /event-types/{slug}`
+- [x] `components/FieldRenderer.jsx` — switch on `preset.widget`:
+    - `step`/`single_select`/`multi_select`/`face_select` → chip/pill groups (multi = array, face shows emoji)
+    - `number`/`dose`/`duration` → stepper (−/+ with min/max/step, unit, numeric input)
+    - `text` → textarea, `bool` → Yes/No toggle
+- [x] `components/TimeChips.jsx` (Just now / 15m / 1h / Yesterday / Pick…) + native `datetime-local` fallback
+- [x] Save flow: `POST /logged-events` → navigate Home → `Toast` w/ 5s auto-dismiss + Undo (DELETE the created id; no extra call if the window passes). Toast handed off via router state.
+- [x] "Save another" — stays on screen, resets the form, brief "Saved ✓"
+- [x] Validation: required fields flagged inline; submit blocked until satisfied; server errors surfaced
 
-**Definition of done:** Can log a Headache (severity + locations + note), a medication (dose + with food), Water (count), and a Mood face. Entries appear in Today feed.
+**Design notes:**
+- `values` state holds only user edits; unedited fields fall back to their widget default via `valueFor()`. This sidesteps seeding state in an effect (the eslint config rejects both setState-in-effect and ref-writes-in-render), and "Save another" resets by clearing to `{}`.
+- Home shows the undo toast from `location.state.saved`, reloads hero+today, and clears the history state so a refresh doesn't re-show it.
+
+**Verified (live API, test env):** the four DoD trackers POST 201 with the exact widget→value shapes the form emits — Headache (Severity `step`→1, Location `multi_select`→["front","temple"]), advil-200mg (Dose `dose`→1, With `single_select`→"none"), Water (Glasses `dose`→1), Mood (How `face_select`→1). Undo: DELETE→204, subsequent GET→404. lint 0 errors; build → dist; test-env serves the new bundle; `/tracker/log/headache` → 200. **Not verified headless:** the in-browser interaction/visual — owner's check via the test env.
+
+**Definition of done:** ✅ can log Headache (severity + locations + note), a medication (dose + with food), Water (count), and a Mood face; entries appear in the Today feed. (Save/undo contract proven against the live API; interactive pass is the owner's.)
 
 ---
 
