@@ -1,153 +1,186 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getThemePref, resolveTheme, setThemePref } from '../theme.js'
 import { clearSession, getUser } from '../auth.js'
-import {
-  Home as HomeIcon, Plus, Stats, User, Sun, Logout,
-  Sleep, Pill, Water, DynamicIcon,
-} from '../icons/index.jsx'
+import { useApi } from '../hooks/useApi.js'
+import { flattenLeaves, leavesUnder } from '../lib/catalog.js'
+import { greeting, dateLabel, timeLabel, summarizeOptions } from '../lib/format.js'
+import AppShell from '../components/AppShell.jsx'
+import BottomNav from '../components/BottomNav.jsx'
+import TrackerPickerSheet from '../components/TrackerPickerSheet.jsx'
+import { Sun, Logout, Plus, DynamicIcon } from '../icons/index.jsx'
 
-// Epic 5/6 placeholder Home. Proves tokens, typography, icons, dark mode and
-// logout. Real data wiring lands in Epic 7.
-
-const TILES = [
-  { name: 'Medication', icon: 'Pill' },
-  { name: 'Water', icon: 'Water' },
-  { name: 'Sleep', icon: 'Sleep' },
-  { name: 'Mood', icon: 'Mood' },
-  { name: 'Workout', icon: 'Workout' },
-  { name: 'Coffee', icon: 'Coffee' },
-  { name: 'Journal', icon: 'Journal' },
-  { name: 'Weight', icon: 'Weight' },
-]
-
-function NavItem({ icon: Icon, label, active }) {
-  return (
-    <button
-      className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-full font-body text-[11px] ${
-        active ? 'bg-accent-2 text-accent-ink' : 'text-ink-3'
-      }`}
-    >
-      <Icon size={22} />
-      {label}
-    </button>
-  )
-}
+const EMPTY = []
 
 export default function Home() {
   const navigate = useNavigate()
-  const [pref, setPref] = useState(getThemePref())
   const user = getUser()
+  const [pref, setPref] = useState(getThemePref())
+  const [sheet, setSheet] = useState({ open: false, title: '', items: [] })
+
+  const hero = useApi('/home/hero')
+  const today = useApi('/home/today')
+  const catalog = useApi('/event-types')
+  const tree = catalog.data || EMPTY
+  // The today/logged-event payload's eventType carries only {slug, name};
+  // resolve its icon from the catalog we already fetched.
+  const iconBySlug = useMemo(() => {
+    const m = {}
+    flattenLeaves(tree).forEach((l) => { m[l.slug] = l.icon })
+    return m
+  }, [tree])
 
   function cycleTheme() {
     const next = resolveTheme(pref) === 'dark' ? 'light' : 'dark'
     setThemePref(next)
     setPref(next)
   }
-
   function logout() {
     clearSession()
     navigate('/login', { replace: true })
   }
+  function logTracker(slug) {
+    setSheet({ open: false, title: '', items: [] })
+    navigate(`/log/${slug}`)
+  }
+  function openTile(node) {
+    if (node.isCategory) setSheet({ open: true, title: node.name, items: leavesUnder(node) })
+    else logTracker(node.slug)
+  }
+  function openFab() {
+    setSheet({ open: true, title: 'Log something', items: flattenLeaves(tree) })
+  }
+
+  const bar = (
+    <header className="flex items-start justify-between px-[18px] pb-2.5 pt-3">
+      <div>
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">{dateLabel()}</p>
+        <h1 className="font-display text-[26px] font-extrabold leading-tight text-ink">
+          {greeting()}{user?.displayName ? `, ${user.displayName}.` : '.'}
+        </h1>
+      </div>
+      <div className="flex items-center gap-2 pt-1">
+        <button onClick={cycleTheme} aria-label="Toggle theme"
+          className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-2">
+          <Sun size={18} />
+        </button>
+        <button onClick={logout} aria-label="Sign out"
+          className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-2">
+          <Logout size={18} />
+        </button>
+      </div>
+    </header>
+  )
 
   return (
-    <div className="mx-auto flex min-h-full max-w-[480px] flex-col bg-bg">
-      {/* App bar */}
-      <header className="flex items-center justify-between px-[18px] pb-2.5 pt-2">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">LifeTracker</p>
-          <h1 className="font-display text-[22px] font-extrabold text-ink">
-            {user?.displayName ? `Hi, ${user.displayName}.` : 'Good morning.'}
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={cycleTheme}
-            aria-label="Toggle theme"
-            className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-2"
-          >
-            <Sun size={18} />
-          </button>
-          <button
-            onClick={logout}
-            aria-label="Sign out"
-            className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-2"
-          >
-            <Logout size={18} />
-          </button>
-        </div>
-      </header>
+    <AppShell bar={bar} nav={<BottomNav active="home" onSelect={(k) => k === 'log' && openFab()} />}>
+      {/* Hero cards */}
+      <section className="space-y-3">
+        {hero.loading && <CardSkeleton />}
+        {hero.data?.map((c, i) => (
+          <HeroCard key={c.eventTypeSlug} card={c} primary={c.primary ?? i === 0} onClick={() => logTracker(c.eventTypeSlug)} />
+        ))}
+      </section>
 
-      <main className="flex-1 space-y-5 px-[18px] pb-24">
-        {/* Hero card (primary gradient) */}
-        <section
-          className="qcard qcard-primary flex flex-col justify-between"
-          style={{ boxShadow: '0 10px 24px -12px var(--accent-deep)' }}
-        >
-          <div className="flex items-start justify-between">
-            <div className="grid h-[34px] w-[34px] place-items-center rounded-xl bg-white/20">
-              <Pill size={20} />
-            </div>
-            <span className="font-mono text-[10px] uppercase tracking-[0.08em] opacity-80">1 left</span>
-          </div>
-          <div>
-            <p className="font-body text-[13px] opacity-90">Medication</p>
-            <p className="font-display text-[22px] font-extrabold leading-none">
-              2 <span className="text-[15px] font-bold opacity-80">/3</span>
-            </p>
-            <div className="mt-2 h-[5px] w-full overflow-hidden rounded-full bg-white/25">
-              <div className="h-full rounded-full bg-white" style={{ width: '66%' }} />
-            </div>
-          </div>
-        </section>
-
-        {/* Two secondary hero cards */}
-        <section className="grid grid-cols-2 gap-3">
-          {[
-            { Icon: Water, name: 'Water', value: '5', sub: '/8', cap: 'glasses', pct: '62%' },
-            { Icon: Sleep, name: 'Sleep', value: '7.2', sub: 'h', cap: 'last night', pct: '90%' },
-          ].map(({ Icon, name, value, sub, cap, pct }) => (
-            <div key={name} className="qcard flex flex-col justify-between">
-              <div className="grid h-[34px] w-[34px] place-items-center rounded-xl bg-accent-2 text-accent-ink">
-                <Icon size={20} />
-              </div>
-              <div>
-                <p className="font-body text-[13px] text-ink-2">{name}</p>
-                <p className="font-display text-[22px] font-extrabold leading-none text-ink">
-                  {value} <span className="text-[15px] font-bold text-ink-3">{sub}</span>
-                </p>
-                <p className="font-mono text-[10px] text-ink-3">{cap}</p>
-                <div className="mt-2 h-[5px] w-full overflow-hidden rounded-full bg-surface-2">
-                  <div className="h-full rounded-full bg-accent" style={{ width: pct }} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </section>
-
-        {/* All trackers grid */}
-        <section className="space-y-3">
-          <h2 className="font-display text-[15px] font-bold text-ink">All trackers</h2>
+      {/* All trackers */}
+      <section className="mt-6 space-y-3">
+        <h2 className="font-display text-[15px] font-bold text-ink">All trackers</h2>
+        {catalog.loading ? (
+          <p className="font-body text-[13px] text-ink-3">Loading…</p>
+        ) : (
           <div className="grid grid-cols-4 gap-3">
-            {TILES.map((t) => (
-              <button key={t.name} className="flex flex-col items-center gap-1.5">
+            {tree.map((node) => (
+              <button key={node.slug} onClick={() => openTile(node)} className="flex flex-col items-center gap-1.5">
                 <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-line bg-surface text-ink-2">
-                  <DynamicIcon name={t.icon} size={24} />
+                  <DynamicIcon name={node.icon} size={24} />
                 </span>
-                <span className="font-body text-[11px] text-ink-3">{t.name}</span>
+                <span className="w-full truncate text-center font-body text-[11px] text-ink-3">{node.name}</span>
               </button>
             ))}
           </div>
-        </section>
-      </main>
+        )}
+      </section>
 
-      {/* Bottom nav */}
-      <nav className="sticky bottom-0 flex items-center justify-around border-t border-line bg-bg px-2 py-2">
-        <NavItem icon={HomeIcon} label="Home" active />
-        <NavItem icon={Plus} label="Log" />
-        <NavItem icon={Stats} label="Stats" />
-        <NavItem icon={User} label="Me" />
-      </nav>
-    </div>
+      {/* Today */}
+      <section className="mt-6 space-y-3">
+        <h2 className="font-display text-[15px] font-bold text-ink">Today</h2>
+        {today.loading ? (
+          <p className="font-body text-[13px] text-ink-3">Loading…</p>
+        ) : today.data?.length ? (
+          <ul className="space-y-2">
+            {today.data.map((e) => (
+              <li key={e.id} className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2.5">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent-2 text-accent-ink">
+                  <DynamicIcon name={iconBySlug[e.eventType?.slug]} size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-body text-[13px] font-semibold text-ink">{e.eventType?.name || e.eventType?.slug}</p>
+                  {(summarizeOptions(e.options) || e.note) && (
+                    <p className="truncate font-body text-[11px] text-ink-3">{summarizeOptions(e.options) || e.note}</p>
+                  )}
+                </div>
+                <span className="shrink-0 font-mono text-[10px] text-ink-3">{timeLabel(e.occurredAt)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="font-body text-[13px] text-ink-3">Nothing logged yet today. Tap + to start.</p>
+        )}
+      </section>
+
+      {/* FAB */}
+      <button
+        onClick={openFab}
+        aria-label="Log something"
+        className="fixed bottom-[84px] right-[calc(50%-240px+18px)] z-20 grid h-[58px] w-[58px] place-items-center rounded-[20px] text-white shadow-lg max-[480px]:right-[18px]"
+        style={{ background: 'linear-gradient(160deg, var(--accent), var(--accent-deep))' }}
+      >
+        <Plus size={26} />
+      </button>
+
+      <TrackerPickerSheet
+        open={sheet.open}
+        title={sheet.title}
+        items={sheet.items}
+        onPick={logTracker}
+        onClose={() => setSheet({ open: false, title: '', items: [] })}
+      />
+    </AppShell>
   )
+}
+
+function HeroCard({ card, primary, onClick }) {
+  const pct = Math.round((card.progress ?? 0) * 100)
+  return (
+    <button
+      onClick={onClick}
+      className={`qcard flex w-full flex-col justify-between text-left ${primary ? 'qcard-primary' : ''}`}
+      style={primary ? { boxShadow: '0 10px 24px -12px var(--accent-deep)' } : undefined}
+    >
+      <div className="flex items-start justify-between">
+        <span className={`grid h-[34px] w-[34px] place-items-center rounded-xl ${primary ? 'bg-white/20' : 'bg-accent-2 text-accent-ink'}`}>
+          <DynamicIcon name={card.icon} size={20} />
+        </span>
+        {card.captionText && (
+          <span className={`font-mono text-[10px] uppercase tracking-[0.08em] ${primary ? 'opacity-80' : 'text-ink-3'}`}>
+            {card.captionText}
+          </span>
+        )}
+      </div>
+      <div className="mt-3">
+        <p className={`font-body text-[13px] ${primary ? 'opacity-90' : 'text-ink-2'}`}>{card.name}</p>
+        <p className={`font-display text-[22px] font-extrabold leading-none ${primary ? '' : 'text-ink'}`}>
+          {card.valueText}{' '}
+          <span className={`text-[15px] font-bold ${primary ? 'opacity-80' : 'text-ink-3'}`}>{card.subText}</span>
+        </p>
+        <div className={`mt-2 h-[5px] w-full overflow-hidden rounded-full ${primary ? 'bg-white/25' : 'bg-surface-2'}`}>
+          <div className={`h-full rounded-full ${primary ? 'bg-white' : 'bg-accent'}`} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function CardSkeleton() {
+  return <div className="qcard animate-pulse bg-surface-2" />
 }

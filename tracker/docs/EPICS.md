@@ -11,10 +11,14 @@
 
 ## Current work
 
-**Epic:** 7 — Home screen **(not started)**
-**Branch:** Epics 1-6 are merged to `main`.
+**Epic:** 8 — Entry screen **(not started)**
+**Branch:** Epics 1-7 are merged to `main`.
 
-**Epics 1–6 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main` with a green full-suite run (proof in Epic 4). Frontend: Epic 5 scaffold + Epic 6 login/auth-guard/logout on `main` (React Router wired, `dist/` committed + bind-mounted into the shared Apache). In-browser flows aren't verified headless — owner confirms on deploy.
+**Epics 1–7 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main`, full suite green. Frontend on `main`: Epic 5 scaffold, Epic 6 login/guard/logout, Epic 7 Home (hero + all-trackers grid + today feed + FAB + picker sheet, real data). Also: case-insensitive login, catalog tree-truncation fix (Epic 3 note), and a local test env at `tracker/testenv` (4 users / `test123`, ~11.5k events across all 42 trackers — `./run.sh`). In-browser visual checks aren't done headless — owner confirms via the test env / deploy.
+
+**Frontend data layer:** `hooks/useApi.js` (GET → `{data,loading,error,reload}`). Auth/token in `auth.js`; `api.js` attaches Bearer + clears session on 401. Catalog helpers in `lib/catalog.js`, formatting in `lib/format.js`.
+
+**Next (Epic 8): Entry screen** — replace the `pages/Entry.jsx` stub at `/log/:slug`. Fetch the type via `GET /api/event-types/{slug}`, render a `FieldRenderer` per `property.preset.widget` (step/single_select/multi_select/face_select → chips; number/dose/duration → stepper; text → textarea; bool → toggle), TimeChips, then `POST /api/logged-events` → navigate Home → toast w/ 5s undo (DELETE). See `docs/API.md` logged-events + `docs/DESIGN.md` fields/chips/buttons.
 
 **Test infra note:** the JUnit suite now runs two ways — Testcontainers (CI / Docker-compatible hosts) *or* against an external Postgres via `TRACKER_TEST_DB_URL` (this dev box, where Testcontainers can't talk to Docker 29.x). `AbstractIntegrationTest` picks automatically. The reproduce recipe is in the Epic 4 proof block.
 
@@ -217,20 +221,28 @@ Reproduce: `cd tracker/frontend && npm install && npm run build && npm run previ
 
 ---
 
-### Epic 7 — Home screen ⚪
+### Epic 7 — Home screen 🟢 (signed off 2026-05-20)
 
-- [ ] `components/AppShell.jsx` (app bar + content + bottom nav layout)
-- [ ] `components/BottomNav.jsx` (Home/Log/Stats/Me — only Home wired)
-- [ ] `pages/Home.jsx`:
-    - Greeting (Thursday · Apr 23 / Good morning, Carley.)
-    - Top-3 hero cards from `/api/home/hero`
-    - "All trackers" 4-col grid from `/api/event-types` tree
-    - "Today" list from `/api/home/today`
-    - FAB
-- [ ] `components/TrackerPickerSheet.jsx` — bottom sheet shown when tapping a category tile or the FAB
-- [ ] Dark mode toggle in Me-tab placeholder or app bar menu, persisted in localStorage
+- [x] `components/AppShell.jsx` (app bar slot + scrollable content + bottom nav)
+- [x] `components/BottomNav.jsx` (Home/Log/Stats/Me — only Home active; Log opens the FAB picker)
+- [x] `pages/Home.jsx`:
+    - Greeting (`Thursday · May 20` / `Good morning, Carley.`) — `lib/format.js`
+    - Hero cards from `GET /api/home/hero` (first/`primary` card uses the gradient)
+    - "All trackers" 4-col grid from `GET /api/event-types` (top-level nodes)
+    - "Today" list from `GET /api/home/today`
+    - FAB (gradient, bottom-right, centered-column aware)
+- [x] `components/TrackerPickerSheet.jsx` — bottom sheet from the FAB (all leaves) or a category tile (its leaves); picking → `/log/:slug`
+- [x] Dark mode toggle + logout in the app bar (persisted via `theme.js`)
+- [x] `hooks/useApi.js` (light GET hook), `lib/catalog.js` (flatten leaves), `pages/Entry.jsx` + `/log/:slug` route (stub — real form is Epic 8)
 
-**Definition of done:** Home screen visually matches `lifetracker-polished.html` and pulls real data for the logged-in user.
+**Deviations (intentional):**
+- Used a small `useApi` hook instead of TanStack Query (DESIGN.md's suggestion) — Phase 1 doesn't need cache/invalidation yet; can swap in behind the hook later.
+- `/home/today` (and logged-event views) only return `eventType {slug, name}` — **no icon**. Home derives the Today-row icons client-side from the `/event-types` tree it already fetches. If other surfaces need it, add `icon` to `LoggedEventView.EventTypeRef` in a later epic.
+- Added a minimal Entry stub now so picking a tracker navigates somewhere instead of bouncing off the `*` redirect; Epic 8 replaces it.
+
+**Verified:** lint 0 errors; build 38 modules → dist; the test env (nginx bind-mount) serves the new bundle; `/tracker/log/water` serves the SPA (200). `/home/hero`, `/home/today`, `/event-types` all return populated data for the seeded users. **Not verified headless:** the in-browser visual match to the prototype — owner's check (open http://&lt;host&gt;:18080/tracker/, log in as carley/test123).
+
+**Definition of done:** Home screen pulls real data for the logged-in user and matches the prototype layout. *(Data + layout in place + build/serve green; pixel match is the owner's visual check.)*
 
 ---
 

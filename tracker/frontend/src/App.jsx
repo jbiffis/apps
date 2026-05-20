@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import RequireAuth from './components/RequireAuth.jsx'
 import Login from './pages/Login.jsx'
 import Home from './pages/Home.jsx'
+import Entry from './pages/Entry.jsx'
 
 export default function App() {
   return (
@@ -12,6 +13,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Home />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/log/:slug"
+        element={
+          <RequireAuth>
+            <Entry />
           </RequireAuth>
         }
       />
