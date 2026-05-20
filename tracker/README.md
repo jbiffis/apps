@@ -29,7 +29,8 @@ tracker/
 │   ├── SEED_CATALOG.md          ← starter event-type hierarchy
 │   ├── DESIGN.md                ← palette, typography, components
 │   ├── API.md                   ← REST endpoints
-│   └── PRIVACY.md               ← what lives where, what Claude can/can't see
+│   ├── PRIVACY.md               ← what lives where, what Claude can/can't see
+│   └── TEST_CASES.md            ← manual/acceptance test plan + deploy verification
 ├── backend/                     ← Spring Boot app
 │   ├── pom.xml
 │   ├── Dockerfile
