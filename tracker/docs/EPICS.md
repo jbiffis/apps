@@ -11,10 +11,14 @@
 
 ## Current work
 
-**Epic:** 4 — Logged events API **(not started)**
-**Branch:** `claude/tracker-epic3-catalog` (Epic 3); deployed work is on `main`.
+**Epic:** 5 — Frontend scaffold **(not started)**
+**Branch:** `claude/tracker-epic4-logged-events` (Epic 4); Epics 1-3 are on `main`.
 
-**Epics 1 + 2 + 3 signed off 2026-05-20.** Java bumped to 21 along the way. Epics 1+2 are merged to `main` and deployed; Epic 3 is on its own branch awaiting merge.
+**Epics 1–4 signed off 2026-05-20.** Java is 21. Epics 1-3 merged to `main` (1+2 deployed); Epic 4 on its branch with a green full-suite run (proof in the Epic 4 section).
+
+**Test infra note:** the JUnit suite now runs two ways — Testcontainers (CI / Docker-compatible hosts) *or* against an external Postgres via `TRACKER_TEST_DB_URL` (this dev box, where Testcontainers can't talk to Docker 29.x). `AbstractIntegrationTest` picks automatically. The reproduce recipe is in the Epic 4 proof block.
+
+**Next (Epic 5): Frontend scaffold** — React 19 + Vite (JS, not TS), Tailwind + theme.css tokens, PWA, JWT-aware fetch client. Read `docs/DESIGN.md` for palette/typography and `docs/API.md` for the endpoints to call. Note: the agent is now fenced out of the prod `tracker` Komodo stack (own stack, ungranted), so frontend work is dev/local only — deploy stays with the owner.
 
 **Epic 3 recap (Catalog API):** `GET /api/event-types` (audience-filtered tree, `?include=all` bypass), `GET /api/event-types/{slug}`, `POST /api/event-types` (creates a shared non-seed type, auto-slugified from name), `DELETE /api/event-types/{id}` (creator-only, non-seed-only), `GET /api/property-presets`. Verified against throwaway Postgres: 26 presets, tree with categories+children, `lady-stuff` (female) visible to carley / hidden from jeremy / shown to jeremy with `?include=all`, leaf hydration (headache → severity-1-5 + headache-location-multi), create→204-delete by creator, seed delete→403, unknown→404.
 
@@ -26,7 +30,7 @@ Design notes for Epic 3 (mirror these going into Epic 4):
 
 **Next (Epic 4): Logged events API — privacy-critical.** Every read/write MUST filter by `CurrentUser.id()`. No `findAll` on logged_events. See `docs/API.md` logged-events + home sections and the TC-4.x cross-user isolation cases in `docs/TEST_CASES.md`.
 
-**Backend smoke-test note** (still relevant): Testcontainers can't reach Docker 29.x from this box (docker-java negotiates API 1.32, daemon needs ≥1.40). Verify by building the jar and booting against a throwaway `postgres:16-alpine` — recipe below / in TEST_CASES.md.
+**Backend smoke-test note** (still relevant): Testcontainers can't reach Docker 29.x from this box (docker-java negotiates API 1.32, daemon needs ≥1.40). Two ways around it now: (a) the full JUnit suite via `TRACKER_TEST_DB_URL` against an external Postgres (see Epic 4 proof block), or (b) build the jar and boot against a throwaway `postgres:16-alpine` for manual curl checks.
 
 > **Smoke-test note for future agents:** `./mvnw test` (Testcontainers) does **not** work against very new Docker daemons (29.x) with this Testcontainers version — the bundled docker-java client negotiates API 1.32, which the daemon rejects ("client version 1.32 is too old, minimum 1.40"). Pinning `DOCKER_API_VERSION` didn't help. Instead of fighting it, Epic 1 was verified the prod-equivalent way: built the jar (`mvn -DskipTests package`), booted it against a throwaway `postgres:16-alpine` container on a private network, and confirmed:
 > - Flyway **applied all 4 migrations** cleanly, `validate` passed (no Hibernate drift).
@@ -118,30 +122,39 @@ Read + write `event_types`, `event_properties`, `property_presets`. Tree respons
 
 ---
 
-### Epic 4 — Logged events API ⚪
+### Epic 4 — Logged events API 🟢 (signed off 2026-05-20)
 
 Save and read entries. **User-scoped at every layer** — there is no `findAll`.
 
-- [ ] `model/LoggedEvent.java`
-- [ ] `model/LoggedEventOption.java`
-- [ ] Repositories: `findByUserIdAndOccurredAtBetween`, `findByUserIdAndIdOrThrow`, etc. No unbounded queries.
-- [ ] `service/LoggedEventService.java`
-- [ ] `controller/LoggedEventController.java`:
-    - `POST /api/logged-events`
-    - `GET /api/logged-events?from=&to=&eventTypeSlug=&limit=`
-    - `GET /api/logged-events/{id}`
-    - `DELETE /api/logged-events/{id}`
-- [ ] `controller/HomeController.java`:
-    - `GET /api/home/hero` (3 hardcoded trackers — medication, water, sleep — with progress)
-    - `GET /api/home/today` (today's entries for the feed)
-- [ ] DTOs
-- [ ] Tests:
-    - Save + read round-trip
-    - **Cross-user isolation**: Carley cannot read Jeremy's events; 404 on direct GET of another user's id
-    - Filter by date range, by event type
-    - Hero/Today aggregates produce correct shapes
+- [x] `model/LoggedEvent.java` / `model/LoggedEventOption.java` (option value = JsonNode jsonb)
+- [x] Repositories: `findByIdAndUserId`, `deleteByIdAndUserId`, `findScoped(userId, from, to, eventTypeId?, Pageable)`, `countScopedForTypes`. No unbounded queries — every method takes a userId.
+- [x] `service/LoggedEventService.java` — every method derives owner from `CurrentUser.id()`; batch hydration (3 queries) for views.
+- [x] `controller/LoggedEventController.java`: POST, GET list (`?from=&to=&eventTypeSlug=&limit=`, default 24h / 50, max 200), GET `/{id}`, DELETE `/{id}`.
+- [x] `controller/HomeController.java`: `GET /api/home/hero` (medication/water/sleep, hardcoded targets — no goals schema yet), `GET /api/home/today` (today's entries oldest→newest, max 10).
+- [x] DTOs (records): LogEventRequest/LogOptionRequest, LoggedEventView (+EventTypeRef/OptionView), LoggedEventsResponse, HeroCard.
+- [x] Tests: `LoggedEventControllerTest` (11) — save+read round-trip, unknown type 404, **cross-user 404 on GET/DELETE of another's id**, **list excludes others' events**, filter by type, date-window excludes old, today/hero shapes, unauth 401.
 
-**Definition of done:** End-to-end with Postman/curl: log in, POST an entry, GET it back; logging in as the other user returns 0 events.
+**Definition of done:** ✅ verified by the full JUnit suite run against a real Postgres (see proof below) — `Tests run: 27, Failures: 0, Errors: 0`. Cross-user isolation holds: Jeremy gets 404 on Carley's event id and his list never contains it.
+
+> **Proof (2026-05-20):** ran the whole suite against an external `postgres:16-alpine` (Testcontainers can't negotiate with this box's Docker 29.x; `AbstractIntegrationTest` now falls back to `TRACKER_TEST_DB_URL`). Result:
+> ```
+> CatalogControllerTest      Tests run: 9,  Failures: 0, Errors: 0
+> AuthControllerTest         Tests run: 6,  Failures: 0, Errors: 0
+> LoggedEventControllerTest  Tests run: 11, Failures: 0, Errors: 0
+> TrackerApplicationTests    Tests run: 1,  Failures: 0, Errors: 0
+> ---------------------------------------------------------------
+> Tests run: 27, Failures: 0, Errors: 0, Skipped: 0   →  BUILD SUCCESS
+> ```
+> To reproduce on a host without Testcontainers-compatible Docker:
+> ```bash
+> docker network create tt && \
+> docker run -d --name tt-db --network tt -e POSTGRES_DB=tracker \
+>   -e POSTGRES_USER=tracker -e POSTGRES_PASSWORD=pw postgres:16-alpine
+> docker run --rm --network tt -v "$PWD":/work -v "$HOME/.m2":/root/.m2 -w /work \
+>   -e TRACKER_TEST_DB_URL=jdbc:postgresql://tt-db:5432/tracker \
+>   -e TRACKER_TEST_DB_USER=tracker -e TRACKER_TEST_DB_PASSWORD=pw \
+>   maven:3.9-eclipse-temurin-21 mvn -B test
+> ```
 
 ---
 
