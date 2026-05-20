@@ -1,0 +1,57 @@
+# Isolated LOCAL test stack for the tracker. Deliberately separate from the
+# prod tracker/compose.yaml: its own Docker project, an ephemeral volume, and
+# THROWAWAY test-only secrets inlined below (never used in prod). Brings up
+# Postgres + the backend + an nginx that serves the built SPA and proxies
+# /tracker/api to the backend — mirroring the prod request path.
+#
+# Bring up + seed with ./run.sh. Reset everything with ./run.sh --fresh.
+name: tracker-test
+
+services:
+  tracker-test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tracker
+      POSTGRES_USER: tracker
+      POSTGRES_PASSWORD: testpass
+    ports:
+      - "127.0.0.1:15433:5432" # host-local only, for psql convenience
+    volumes:
+      - tracker-test-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracker -d tracker"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  tracker-test-backend:
+    build: ../backend
+    environment:
+      APP_PORT: 8080
+      DB_HOST: tracker-test-db
+      DB_PORT: 5432
+      DB_NAME: tracker
+      DB_USERNAME: tracker
+      DB_PASSWORD: testpass
+      # Throwaway test JWT secret (>=32 chars). NOT a prod secret.
+      JWT_SECRET: test-secret-at-least-32-chars-long-aaaa
+      UPLOAD_DIR: /uploads
+    volumes:
+      - tracker-test-uploads:/uploads
+    depends_on:
+      tracker-test-db:
+        condition: service_healthy
+
+  tracker-test-web:
+    image: nginx:alpine
+    ports:
+      - "0.0.0.0:18080:80" # reachable from the LAN
+    volumes:
+      - ../frontend/dist:/usr/share/nginx/html/tracker:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - tracker-test-backend
+
+volumes:
+  tracker-test-db:
+  tracker-test-uploads:

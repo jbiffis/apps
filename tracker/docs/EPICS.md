@@ -122,6 +122,8 @@ Read + write `event_types`, `event_properties`, `property_presets`. Tree respons
 
 **Definition of done:** ✅ verified vs throwaway Postgres — Jeremy's default tree excludes `lady-stuff`, Carley's includes it, `?include=all` shows it to both; a POST-created type (audience defaults to `all`) is in the shared tree for everyone. (`create_thenDelete_byCreator` covers create+delete; cross-user *visibility* is inherent since catalog reads have no per-user filter beyond audience.)
 
+**Bug fix (2026-05-20, found while building the test env):** `CatalogService.tree()` converted each root to an immutable `EventTypeView` *inside* the parent/child linking loop. Because nodes iterate by sort order (parents interleaved with children), a root was frozen via `toView()` before all its descendants were linked — silently truncating the tree to ~17 of 42 leaves (`health` showed only `headache`; `mood`, all symptom sub-trees, most meds/food were dropped). Fixed by linking the whole tree first, then mapping roots to views. Added regression test `tree_assemblesAllLevels_noTruncation` (asserts `mood`, `eyes`, the 3-level `double-vision`, and ≥40 leaves). This was a real product bug (Home grid / Entry navigation), not just a seeder issue.
+
 ---
 
 ### Epic 4 — Logged events API 🟢 (signed off 2026-05-20)

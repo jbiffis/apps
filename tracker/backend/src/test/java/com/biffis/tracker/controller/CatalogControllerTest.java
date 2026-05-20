@@ -79,6 +79,35 @@ class CatalogControllerTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void tree_assemblesAllLevels_noTruncation() throws Exception {
+        // Regression: tree() used to convert a root to an immutable view before
+        // all its descendants were linked, silently dropping most of the tree.
+        // Assert the full multi-level structure survives.
+        JsonNode root = tree(token("carley"), "all");
+
+        // health's direct leaves AND sub-categories are all present
+        assertThat(containsSlug(root, "mood")).as("health direct leaf 'mood'").isTrue();
+        assertThat(containsSlug(root, "eyes")).as("health sub-category 'eyes'").isTrue();
+        // a 3-level-deep leaf (health → eyes → double-vision) is reachable
+        assertThat(containsSlug(root, "double-vision")).as("3-level leaf").isTrue();
+
+        // every non-category seed type should surface as a leaf in the tree
+        assertThat(countLeaves(root)).isGreaterThanOrEqualTo(40);
+    }
+
+    private int countLeaves(JsonNode node) {
+        if (node.isArray()) {
+            int n = 0;
+            for (JsonNode child : node) n += countLeaves(child);
+            return n;
+        }
+        if (node.path("isCategory").asBoolean()) {
+            return countLeaves(node.path("children"));
+        }
+        return 1;
+    }
+
+    @Test
     void audienceFilter_femaleCategoryHiddenForMaleByDefault() throws Exception {
         // Carley (female) sees lady-stuff; Jeremy (male) does not.
         assertThat(containsSlug(tree(token("carley"), null), "lady-stuff")).isTrue();

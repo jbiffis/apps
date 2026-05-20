@@ -74,16 +74,20 @@ public class CatalogService {
             nodes.put(t.getId(), new MutableNode(t, propertyViews(propsByType.get(t.getId()), presetById)));
         }
 
-        List<EventTypeView> roots = new ArrayList<>();
+        // Wire the whole tree first, THEN convert to immutable views. toView()
+        // snapshots children recursively, so converting a root before all its
+        // descendants are linked silently truncates the tree — node iteration
+        // order interleaves parents and children by sort order.
+        List<MutableNode> roots = new ArrayList<>();
         for (MutableNode node : nodes.values()) {
             UUID parentId = node.type.getParentId();
             if (parentId != null && nodes.containsKey(parentId)) {
                 nodes.get(parentId).children.add(node);
             } else {
-                roots.add(node.toView());
+                roots.add(node);
             }
         }
-        return roots;
+        return roots.stream().map(MutableNode::toView).toList();
     }
 
     @Transactional(readOnly = true)
