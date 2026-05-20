@@ -7,7 +7,9 @@
 tracker/.local-data/
 tracker/backend/target/
 tracker/frontend/node_modules/
-tracker/frontend/dist/
+# NOTE: tracker/frontend/dist/ is intentionally committed (like book-log,
+# dreamworld) so the restart-only Komodo deploy can bind-mount the build into
+# the shared Apache. Rebuild + commit dist after frontend changes.
 tracker/**/*.db
 tracker/**/*.sqlite*
 tracker/**/dump.sql

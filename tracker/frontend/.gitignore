@@ -1,0 +1,15 @@
+# Logs
+*.log
+npm-debug.log*
+
+node_modules
+# dist is committed so Komodo (restart-only) can bind-mount it; see ../../compose.yaml
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?
