@@ -11,29 +11,23 @@
 
 ## Current work
 
-**Epic:** 1 — Backend scaffold + schema **(code complete; awaiting live smoke test)**
-**Started:** 2026-05-19
+**Epic:** 2 — Auth (Spring Security + JWT) **(starting)**
+**Started:** 2026-05-20
 **Branch:** `claude/event-tracking-app-RiLUG`
 
-**What's done:**
-- Spring Boot 3.4.1 / Java 17 / Maven project scaffolded under `tracker/backend/`.
-- All 4 Flyway migrations written: schema, presets (26 rows), event_types (~50 rows) + properties, users (Carley + Jeremy with placeholder bcrypt of `changeme-on-first-login`).
-- `GET /api/health` endpoint live.
-- Permit-all `SecurityConfig` placeholder (Epic 2 replaces it).
-- Multi-stage Dockerfile (temurin 17 jdk → jre), `mvnw` wrapper, `run.sh`.
-- Root `compose.yaml` updated with `tracker-backend` + `tracker-db` (private `tracker-net`, no host port on DB).
-- `tracker-proxy.conf` at repo root + COPY in root Dockerfile.
-- `.env.example` (TRACKER_DB_PASSWORD, TRACKER_JWT_SECRET).
-- Top-level `.gitignore` covering tracker dev artifacts + `.env`.
-- `tracker/` added to `.dockerignore` so source isn't bundled into the Apache image.
-- `mvnw package` succeeds locally (58 MB fat jar at `target/tracker-backend-0.0.1-SNAPSHOT.jar`).
-- Smoke test `TrackerApplicationTests` uses `@ServiceConnection` + Testcontainers Postgres.
+**Epic 1 signed off 2026-05-20.** Verified on the aivm box (has Docker 29.3.1).
 
-**What's NOT done (blocks Epic 1 sign-off):**
-- ❗ **Live smoke test** — this dev environment has no Docker daemon. Next agent (or human) needs to run `./mvnw test` somewhere with Docker, OR deploy and `curl https://apps.biffis.com/tracker/api/health`. If migrations or context-load fail, fix before moving on.
-- Set real values for `TRACKER_DB_PASSWORD` and `TRACKER_JWT_SECRET` in prod `.env`.
+> **Smoke-test note for future agents:** `./mvnw test` (Testcontainers) does **not** work against very new Docker daemons (29.x) with this Testcontainers version — the bundled docker-java client negotiates API 1.32, which the daemon rejects ("client version 1.32 is too old, minimum 1.40"). Pinning `DOCKER_API_VERSION` didn't help. Instead of fighting it, Epic 1 was verified the prod-equivalent way: built the jar (`mvn -DskipTests package`), booted it against a throwaway `postgres:16-alpine` container on a private network, and confirmed:
+> - Flyway **applied all 4 migrations** cleanly, `validate` passed (no Hibernate drift).
+> - All 6 tables + `flyway_schema_history` created.
+> - Seed counts: **26** property_presets, **52** event_types, **59** event_properties, **2** users.
+> - `GET /api/health` → `{"ok":true,"app":"tracker","version":"0.0.1-SNAPSHOT"}`.
+>
+> If someone wants the Testcontainers path green, bump Testcontainers (and transitively docker-java) — but that needs sign-off per CLAUDE.md ("don't bump versions unless asked").
 
-**If you need to take over:** check `git status` and `git log` for the latest commit on this branch, then update this section. Run the smoke test, mark Epic 1 done, and start Epic 2.
+**Epic 2 plan:** replace permit-all `SecurityConfig` with a stateless JWT filter chain. `User` entity/repo/service, `JwtService` (HS256, secret from `tracker.jwt.secret`), `JwtAuthFilter`, `CurrentUser` helper, `AuthController` (`POST /api/auth/login`), DTOs as records. Only `/api/auth/**` permit-all; everything else authenticated. BCrypt password checks. Testcontainers tests for login happy-path / wrong-password 401 / missing-token 401 (will run them via the real-postgres boot pattern above since Testcontainers itself is blocked).
+
+**If you need to take over:** `git log` this branch for the latest commit, then update this section.
 
 ---
 
@@ -41,7 +35,7 @@
 
 Scope: **Home + Entry + basic history**, two seeded users (Carley, Jeremy). Stats/Me/long-press-reorder are Phase 2.
 
-### Epic 1 — Backend scaffold + schema 🟡 (code complete, awaiting smoke test)
+### Epic 1 — Backend scaffold + schema 🟢 (signed off 2026-05-20)
 
 Set up the Spring Boot project, get Postgres talking, run migrations, expose a health check.
 
@@ -68,8 +62,8 @@ Set up the Spring Boot project, get Postgres talking, run migrations, expose a h
 - [x] `tracker/` added to `.dockerignore` (prevent source from being bundled into Apache image)
 - [x] `mvnw package` builds cleanly
 - [x] `TrackerApplicationTests` smoke test (Testcontainers Postgres + Spring context load + Flyway run)
-- [ ] **Run smoke test on a machine with Docker** (`cd tracker/backend && ./mvnw test`)
-- [ ] **Verify on prod** (`curl https://apps.biffis.com/tracker/api/health` returns 200)
+- [x] **Smoke test on a machine with Docker** — Testcontainers blocked by Docker 29.x API-version mismatch (see Current work note); verified instead by booting the jar against a throwaway `postgres:16-alpine`: all 4 migrations applied, `validate` passed, health 200, seeds correct (26/52/59/2).
+- [ ] **Verify on prod** (`curl https://apps.biffis.com/tracker/api/health` returns 200) — gated on deploy; tracked in Epic 10.
 - [x] Commit + push (Epic 1 code)
 
 **Definition of done:** `docker compose up tracker-db tracker-backend` from a clean checkout boots the API, Flyway applies all four migrations, `curl https://apps.biffis.com/tracker/api/health` returns 200 on prod.
