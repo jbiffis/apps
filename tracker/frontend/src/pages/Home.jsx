@@ -1,19 +1,22 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { getThemePref, resolveTheme, setThemePref } from '../theme.js'
 import { clearSession, getUser } from '../auth.js'
+import { api } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 import { flattenLeaves, leavesUnder } from '../lib/catalog.js'
 import { greeting, dateLabel, timeLabel, summarizeOptions } from '../lib/format.js'
 import AppShell from '../components/AppShell.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import TrackerPickerSheet from '../components/TrackerPickerSheet.jsx'
+import Toast from '../components/Toast.jsx'
 import { Sun, Logout, Plus, DynamicIcon } from '../icons/index.jsx'
 
 const EMPTY = []
 
 export default function Home() {
   const navigate = useNavigate()
+  const location = useLocation()
   const user = getUser()
   const [pref, setPref] = useState(getThemePref())
   const [sheet, setSheet] = useState({ open: false, title: '', items: [] })
@@ -21,6 +24,27 @@ export default function Home() {
   const hero = useApi('/home/hero')
   const today = useApi('/home/today')
   const catalog = useApi('/event-types')
+
+  // A just-saved entry hands off via router state; derive the undo toast from
+  // it (no extra state) and refresh the feeds once it appears.
+  const saved = location.state?.saved
+  useEffect(() => {
+    if (saved) { hero.reload(); today.reload() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved?.id])
+
+  const clearSaved = () => navigate('.', { replace: true, state: {} })
+
+  async function undoSave() {
+    const id = saved?.id
+    clearSaved()
+    if (!id) return
+    try {
+      await api.del(`/logged-events/${id}`)
+      hero.reload()
+      today.reload()
+    } catch { /* already gone / window passed — nothing to do */ }
+  }
   const tree = catalog.data || EMPTY
   // The today/logged-event payload's eventType carries only {slug, name};
   // resolve its icon from the catalog we already fetched.
@@ -145,6 +169,10 @@ export default function Home() {
         onPick={logTracker}
         onClose={() => setSheet({ open: false, title: '', items: [] })}
       />
+
+      {saved && (
+        <Toast message={`Logged ${saved.name}`} onUndo={undoSave} onDismiss={clearSaved} />
+      )}
     </AppShell>
   )
 }
