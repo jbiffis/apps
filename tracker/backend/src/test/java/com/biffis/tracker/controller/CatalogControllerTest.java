@@ -1,0 +1,179 @@
+package com.biffis.tracker.controller;
+
+import com.biffis.tracker.AbstractIntegrationTest;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@AutoConfigureMockMvc
+class CatalogControllerTest extends AbstractIntegrationTest {
+
+    private static final String SEED_PASSWORD = "changeme-on-first-login";
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper objectMapper;
+
+    private String token(String username) throws Exception {
+        String body = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + username + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).get("token").asText();
+    }
+
+    private JsonNode tree(String token, String include) throws Exception {
+        var req = get("/api/event-types").header("Authorization", "Bearer " + token);
+        if (include != null) {
+            req = get("/api/event-types?include=" + include).header("Authorization", "Bearer " + token);
+        }
+        String body = mockMvc.perform(req).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body);
+    }
+
+    /** Recursively look for a node with the given slug. */
+    private boolean containsSlug(JsonNode node, String slug) {
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                if (containsSlug(child, slug)) return true;
+            }
+            return false;
+        }
+        if (node.has("slug") && slug.equals(node.get("slug").asText())) return true;
+        if (node.has("children")) return containsSlug(node.get("children"), slug);
+        return false;
+    }
+
+    @Test
+    void unauthenticated_treeRequest_returns401() throws Exception {
+        mockMvc.perform(get("/api/event-types")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void tree_hasTopLevelCategoriesWithChildren() throws Exception {
+        JsonNode root = tree(token("carley"), null);
+        assertThat(root.isArray()).isTrue();
+        assertThat(root.size()).isGreaterThan(0);
+        // 'health' is a seeded top-level category with children
+        JsonNode health = null;
+        for (JsonNode n : root) {
+            if ("health".equals(n.path("slug").asText())) health = n;
+        }
+        assertThat(health).isNotNull();
+        assertThat(health.path("isCategory").asBoolean()).isTrue();
+        assertThat(health.path("children").size()).isGreaterThan(0);
+    }
+
+    @Test
+    void audienceFilter_femaleCategoryHiddenForMaleByDefault() throws Exception {
+        // Carley (female) sees lady-stuff; Jeremy (male) does not.
+        assertThat(containsSlug(tree(token("carley"), null), "lady-stuff")).isTrue();
+        assertThat(containsSlug(tree(token("jeremy"), null), "lady-stuff")).isFalse();
+    }
+
+    @Test
+    void audienceFilter_includeAllBypassesForMale() throws Exception {
+        assertThat(containsSlug(tree(token("jeremy"), "all"), "lady-stuff")).isTrue();
+    }
+
+    @Test
+    void presets_returnsSeededSet() throws Exception {
+        String body = mockMvc.perform(get("/api/property-presets")
+                        .header("Authorization", "Bearer " + token("carley")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode presets = objectMapper.readTree(body);
+        assertThat(presets.isArray()).isTrue();
+        assertThat(presets.size()).isEqualTo(26);
+        // each preset has a widget + options
+        assertThat(presets.get(0).has("widget")).isTrue();
+        assertThat(presets.get(0).has("options")).isTrue();
+    }
+
+    @Test
+    void leaf_hasHydratedProperties() throws Exception {
+        // Find any leaf with at least one property in the full tree and check
+        // its preset is hydrated.
+        JsonNode root = tree(token("carley"), "all");
+        JsonNode leafWithProps = findLeafWithProperties(root);
+        assertThat(leafWithProps).as("expected at least one leaf with properties").isNotNull();
+        JsonNode prop = leafWithProps.get("properties").get(0);
+        assertThat(prop.path("preset").path("widget").asText()).isNotBlank();
+    }
+
+    private JsonNode findLeafWithProperties(JsonNode node) {
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                JsonNode found = findLeafWithProperties(child);
+                if (found != null) return found;
+            }
+            return null;
+        }
+        if (!node.path("isCategory").asBoolean() && node.path("properties").size() > 0) {
+            return node;
+        }
+        if (node.has("children")) return findLeafWithProperties(node.get("children"));
+        return null;
+    }
+
+    @Test
+    void create_thenDelete_byCreator() throws Exception {
+        String carley = token("carley");
+        String created = mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + carley)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test Tracker ZZZ","icon":"Pill","parentSlug":"medication"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode node = objectMapper.readTree(created);
+        String id = node.get("id").asText();
+        assertThat(node.path("isSeed").asBoolean()).isFalse();
+        assertThat(node.path("slug").asText()).isEqualTo("test-tracker-zzz");
+
+        // visible in the tree
+        assertThat(containsSlug(tree(carley, "all"), "test-tracker-zzz")).isTrue();
+
+        // creator can delete
+        mockMvc.perform(delete("/api/event-types/" + id)
+                        .header("Authorization", "Bearer " + carley))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void delete_seedType_forbidden() throws Exception {
+        String carley = token("carley");
+        // resolve a seed type's id
+        String health = mockMvc.perform(get("/api/event-types/health")
+                        .header("Authorization", "Bearer " + carley))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String id = objectMapper.readTree(health).get("id").asText();
+
+        mockMvc.perform(delete("/api/event-types/" + id)
+                        .header("Authorization", "Bearer " + carley))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void delete_unknownId_notFound() throws Exception {
+        mockMvc.perform(delete("/api/event-types/00000000-0000-0000-0000-000000000000")
+                        .header("Authorization", "Bearer " + token("carley")))
+                .andExpect(status().isNotFound());
+    }
+}

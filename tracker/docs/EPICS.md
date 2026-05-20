@@ -11,16 +11,22 @@
 
 ## Current work
 
-**Epic:** 3 — Catalog API **(not started)**
-**Branch:** `claude/event-tracking-app-RiLUG`
+**Epic:** 4 — Logged events API **(not started)**
+**Branch:** `claude/tracker-epic3-catalog` (Epic 3); deployed work is on `main`.
 
-**Epics 1 + 2 signed off 2026-05-20.** Also bumped Java 17 → 21 (pom + Dockerfile + docs) at the owner's request — rebuilt + re-verified the whole auth flow on temurin 21.
+**Epics 1 + 2 + 3 signed off 2026-05-20.** Java bumped to 21 along the way. Epics 1+2 are merged to `main` and deployed; Epic 3 is on its own branch awaiting merge.
 
-**Epic 2 recap:** per-user JWT auth is live and verified. Login → `{token, user}`, `/api/auth/me` is the first protected endpoint, `set-password` CLI rotates hashes. See the Epic 2 checklist below for the two small design refinements (precise permit-all matcher; PasswordEncoder split into its own config for the web-less CLI).
+**Epic 3 recap (Catalog API):** `GET /api/event-types` (audience-filtered tree, `?include=all` bypass), `GET /api/event-types/{slug}`, `POST /api/event-types` (creates a shared non-seed type, auto-slugified from name), `DELETE /api/event-types/{id}` (creator-only, non-seed-only), `GET /api/property-presets`. Verified against throwaway Postgres: 26 presets, tree with categories+children, `lady-stuff` (female) visible to carley / hidden from jeremy / shown to jeremy with `?include=all`, leaf hydration (headache → severity-1-5 + headache-location-multi), create→204-delete by creator, seed delete→403, unknown→404.
 
-**Next (Epic 3):** Catalog API — `event_types` tree (audience-filtered by the caller's gender), `event_properties`, `property_presets`. This is where a dedicated `UserService` (lookup current user's gender) will likely split out from `AuthService`. Read `docs/DATA_MODEL.md` audience rules + `docs/API.md` catalog section first.
+Design notes for Epic 3 (mirror these going into Epic 4):
+- `EventType`/`EventProperty` use **plain UUID** `parentId`/`createdBy`/`presetId` (not @ManyToOne) so `CatalogService` assembles the tree from 3 bulk queries — no lazy loading (open-in-view is off).
+- `PropertyPreset.options` is a `JsonNode` mapped with `@JdbcTypeCode(SqlTypes.JSON)` — serializes as raw JSON in responses.
+- `UserService` split out from `AuthService` (as predicted) — `currentGender()` drives audience filtering.
+- Errors: added `exception/` package + `ApiExceptionHandler` (@RestControllerAdvice) for the uniform `{error,message}` shape (not_found/forbidden/conflict/validation_failed). Epic 4+ should throw these.
 
-**Epic 1 verification note** (still relevant for any backend smoke test): Testcontainers can't reach Docker 29.x from this box (docker-java negotiates API 1.32, daemon needs ≥1.40). Verify by building the jar and booting against a throwaway `postgres:16-alpine` — the recipe is below.
+**Next (Epic 4): Logged events API — privacy-critical.** Every read/write MUST filter by `CurrentUser.id()`. No `findAll` on logged_events. See `docs/API.md` logged-events + home sections and the TC-4.x cross-user isolation cases in `docs/TEST_CASES.md`.
+
+**Backend smoke-test note** (still relevant): Testcontainers can't reach Docker 29.x from this box (docker-java negotiates API 1.32, daemon needs ≥1.40). Verify by building the jar and booting against a throwaway `postgres:16-alpine` — recipe below / in TEST_CASES.md.
 
 > **Smoke-test note for future agents:** `./mvnw test` (Testcontainers) does **not** work against very new Docker daemons (29.x) with this Testcontainers version — the bundled docker-java client negotiates API 1.32, which the daemon rejects ("client version 1.32 is too old, minimum 1.40"). Pinning `DOCKER_API_VERSION` didn't help. Instead of fighting it, Epic 1 was verified the prod-equivalent way: built the jar (`mvn -DskipTests package`), booted it against a throwaway `postgres:16-alpine` container on a private network, and confirmed:
 > - Flyway **applied all 4 migrations** cleanly, `validate` passed (no Hibernate drift).
@@ -95,24 +101,20 @@ Per-user login, JWT issuance, auth filter, current-user helper.
 
 ---
 
-### Epic 3 — Catalog API ⚪
+### Epic 3 — Catalog API 🟢 (signed off 2026-05-20)
 
 Read + write `event_types`, `event_properties`, `property_presets`. Tree response for home.
 
-- [ ] `model/EventType.java` (self-referential parent, audience enum, is_category, is_seed)
-- [ ] `model/EventProperty.java`
-- [ ] `model/PropertyPreset.java` (jsonb options column via `@JdbcTypeCode(SqlTypes.JSON)`)
-- [ ] Repositories + services with audience filtering by current user gender
-- [ ] `controller/EventTypeController.java`:
-    - `GET /api/event-types` (tree, audience-filtered; `?include=all` bypass)
-    - `GET /api/event-types/{slug}` (single, with properties)
-    - `POST /api/event-types` (create new, shared)
-    - `DELETE /api/event-types/{id}` (creator-only, non-seed only)
-- [ ] `controller/PropertyPresetController.java` — `GET /api/property-presets`
-- [ ] DTOs in `dto/`
-- [ ] Tests: tree shape, audience filter for Carley vs Jeremy, create + delete permission rules
+- [x] `model/EventType.java` (plain-UUID parent/createdBy, audience, is_category, is_seed)
+- [x] `model/EventProperty.java`
+- [x] `model/PropertyPreset.java` (jsonb options via `@JdbcTypeCode(SqlTypes.JSON)` on a `JsonNode`)
+- [x] Repositories + `CatalogService` with audience filtering by current user gender (+ `UserService` split)
+- [x] `controller/EventTypeController.java`: tree (`?include=all`), `/{slug}`, POST create, DELETE
+- [x] `controller/PropertyPresetController.java` — `GET /api/property-presets`
+- [x] DTOs in `dto/` (records) + `exception/` package & `ApiExceptionHandler` for uniform errors
+- [x] Tests: `CatalogControllerTest` — tree shape, audience (carley vs jeremy + include=all), leaf hydration, preset count, create + delete (creator 204 / seed 403 / unknown 404), unauth 401
 
-**Definition of done:** `GET /api/event-types` as Jeremy excludes the Lady stuff category by default; same call as Carley includes it. New medication created via POST is visible to both users.
+**Definition of done:** ✅ verified vs throwaway Postgres — Jeremy's default tree excludes `lady-stuff`, Carley's includes it, `?include=all` shows it to both; a POST-created type (audience defaults to `all`) is in the shared tree for everyone. (`create_thenDelete_byCreator` covers create+delete; cross-user *visibility* is inherent since catalog reads have no per-user filter beyond audience.)
 
 ---
 
