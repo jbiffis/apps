@@ -10,7 +10,7 @@ Personal event-tracking app. Log anything — headaches, medications, water, moo
 
 ## At a glance
 
-- **Backend:** Spring Boot 3.4.1 · Java 17 · Spring Data JPA · Spring Security + JWT · Flyway · PostgreSQL
+- **Backend:** Spring Boot 3.4.1 · Java 21 · Spring Data JPA · Spring Security + JWT · Flyway · PostgreSQL
 - **Frontend:** React 19 + Vite · Tailwind · `vite-plugin-pwa`
 - **DB:** PostgreSQL 16 in its own Docker container, no host port, volume on prod only
 - **Auth:** Per-user password → JWT (Bearer). Two seeded users: Carley, Jeremy.

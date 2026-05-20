@@ -11,11 +11,16 @@
 
 ## Current work
 
-**Epic:** 2 — Auth (Spring Security + JWT) **(starting)**
-**Started:** 2026-05-20
+**Epic:** 3 — Catalog API **(not started)**
 **Branch:** `claude/event-tracking-app-RiLUG`
 
-**Epic 1 signed off 2026-05-20.** Verified on the aivm box (has Docker 29.3.1).
+**Epics 1 + 2 signed off 2026-05-20.** Also bumped Java 17 → 21 (pom + Dockerfile + docs) at the owner's request — rebuilt + re-verified the whole auth flow on temurin 21.
+
+**Epic 2 recap:** per-user JWT auth is live and verified. Login → `{token, user}`, `/api/auth/me` is the first protected endpoint, `set-password` CLI rotates hashes. See the Epic 2 checklist below for the two small design refinements (precise permit-all matcher; PasswordEncoder split into its own config for the web-less CLI).
+
+**Next (Epic 3):** Catalog API — `event_types` tree (audience-filtered by the caller's gender), `event_properties`, `property_presets`. This is where a dedicated `UserService` (lookup current user's gender) will likely split out from `AuthService`. Read `docs/DATA_MODEL.md` audience rules + `docs/API.md` catalog section first.
+
+**Epic 1 verification note** (still relevant for any backend smoke test): Testcontainers can't reach Docker 29.x from this box (docker-java negotiates API 1.32, daemon needs ≥1.40). Verify by building the jar and booting against a throwaway `postgres:16-alpine` — the recipe is below.
 
 > **Smoke-test note for future agents:** `./mvnw test` (Testcontainers) does **not** work against very new Docker daemons (29.x) with this Testcontainers version — the bundled docker-java client negotiates API 1.32, which the daemon rejects ("client version 1.32 is too old, minimum 1.40"). Pinning `DOCKER_API_VERSION` didn't help. Instead of fighting it, Epic 1 was verified the prod-equivalent way: built the jar (`mvn -DskipTests package`), booted it against a throwaway `postgres:16-alpine` container on a private network, and confirmed:
 > - Flyway **applied all 4 migrations** cleanly, `validate` passed (no Hibernate drift).
@@ -39,9 +44,9 @@ Scope: **Home + Entry + basic history**, two seeded users (Carley, Jeremy). Stat
 
 Set up the Spring Boot project, get Postgres talking, run migrations, expose a health check.
 
-- [x] `tracker/backend/pom.xml` (Spring Boot 3.4.1, Java 17, web, jpa, security, validation, flyway, postgres, h2-test, testcontainers, jjwt)
+- [x] `tracker/backend/pom.xml` (Spring Boot 3.4.1, Java 21, web, jpa, security, validation, flyway, postgres, h2-test, testcontainers, jjwt)
 - [x] `tracker/backend/mvnw` + `mvnw.cmd` + `.mvn/wrapper/`
-- [x] `tracker/backend/Dockerfile` (multi-stage temurin 17 jdk → jre, runs as non-root `tracker` user)
+- [x] `tracker/backend/Dockerfile` (multi-stage temurin 21 jdk → jre, runs as non-root `tracker` user)
 - [x] `tracker/backend/run.sh`
 - [x] `tracker/backend/.gitignore`
 - [x] `tracker/backend/.dockerignore`
@@ -70,23 +75,23 @@ Set up the Spring Boot project, get Postgres talking, run migrations, expose a h
 
 ---
 
-### Epic 2 — Auth (Spring Security + JWT) ⚪
+### Epic 2 — Auth (Spring Security + JWT) 🟢 (signed off 2026-05-20)
 
 Per-user login, JWT issuance, auth filter, current-user helper.
 
-- [ ] `model/User.java` (entity)
-- [ ] `repository/UserRepository.java`
-- [ ] `service/UserService.java` (load by username, password verification helper)
-- [ ] `config/SecurityConfig.java` (stateless, JWT filter chain, CSRF off, /api/auth/** permit-all)
-- [ ] `security/JwtService.java` (HS256, sign + parse + validate)
-- [ ] `security/JwtAuthFilter.java`
-- [ ] `security/CurrentUser.java` helper (`@AuthenticationPrincipal` or `SecurityContextHolder` wrapper)
-- [ ] `controller/AuthController.java` — `POST /api/auth/login` → `{token, user}`
-- [ ] `dto/LoginRequest.java`, `dto/LoginResponse.java`, `dto/UserView.java`
-- [ ] CLI subcommand or one-shot tool for setting passwords on prod (described in PRIVACY.md)
-- [ ] Tests: login happy path, wrong password, missing token on protected endpoint
+- [x] `model/User.java` (entity)
+- [x] `repository/UserRepository.java`
+- [x] `service/AuthService.java` (login: load by username + bcrypt verify + issue token) — folded the planned `UserService` responsibilities in here; a separate UserService can split out in Epic 3 when catalog needs user lookups by gender.
+- [x] `config/SecurityConfig.java` (stateless, JWT filter chain, CSRF off). **Refinement:** only `/api/auth/login` + `/api/health` are permit-all, not all of `/api/auth/**` — `/api/auth/me` requires a token. `@ConditionalOnWebApplication` so the CLI run doesn't build a servlet chain. `PasswordEncoder` lives in `config/PasswordConfig.java` (always-on, used by both web + CLI).
+- [x] `security/JwtService.java` (HS256, sign + parse + validate; secret ≥32 bytes enforced at startup)
+- [x] `security/JwtAuthFilter.java`
+- [x] `security/CurrentUser.java` helper + `security/AuthUser.java` principal record
+- [x] `controller/AuthController.java` — `POST /api/auth/login` → `{token, user}` + `GET /api/auth/me`
+- [x] `dto/LoginRequest.java`, `dto/LoginResponse.java`, `dto/UserView.java` (records; UserView never carries the hash)
+- [x] CLI: `cli/SetPasswordRunner.java` + `TrackerApplication` runs `set-password <user>` as `WebApplicationType.NONE`. Reads stdin (no echo on a TTY), bcrypts, updates. **Gotcha fixed:** must NOT be `@Transactional` while calling `System.exit` — exit kills the JVM before the tx commits, silently rolling back the write. Spring Data `save()` commits per-call without it.
+- [x] Tests: `AuthControllerTest` — login happy path, wrong password 401, unknown user 401, missing token 401, valid token 200, garbage token 401. (`AbstractIntegrationTest` base shares one Testcontainers Postgres.)
 
-**Definition of done:** Logging in as `carley` returns a working JWT that authenticates subsequent requests; bad creds return 401; unauthenticated calls to protected endpoints return 401.
+**Definition of done:** ✅ verified on aivm (Java 21 jar booted against throwaway Postgres). Login as `carley`/`jeremy` returns a working JWT; `/api/auth/me` returns 200 with the token, 401 without; wrong/unknown creds return 401 `{"error":"invalid_credentials"}`; `set-password` rotates the hash (old pw → 401, new pw → 200 after).
 
 ---
 

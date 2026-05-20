@@ -16,7 +16,7 @@ See [docs/PRIVACY.md](docs/PRIVACY.md) for the full trust-boundary picture.
 
 Modeled on [`jbiffis/hockeypool`](https://github.com/jbiffis/hockeypool). Match its style unless there's a specific reason not to.
 
-- **Java 17**, Spring Boot **3.4.1**, Maven via `./mvnw` wrapper. Do not bump unless asked.
+- **Java 21**, Spring Boot **3.4.1**, Maven via `./mvnw` wrapper. Do not bump unless asked.
 - **Package by layer** — `config / controller / dto / model / repository / service / security`. Don't introduce package-by-feature.
 - **`application.properties`**, not YAML.
 - **Entities use JPA annotations.** UUIDs as primary keys (`@GeneratedValue(strategy = UUID)`).

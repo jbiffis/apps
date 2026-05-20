@@ -1,5 +1,5 @@
 # --- Build stage -----------------------------------------------------------
-FROM eclipse-temurin:17-jdk AS build
+FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 
 # Cache dependencies first
@@ -13,7 +13,7 @@ RUN ./mvnw -B -q -DskipTests package \
     && mv target/*.jar target/app.jar
 
 # --- Runtime stage ---------------------------------------------------------
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 # Non-root user
