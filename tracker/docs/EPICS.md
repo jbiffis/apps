@@ -221,14 +221,26 @@ React + Vite SPA (JS) with Tailwind, PWA, JWT-aware fetch client, palette tokens
 
 ### Epic 10 — Deploy + initial users ⚪
 
+- [ ] Register `tracker/compose.yaml` as its own Komodo stack (NOT part of biffis-apps)
+- [ ] Set `TRACKER_DB_PASSWORD` + `TRACKER_JWT_SECRET` in that stack's Komodo Environment
+- [ ] Confirm `opencode-homelab` has NO permission on the tracker stack (secret isolation — see below)
 - [ ] Push branch, merge to main
-- [ ] On prod: `docker compose build tracker-backend tracker-frontend`
-- [ ] Komodo restart
+- [ ] On prod: `docker compose -f tracker/compose.yaml build`
+- [ ] Deploy tracker stack first (creates `tracker-net`), then biffis-apps if its proxy changed
 - [ ] Verify migrations ran
-- [ ] Set Carley's + Jeremy's real passwords via the CLI subcommand
+- [ ] Set Carley's + Jeremy's real passwords via the `set-password` CLI
 - [ ] Smoke test login + log an entry from a phone
 - [ ] Add PWA to home screen
 - [ ] Document any surprises in this file
+
+**Secret isolation (why the tracker is its own stack):** the agent's Komodo API
+user (`opencode-homelab`) is non-admin but has explicit grants on several
+stacks incl. biffis-apps. Any plain env-var secret on a stack it can reach is
+readable via `InspectStackContainer` (resolved `Config.Env`). Splitting the
+tracker into its own stack — and not granting that user on it — keeps
+`TRACKER_JWT_SECRET` / `TRACKER_DB_PASSWORD` out of the agent's reach entirely.
+`web` (in biffis-apps, which the agent can inspect) proxies to the backend over
+`tracker-net` but carries no tracker secret.
 
 **Definition of done:** Carley and Jeremy can log in on their phones at `apps.biffis.com/tracker`, save an entry, and see it in history.
 

@@ -34,47 +34,17 @@ services:
     env_file: ./.env
     restart: unless-stopped
 
-  # --- Tracker app (apps.biffis.com/tracker) ---
-  # See tracker/README.md and tracker/docs/PRIVACY.md.
-  # tracker-db has no host port — only reachable inside tracker-net.
-
-  tracker-backend:
-    build: ./tracker/backend
-    networks:
-      - tracker-net
-    environment:
-      - APP_PORT=8080
-      - DB_HOST=tracker-db
-      - DB_PORT=5432
-      - DB_NAME=tracker
-      - DB_USERNAME=tracker
-      - DB_PASSWORD=${TRACKER_DB_PASSWORD:?TRACKER_DB_PASSWORD must be set}
-      - JWT_SECRET=${TRACKER_JWT_SECRET:?TRACKER_JWT_SECRET must be set (>=32 chars)}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
-      - UPLOAD_DIR=/uploads
-    volumes:
-      - tracker-uploads:/uploads
-    depends_on:
-      - tracker-db
-    restart: unless-stopped
-
-  tracker-db:
-    image: postgres:16-alpine
-    networks:
-      - tracker-net
-    environment:
-      - POSTGRES_DB=tracker
-      - POSTGRES_USER=tracker
-      - POSTGRES_PASSWORD=${TRACKER_DB_PASSWORD:?TRACKER_DB_PASSWORD must be set}
-    volumes:
-      - /var/lib/docker/volumes/apps/tracker-db:/var/lib/postgresql/data
-    restart: unless-stopped
-
-volumes:
-  tracker-uploads:
+  # The tracker app (tracker-backend + tracker-db) lives in its OWN Komodo
+  # stack — tracker/compose.yaml — so its secrets stay out of this stack's
+  # env and out of `docker inspect` for anyone (e.g. the agent API user) who
+  # has access to biffis-apps but not to the tracker stack. `web` above only
+  # reverse-proxies /tracker/api/* to tracker-backend over the shared external
+  # `tracker-net`; it holds no tracker secret. Deploy the tracker stack first
+  # (it creates tracker-net), then this one.
 
 networks:
   data-tracking-globe:
     external: true
   tracker-net:
-    driver: bridge
+    external: true
+    name: tracker-net
