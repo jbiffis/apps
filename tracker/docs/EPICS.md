@@ -11,16 +11,16 @@
 
 ## Current work
 
-**Epic:** 6 — Login screen **(not started)**
-**Branch:** Epics 1-5 are merged to `main`.
+**Epic:** 7 — Home screen **(not started)**
+**Branch:** Epics 1-6 are merged to `main`.
 
-**Epics 1–5 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main` with a green full-suite run (proof in Epic 4). Epic 5 frontend scaffold on `main`: Vite SPA builds + serves; `dist/` is committed and bind-mounted into the shared Apache (proof in Epic 5).
+**Epics 1–6 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main` with a green full-suite run (proof in Epic 4). Frontend: Epic 5 scaffold + Epic 6 login/auth-guard/logout on `main` (React Router wired, `dist/` committed + bind-mounted into the shared Apache). In-browser flows aren't verified headless — owner confirms on deploy.
 
 **Test infra note:** the JUnit suite now runs two ways — Testcontainers (CI / Docker-compatible hosts) *or* against an external Postgres via `TRACKER_TEST_DB_URL` (this dev box, where Testcontainers can't talk to Docker 29.x). `AbstractIntegrationTest` picks automatically. The reproduce recipe is in the Epic 4 proof block.
 
 **Frontend dev:** `cd tracker/frontend && npm install && npm run dev` (Vite at :5173, proxies `/tracker/api`→`localhost:8080/api`). After any frontend change, `npm run build` and **commit `dist/`** — Komodo deploy is restart-only and bind-mounts the committed build. The agent is fenced out of the prod `tracker` Komodo stack, so deploy + the in-browser visual check stay with the owner.
 
-**Next (Epic 6): Login screen** — build on `src/api.js` (`auth.login`) + `src/auth.js` (`setSession`). React Router is installed. Read `docs/DESIGN.md` (fields/buttons) and `docs/API.md` (`POST /auth/login` → `{token, user}`, 401 `invalid_credentials`).
+**Next (Epic 7): Home screen** — replace the `pages/Home.jsx` placeholder with real data: greeting, top-3 hero cards from `GET /api/home/hero`, "All trackers" 4-col grid from `GET /api/event-types` tree, "Today" list from `GET /api/home/today`, FAB. Add `AppShell` + `BottomNav` (only Home wired). Use `src/api.js` (`api.get`) — it already attaches the Bearer token and clears the session on 401. The icon set + `DynamicIcon` map `event_types.icon` values. Read `docs/DESIGN.md` (cards/tiles/app bar/bottom nav) + `docs/API.md` (home + catalog).
 
 **Epic 3 recap (Catalog API):** `GET /api/event-types` (audience-filtered tree, `?include=all` bypass), `GET /api/event-types/{slug}`, `POST /api/event-types` (creates a shared non-seed type, auto-slugified from name), `DELETE /api/event-types/{id}` (creator-only, non-seed-only), `GET /api/property-presets`. Verified against throwaway Postgres: 26 presets, tree with categories+children, `lady-stuff` (female) visible to carley / hidden from jeremy / shown to jeremy with `?include=all`, leaf hydration (headache → severity-1-5 + headache-location-multi), create→204-delete by creator, seed delete→403, unknown→404.
 
@@ -202,13 +202,16 @@ Reproduce: `cd tracker/frontend && npm install && npm run build && npm run previ
 
 ---
 
-### Epic 6 — Login screen ⚪
+### Epic 6 — Login screen 🟢 (signed off 2026-05-20)
 
-- [ ] `src/pages/Login.jsx` (form + submit + error display)
-- [ ] Auth guard wrapper component
-- [ ] Logout (clears JWT, redirects to /login)
+- [x] `src/pages/Login.jsx` (form + submit + inline error; 401 → "Incorrect username or password", other → generic; submit disabled until both fields filled; redirects to `state.from` or `/`)
+- [x] `src/components/RequireAuth.jsx` auth guard (unauth/expired → `/login`, remembers `from`)
+- [x] Logout button in the Home app bar (clears session, redirects to `/login`)
+- [x] React Router wired: `BrowserRouter basename=/tracker` in `main.jsx`; routes `/login`, `/` (guarded Home), `*`→`/`. Home extracted to `src/pages/Home.jsx`; greeting now uses `user.displayName`.
 
-**Definition of done:** Visiting any path while unauthenticated lands on /tracker/login. Valid creds redirect to home.
+**Verified:** login response shape (`{token, user:{id,username,displayName,gender}}`) matches what `Login.jsx`/`Home.jsx` consume. Build: lint 0 errors, 31 modules → dist. Serve (vite preview): `/tracker/`, `/tracker/login`, unknown paths all 200 (SPA fallback). **Not verified headless:** the actual in-browser redirect/login round-trip (needs a running backend + browser) — owner to confirm on deploy.
+
+**Definition of done:** Visiting any path while unauthenticated lands on /tracker/login. Valid creds redirect to home. *(Logic in place + build/serve green; live round-trip gated on deploy.)*
 
 ---
 

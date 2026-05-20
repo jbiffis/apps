@@ -203,10 +203,17 @@ export const Sparkle = (p) => (
   </Svg>
 )
 
+export const Logout = (p) => (
+  <Svg {...p}>
+    <path d="M14 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h8" />
+    <path d="M11 12h10M18 9l3 3-3 3" />
+  </Svg>
+)
+
 export const icons = {
   Home, Plus, Stats, User, Bell, Menu, Back, Close, Check, Chevron,
   Pill, Water, Sleep, Mood, Steps, Workout, Coffee, Food, Journal,
-  Meditation, Weight, Heart, Clock, Music, Sun, Pin, Sparkle,
+  Meditation, Weight, Heart, Clock, Music, Sun, Pin, Sparkle, Logout,
 }
 
 // Look up an icon by its stored name (event_types.icon). Falls back to a
