@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Palette — source of truth is docs/DESIGN.md. Light is :root, dark is .dark
+   on <html> (toggled in theme.js). Components reference these via Tailwind
+   color utilities (bg-bg, text-ink, …) — never hardcode hex. */
+:root {
+  --bg:          #f6efe4;
+  --surface:     #ffffff;
+  --surface-2:   #fceade;
+  --line:        #e0d4c0;
+  --ink:         #310a31;
+  --ink-2:       #4d2a4d;
+  --ink-3:       #7a627a;
+  --accent:      #329f5b;
+  --accent-2:    #d6efdf;
+  --accent-ink:  #18472a;
+  --accent-deep: #1f6b3d;
+  --warn:        #c03221;
+  --coral:       #c03221;
+  --amber:       #e08b2d;
+  --sky:         #2aa6c9;
+  --plum:        #310a31;
+
+  --display: 'Nunito', system-ui, sans-serif;
+  --body:    'DM Sans', system-ui, sans-serif;
+  --mono:    'JetBrains Mono', ui-monospace, monospace;
+}
+
+.dark {
+  --bg:          #1a051a;
+  --surface:     #2a0a2a;
+  --surface-2:   #3a1540;
+  --line:        #4a1f4a;
+  --ink:         #fceade;
+  --ink-2:       #e8c9b8;
+  --ink-3:       #a58a9e;
+  --accent:      #329f5b;
+  --accent-2:    #1a4a2a;
+  --accent-ink:  #d6efdf;
+  --accent-deep: #1f6b3d;
+  --warn:        #c03221;
+  --coral:       #c03221;
+  --amber:       #e08b2d;
+  --sky:         #54defd;
+  --plum:        #310a31;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-weight: 500;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  /* Hero card — see DESIGN.md "Cards". */
+  .qcard {
+    @apply rounded-qcard bg-surface border border-line p-3;
+    min-height: 148px;
+  }
+  .qcard-primary {
+    background: linear-gradient(160deg, var(--accent), var(--accent-deep));
+    color: #fff;
+    border-color: transparent;
+  }
+}

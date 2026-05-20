@@ -11,6 +11,10 @@ services:
       - ./dreamworld/dist:/var/www/html/dreamworld
       - ./dreamworld/api:/var/www/html/dreamworld/api
       - /var/lib/docker/volumes/apps/dreamworld:/var/www/data/dreamworld
+      # Tracker SPA: static build mounted into the shared Apache (the tracker
+      # source itself is in .dockerignore so it isn't baked into the image).
+      # /tracker/api/* is reverse-proxied to the backend (see tracker-proxy.conf).
+      - ./tracker/frontend/dist:/var/www/html/tracker
       - ./webapp-proxy.conf:/etc/apache2/conf-enabled/webapp-proxy.conf:ro
       - ./bookstory-proxy.conf:/etc/apache2/conf-enabled/bookstory-proxy.conf:ro
       - ./dreamworld-proxy.conf:/etc/apache2/conf-enabled/dreamworld-proxy.conf:ro

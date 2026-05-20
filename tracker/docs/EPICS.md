@@ -11,14 +11,16 @@
 
 ## Current work
 
-**Epic:** 5 — Frontend scaffold **(not started)**
-**Branch:** `claude/tracker-epic4-logged-events` (Epic 4); Epics 1-3 are on `main`.
+**Epic:** 6 — Login screen **(not started)**
+**Branch:** Epics 1-5 are merged to `main`.
 
-**Epics 1–4 signed off 2026-05-20.** Java is 21. Epics 1-3 merged to `main` (1+2 deployed); Epic 4 on its branch with a green full-suite run (proof in the Epic 4 section).
+**Epics 1–5 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main` with a green full-suite run (proof in Epic 4). Epic 5 frontend scaffold on `main`: Vite SPA builds + serves; `dist/` is committed and bind-mounted into the shared Apache (proof in Epic 5).
 
 **Test infra note:** the JUnit suite now runs two ways — Testcontainers (CI / Docker-compatible hosts) *or* against an external Postgres via `TRACKER_TEST_DB_URL` (this dev box, where Testcontainers can't talk to Docker 29.x). `AbstractIntegrationTest` picks automatically. The reproduce recipe is in the Epic 4 proof block.
 
-**Next (Epic 5): Frontend scaffold** — React 19 + Vite (JS, not TS), Tailwind + theme.css tokens, PWA, JWT-aware fetch client. Read `docs/DESIGN.md` for palette/typography and `docs/API.md` for the endpoints to call. Note: the agent is now fenced out of the prod `tracker` Komodo stack (own stack, ungranted), so frontend work is dev/local only — deploy stays with the owner.
+**Frontend dev:** `cd tracker/frontend && npm install && npm run dev` (Vite at :5173, proxies `/tracker/api`→`localhost:8080/api`). After any frontend change, `npm run build` and **commit `dist/`** — Komodo deploy is restart-only and bind-mounts the committed build. The agent is fenced out of the prod `tracker` Komodo stack, so deploy + the in-browser visual check stay with the owner.
+
+**Next (Epic 6): Login screen** — build on `src/api.js` (`auth.login`) + `src/auth.js` (`setSession`). React Router is installed. Read `docs/DESIGN.md` (fields/buttons) and `docs/API.md` (`POST /auth/login` → `{token, user}`, 401 `invalid_credentials`).
 
 **Epic 3 recap (Catalog API):** `GET /api/event-types` (audience-filtered tree, `?include=all` bypass), `GET /api/event-types/{slug}`, `POST /api/event-types` (creates a shared non-seed type, auto-slugified from name), `DELETE /api/event-types/{id}` (creator-only, non-seed-only), `GET /api/property-presets`. Verified against throwaway Postgres: 26 presets, tree with categories+children, `lady-stuff` (female) visible to carley / hidden from jeremy / shown to jeremy with `?include=all`, leaf hydration (headache → severity-1-5 + headache-location-multi), create→204-delete by creator, seed delete→403, unknown→404.
 
@@ -158,25 +160,45 @@ Save and read entries. **User-scoped at every layer** — there is no `findAll`.
 
 ---
 
-### Epic 5 — Frontend scaffold ⚪
+### Epic 5 — Frontend scaffold 🟢 (signed off 2026-05-20)
 
-React + Vite SPA (JS) with Tailwind, PWA, JWT-aware fetch client, palette tokens, icon set.
+React 19 + Vite SPA (JS) with Tailwind, PWA, JWT-aware fetch client, palette tokens, icon set.
 
-- [ ] `tracker/frontend/package.json`, `vite.config.js` (`base: '/tracker/'`, vite-plugin-pwa)
-- [ ] `tracker/frontend/Dockerfile` (node build → nginx)
-- [ ] `tracker/frontend/nginx.conf`
-- [ ] `tracker/frontend/eslint.config.js`, `postcss.config.cjs`, `tailwind.config.js`
-- [ ] `index.html` with Google Fonts preconnect (Nunito + DM Sans + JetBrains Mono)
-- [ ] `src/main.jsx`, `src/App.jsx`
-- [ ] `src/theme.css` (CSS variables from `docs/DESIGN.md`, light + dark)
-- [ ] `src/api.js` — fetch wrapper with `Authorization: Bearer …`, 401 → redirect to login
-- [ ] `src/auth.js` — JWT storage helpers
-- [ ] `src/icons/` — port `polished-icons.jsx` to typed JSX components
-- [ ] PWA manifest icons (need source artwork — see Phase 1.5 in docs)
-- [ ] `compose.yaml` add `tracker-frontend` service
-- [ ] `tracker-proxy.conf` updated to serve `/tracker/` from frontend container
+- [x] `tracker/frontend/package.json`, `vite.config.js` (`base: '/tracker/'`, vite-plugin-pwa, dev proxy `/tracker/api`→`:8080/api`)
+- [x] `tracker/frontend/eslint.config.js`, `postcss.config.js`, `tailwind.config.js` (tokens mapped to CSS vars, `darkMode: 'class'`)
+- [x] `index.html` with Google Fonts preconnect (Nunito + DM Sans + JetBrains Mono)
+- [x] `src/main.jsx` (applies stored theme before render), `src/App.jsx` (styled Home placeholder + theme toggle)
+- [x] `src/theme.css` (CSS variables from `docs/DESIGN.md`, light `:root` + `.dark`) + `src/theme.js` (light/dark/system, `localStorage tracker.theme`)
+- [x] `src/api.js` — base-relative fetch wrapper (`${BASE_URL}api`), `Authorization: Bearer …`, 401 clears session
+- [x] `src/auth.js` — token/user storage + JWT-payload decode + `isExpired`/`isAuthenticated`
+- [x] `src/icons/index.jsx` — 27 icons (24px/2px/currentColor) per DESIGN.md + `DynamicIcon`
+- [x] `public/favicon.svg` + `scripts/generate-icons.mjs` → PWA manifest icons (192/512/maskable/apple)
+- [x] `compose.yaml` mounts `./tracker/frontend/dist` at `/var/www/html/tracker`
+- [x] `tracker-proxy.conf` serves `/tracker/` (FallbackResource SPA routing + asset/SW cache headers); `/tracker/api/` still proxied to backend
 
-**Definition of done:** `https://apps.biffis.com/tracker/` loads a styled "Hello" page in both light + dark, installable as a PWA.
+**Deviations from the original plan (intentional):**
+- **No `tracker-frontend` nginx container / Dockerfile / nginx.conf.** This repo's other SPAs (book-log, dreamworld) are served as committed `dist/` bind-mounts into the shared Apache `web`; the tracker follows that convention. `dist/` is committed (see `.gitignore`) so Komodo's restart-only deploy can bind-mount it. The frontend carries no secret, so it doesn't belong in the isolated tracker stack.
+- `postcss.config.js` (not `.cjs`) — the package is `type: module`.
+- Icons authored fresh from the DESIGN.md spec (the `polished-icons.jsx` prototype wasn't in the repo).
+
+**Proof (build + serve, 2026-05-20):**
+```
+npm install   → added 472 packages, 0 vulnerabilities
+npm run lint  → 0 errors (1 react-refresh warning on the icons barrel)
+npm run icons → icon-192/512, maskable-512, apple-touch-icon generated
+npm run build → 18 modules transformed; dist/index.html + assets + sw.js + manifest; built in ~1.3s
+# vite preview smoke (all asset paths are /tracker/-based):
+GET /                          → 302 → /tracker/
+GET /tracker/                  → 200   (<title>LifeTracker</title>)
+GET /tracker/log/water         → 200   (SPA fallback to index.html)
+GET /tracker/assets/index.css  → 200
+GET /tracker/manifest.webmanifest → 200
+```
+Reproduce: `cd tracker/frontend && npm install && npm run build && npm run preview`.
+
+**Not verified headless:** the actual in-browser render and the light/dark visual switch (the toggle button is wired to `theme.js`; the build/serve pass but a real browser check is the owner's to do on deploy).
+
+**Definition of done:** `https://apps.biffis.com/tracker/` loads a styled page in both light + dark, installable as a PWA. *(Local build + serve green; prod load gated on the owner's deploy — agent is fenced out of the tracker stack. Tracked in Epic 10.)*
 
 ---
 
