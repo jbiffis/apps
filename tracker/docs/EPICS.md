@@ -321,8 +321,8 @@ Underway 2026-05-21. Building the deferred backlog epic-by-epic.
 - **2a — History cursor pagination 🟢** — `GET /api/logged-events` now returns a base64url `nextCursor` (keyset on `occurredAt`+`id`, `order by occurredAt desc, id desc`); `findScoped` takes a `noCursor` boolean (avoids an untyped-null param Postgres can't type). History page accumulates pages behind a "Load more" button (100/page), ends with "End of the last 30 days". Suite 32 green (added `list_cursorPagination_noOverlap`).
 - **2b — Soft-delete 🟢** — V5 adds `logged_events.deleted_at` (+ partial live index); every per-user read filters `deleted_at IS NULL`; `DELETE` sets `deleted_at` (idempotent), new `POST /logged-events/{id}/restore` clears it (same id/createdAt). Home long-press "undo" now restores the row instead of re-creating it. Edits reject deleted rows. Suite 34 green (delete→restore, cross-user restore 404).
 - **2c — Me tab 🟢** — V6 adds `user_tracker_prefs` (hidden + sort_order, unique per user/type). New `GET /api/me/tracker-prefs` + `PUT /api/me/tracker-prefs/{slug}` (`TrackerPrefService`, user-scoped). `pages/Me.jsx` (wired to the Me nav tab): profile card, theme toggle, **hide/show trackers** (optimistic toggles → prefs API; hidden trackers drop from the Home grid + picker), **CSV/JSON export** of the caller's full history (`lib/export.js`, paginates the keyset cursor, client-side download). Suite 37 green (`MeControllerTest`: hide+list+cross-user isolation, unknown-tracker 404).
-- **2d — Long-press reorder** home tiles ⚪ (next) — reuses `user_tracker_prefs.sort_order`
-- **2e — Stats tab** (charts/streaks/heatmaps) ⚪
+- **2d — Long-press reorder 🟢** — frontend-only (reuses V6 `sort_order` + `PUT /me/tracker-prefs/{slug}`). Long-press a Home "All trackers" tile → reorder mode; ◀ ▶ move tiles, **Done** persists `sortOrder` for each; the grid sorts by saved order (stable, unset keep catalog order). Used ◀▶ moves rather than touch drag-and-drop (a hand-rolled touch DnD can't be verified headless). "Create categories" from that backlog bullet is deferred (separate feature).
+- **2e — Stats tab** (charts/streaks/heatmaps) ⚪ (next)
 
 ## Out of scope (Phase 2+)
 
