@@ -11,16 +11,16 @@
 
 ## Current work
 
-**Epic:** 9 — History screen **(not started)**
-**Branch:** Epics 1-8 are merged to `main`.
+**Epic:** Phase 1 screens complete (6–9). Remaining: Epic 10 — deploy + initial users (owner-gated; agent is fenced out of the prod tracker stack).
+**Branch:** Epics 1-9 are merged to `main`.
 
-**Epics 1–8 signed off 2026-05-20.** Java is 21. Backend (1-4) on `main`, full suite green. Frontend on `main`: Epic 5 scaffold, Epic 6 login/guard/logout, Epic 7 Home, Epic 8 Entry screen (FieldRenderer per widget, TimeChips, save→toast w/ undo). Also: case-insensitive login, catalog tree-truncation fix (Epic 3 note), and a local test env at `tracker/testenv` (4 users / `test123`, ~11.5k events across all 42 trackers — `./run.sh`). In-browser visual checks aren't done headless — owner confirms via the test env / deploy.
+**Epics 1–9 signed off (1–8 on 2026-05-20, 9 on 2026-05-21).** Java is 21. Backend on `main`, suite 31 green. Frontend on `main`: scaffold, login/guard/logout, Home, Entry, History — plus refinements: case-insensitive login, catalog tree-truncation fix (Epic 3 note), hierarchical tracker picker, long-press Edit/Delete on Today (+ `PUT /logged-events/{id}`). Local test env at `tracker/testenv` (4 users / `test123`, ~11.5k events across all 42 trackers — `./run.sh`). In-browser visual checks aren't done headless — owner confirms via the test env / deploy.
 
 **Frontend data layer:** `hooks/useApi.js` (GET → `{data,loading,error,reload}`). Auth/token in `auth.js`; `api.js` attaches Bearer + clears session on 401. Catalog helpers in `lib/catalog.js`, formatting in `lib/format.js`.
 
 **Refinement (2026-05-21): long-press Edit/Delete on the Today list.** Long-pressing (or right-clicking) a Today row opens an `ActionSheet` (Edit / Delete). Delete removes the entry and shows an undo toast (re-creates from the row data). Edit opens the Entry screen in edit mode (`/log/:slug?edit=<id>`), prefilled, saving via the new `PUT /api/logged-events/{id}` (user-scoped in-place update; another user's id → 404). Backend: `LoggedEventService.update` (flushes option deletes before re-insert to avoid the unique-constraint clash), 31 tests green.
 
-**Next (Epic 9): History screen** — `pages/History.jsx` at `/history`, reachable from a bottom-nav tab (wire the inert one). List the user's entries grouped by day (Today / Yesterday / dated) from `GET /api/logged-events` (widen the window via `from`/`to`; default is last 24h, so pass ~30 days). Tap a row → read-only detail. Reuse `lib/format.js` + the catalog icon map pattern from Home. See `docs/API.md` logged-events + `docs/DESIGN.md`.
+**Next (Epic 10): Deploy + initial users** — owner-gated. The agent is fenced out of the prod `tracker` Komodo stack (own stack, ungranted), so deploying the built `dist/` + backend image and running the `set-password` ritual for the real users is the owner's task. Phase 2 candidates: Stats/Me tabs, cursor pagination for History (`nextCursor`), long-press reorder, soft-delete.
 
 **Test infra note:** the JUnit suite now runs two ways — Testcontainers (CI / Docker-compatible hosts) *or* against an external Postgres via `TRACKER_TEST_DB_URL` (this dev box, where Testcontainers can't talk to Docker 29.x). `AbstractIntegrationTest` picks automatically. The reproduce recipe is in the Epic 4 proof block.
 
@@ -270,13 +270,20 @@ Reproduce: `cd tracker/frontend && npm install && npm run build && npm run previ
 
 ---
 
-### Epic 9 — History screen ⚪
+### Epic 9 — History screen 🟢 (signed off 2026-05-21)
 
-- [ ] `pages/History.jsx` route `/history`
-- [ ] Grouped by day (Today / Yesterday / dated)
-- [ ] Tap row → read-only detail modal/page
+- [x] `pages/History.jsx` route `/history` (guarded); reachable via a "See all →" link on the Home Today section
+- [x] Fetches a 30-day window from `GET /logged-events?from&to&limit=200`; grouped by local day (Today / Yesterday / "Tuesday, May 20") — `lib/format.js` `dayKey`/`dayHeading`
+- [x] Tap a row → read-only `EntryDetail` bottom sheet (icon, name, day+time, each option property/value, note)
+- [x] Icons resolved from the `/event-types` tree (logged-event view carries only slug+name)
 
-**Definition of done:** Last 30 days of entries visible, grouped, readable.
+**Notes:**
+- Phase-1 cap: the list is one request capped at the API's `limit=200` (newest-first); when ≥200 it shows a "most recent 200" footer. The seeded test users log ~30/day, so 200 ≈ the last ~7 days; real-density users span the full 30. Cursor pagination (`nextCursor` is currently null) is Phase 2.
+- `path` is computed once via a lazy `useState` initializer (computing `new Date()` in `useMemo` trips the eslint purity rule).
+
+**Verified (test env):** `/tracker/history` → 200; the 30-day query returns 200 entries across 7 distinct days for carley (newest 2026-05-20, oldest 2026-05-14). lint 0 errors; build → dist; test env serves the new bundle. **Not verified headless:** the in-browser grouping/detail UI — owner's check.
+
+**Definition of done:** entries grouped by day and readable with a tap-through detail. (✅ within the Phase-1 200-entry cap; full 30-day depth for dense users needs Phase-2 pagination.)
 
 ---
 
