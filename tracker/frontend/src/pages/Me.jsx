@@ -65,7 +65,7 @@ export default function Me() {
     </header>
   )
 
-  const onNav = (k) => { if (k !== 'me') navigate('/') }
+  const onNav = (k) => { if (k === 'stats') navigate('/stats'); else if (k !== 'me') navigate('/') }
 
   return (
     <AppShell bar={bar} nav={<BottomNav active="me" onSelect={onNav} />}>

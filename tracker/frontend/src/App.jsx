@@ -5,6 +5,7 @@ import Home from './pages/Home.jsx'
 import Entry from './pages/Entry.jsx'
 import History from './pages/History.jsx'
 import Me from './pages/Me.jsx'
+import Stats from './pages/Stats.jsx'
 
 export default function App() {
   return (
@@ -39,6 +40,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Me />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/stats"
+        element={
+          <RequireAuth>
+            <Stats />
           </RequireAuth>
         }
       />

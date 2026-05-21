@@ -63,4 +63,30 @@ public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> 
                              @Param("eventTypeIds") List<UUID> eventTypeIds,
                              @Param("from") OffsetDateTime from,
                              @Param("to") OffsetDateTime to);
+
+    // --- Stats aggregates (live rows only). UTC-day buckets. ---
+
+    /** [event_type_id text, count] for the user's live entries in [from, to). */
+    @Query(value = """
+            select event_type_id::text, count(*)
+            from logged_events
+            where user_id = :userId and deleted_at is null
+              and occurred_at >= :from and occurred_at < :to
+            group by event_type_id
+            """, nativeQuery = true)
+    List<Object[]> countByType(@Param("userId") UUID userId,
+                               @Param("from") OffsetDateTime from,
+                               @Param("to") OffsetDateTime to);
+
+    /** [day 'YYYY-MM-DD' (UTC), count] for the user's live entries in [from, to). */
+    @Query(value = """
+            select to_char(occurred_at at time zone 'UTC', 'YYYY-MM-DD'), count(*)
+            from logged_events
+            where user_id = :userId and deleted_at is null
+              and occurred_at >= :from and occurred_at < :to
+            group by 1 order by 1
+            """, nativeQuery = true)
+    List<Object[]> countByDay(@Param("userId") UUID userId,
+                              @Param("from") OffsetDateTime from,
+                              @Param("to") OffsetDateTime to);
 }
