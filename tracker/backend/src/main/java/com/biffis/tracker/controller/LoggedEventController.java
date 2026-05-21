@@ -42,8 +42,9 @@ public class LoggedEventController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             @RequestParam(required = false) String eventTypeSlug,
-            @RequestParam(required = false) Integer limit) {
-        return service.list(from, to, eventTypeSlug, limit);
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String cursor) {
+        return service.list(from, to, eventTypeSlug, limit, cursor);
     }
 
     @GetMapping("/{id}")

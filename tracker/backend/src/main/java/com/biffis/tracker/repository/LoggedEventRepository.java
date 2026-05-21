@@ -26,19 +26,28 @@ public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> 
 
     /**
      * Owner-scoped window query, newest first. {@code eventTypeId} optional
-     * (null = all trackers). {@code Pageable} caps the result size.
+     * (null = all trackers). Keyset cursor: pass {@code curTs}/{@code curId}
+     * (the last row of the previous page) to fetch strictly-older rows;
+     * pass null/null for the first page. Ordered by (occurredAt, id) desc so
+     * the cursor is stable even when timestamps tie. {@code Pageable} caps size.
      */
     @Query("""
             select e from LoggedEvent e
             where e.userId = :userId
               and e.occurredAt >= :from and e.occurredAt < :to
               and (:eventTypeId is null or e.eventTypeId = :eventTypeId)
-            order by e.occurredAt desc
+              and (:noCursor = true
+                   or e.occurredAt < :curTs
+                   or (e.occurredAt = :curTs and e.id < :curId))
+            order by e.occurredAt desc, e.id desc
             """)
     List<LoggedEvent> findScoped(@Param("userId") UUID userId,
                                  @Param("from") OffsetDateTime from,
                                  @Param("to") OffsetDateTime to,
                                  @Param("eventTypeId") UUID eventTypeId,
+                                 @Param("noCursor") boolean noCursor,
+                                 @Param("curTs") OffsetDateTime curTs,
+                                 @Param("curId") UUID curId,
                                  Pageable pageable);
 
     /** Count this user's events for a set of event types within a window (for home hero). */
