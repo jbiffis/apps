@@ -28,6 +28,7 @@ export default function Home() {
   const hero = useApi('/home/hero')
   const today = useApi('/home/today')
   const catalog = useApi('/event-types')
+  const prefs = useApi('/me/tracker-prefs')
 
   // A just-saved entry hands off via router state; derive the undo toast from
   // it (no extra state) and refresh the feeds once it appears.
@@ -50,6 +51,15 @@ export default function Home() {
     } catch { /* already gone / window passed — nothing to do */ }
   }
   const tree = catalog.data || EMPTY
+  // Trackers the user hid in the Me tab — dropped from the grid + picker.
+  const hidden = useMemo(
+    () => new Set((prefs.data || EMPTY).filter((p) => p.hidden).map((p) => p.eventTypeSlug)),
+    [prefs.data],
+  )
+  const visibleTree = useMemo(
+    () => tree.filter((n) => n.isCategory || !hidden.has(n.slug)),
+    [tree, hidden],
+  )
   // The today/logged-event payload's eventType carries only {slug, name};
   // resolve its icon from the catalog we already fetched.
   const iconBySlug = useMemo(() => {
@@ -78,7 +88,7 @@ export default function Home() {
     else logTracker(node.slug)
   }
   function openFab() {
-    setSheet({ key: 'all', title: 'Log something', nodes: tree })
+    setSheet({ key: 'all', title: 'Log something', nodes: visibleTree })
   }
 
   function editEntry(e) {
@@ -128,7 +138,7 @@ export default function Home() {
   )
 
   return (
-    <AppShell bar={bar} nav={<BottomNav active="home" onSelect={(k) => k === 'log' && openFab()} />}>
+    <AppShell bar={bar} nav={<BottomNav active="home" onSelect={(k) => { if (k === 'log') openFab(); else if (k === 'me') navigate('/me') }} />}>
       {/* Hero cards */}
       <section className="space-y-3">
         {hero.loading && <CardSkeleton />}
@@ -144,7 +154,7 @@ export default function Home() {
           <p className="font-body text-[13px] text-ink-3">Loading…</p>
         ) : (
           <div className="grid grid-cols-4 gap-3">
-            {tree.map((node) => (
+            {visibleTree.map((node) => (
               <button key={node.slug} onClick={() => openTile(node)} className="flex flex-col items-center gap-1.5">
                 <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-line bg-surface text-ink-2">
                   <DynamicIcon name={node.icon} size={24} />
@@ -192,6 +202,7 @@ export default function Home() {
           key={sheet.key}
           rootTitle={sheet.title}
           rootNodes={sheet.nodes}
+          hidden={hidden}
           onPick={logTracker}
           onClose={() => setSheet(null)}
         />
