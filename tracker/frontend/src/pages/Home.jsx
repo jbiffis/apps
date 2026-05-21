@@ -94,18 +94,13 @@ export default function Home() {
     } catch { /* already gone */ }
   }
 
-  // Undo a delete by re-creating the entry from the row we still hold.
+  // Undo a delete by restoring the same (soft-deleted) row — preserves its id.
   async function undoDelete() {
     const e = notice?.restore
     setNotice(null)
     if (!e) return
     try {
-      await api.post('/logged-events', {
-        eventTypeSlug: e.eventType.slug,
-        occurredAt: e.occurredAt,
-        note: e.note || undefined,
-        options: (e.options || []).map((o) => ({ propertyName: o.property, value: o.value })),
-      })
+      await api.post(`/logged-events/${e.id}/restore`)
       hero.reload()
       today.reload()
     } catch { /* nothing to do */ }

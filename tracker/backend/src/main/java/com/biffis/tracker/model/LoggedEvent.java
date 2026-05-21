@@ -37,6 +37,9 @@ public class LoggedEvent {
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
     protected LoggedEvent() {
     }
 
@@ -82,5 +85,13 @@ public class LoggedEvent {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public OffsetDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(OffsetDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 }

@@ -62,4 +62,9 @@ public class LoggedEventController {
     public void delete(@PathVariable UUID id) {
         service.delete(id);
     }
+
+    @PostMapping("/{id}/restore")
+    public LoggedEventView restore(@PathVariable UUID id) {
+        return service.restore(id);
+    }
 }

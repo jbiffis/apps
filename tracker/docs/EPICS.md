@@ -319,8 +319,8 @@ tracker into its own stack — and not granting that user on it — keeps
 Underway 2026-05-21. Building the deferred backlog epic-by-epic.
 
 - **2a — History cursor pagination 🟢** — `GET /api/logged-events` now returns a base64url `nextCursor` (keyset on `occurredAt`+`id`, `order by occurredAt desc, id desc`); `findScoped` takes a `noCursor` boolean (avoids an untyped-null param Postgres can't type). History page accumulates pages behind a "Load more" button (100/page), ends with "End of the last 30 days". Suite 32 green (added `list_cursorPagination_noOverlap`).
-- **2b — Soft-delete** ⚪ (next)
-- **2c — Me tab** (profile, hide/show trackers, CSV/JSON export) ⚪ — introduces a per-user `user_tracker_prefs` table
+- **2b — Soft-delete 🟢** — V5 adds `logged_events.deleted_at` (+ partial live index); every per-user read filters `deleted_at IS NULL`; `DELETE` sets `deleted_at` (idempotent), new `POST /logged-events/{id}/restore` clears it (same id/createdAt). Home long-press "undo" now restores the row instead of re-creating it. Edits reject deleted rows. Suite 34 green (delete→restore, cross-user restore 404).
+- **2c — Me tab** (profile, hide/show trackers, CSV/JSON export) ⚪ (next) — introduces a per-user `user_tracker_prefs` table
 - **2d — Long-press reorder** home tiles ⚪ — reuses `user_tracker_prefs.sort_order`
 - **2e — Stats tab** (charts/streaks/heatmaps) ⚪
 

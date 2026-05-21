@@ -157,6 +157,35 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void delete_thenRestore_bringsItBack() throws Exception {
+        String carley = token("carley");
+        String id = logWater(carley, 4);
+        mockMvc.perform(delete("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
+                .andExpect(status().isNoContent());
+        // soft-deleted → gone from reads
+        mockMvc.perform(get("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
+                .andExpect(status().isNotFound());
+        // restore → back, same id, original value
+        mockMvc.perform(post("/api/logged-events/" + id + "/restore").header("Authorization", "Bearer " + carley))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.options[0].value").value(4));
+        mockMvc.perform(get("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void crossUser_cannotRestoreOthersEvent_404() throws Exception {
+        String carley = token("carley");
+        String id = logWater(carley, 2);
+        mockMvc.perform(delete("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(post("/api/logged-events/" + id + "/restore")
+                        .header("Authorization", "Bearer " + token("jeremy")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void list_filterByEventType() throws Exception {
         String carley = token("carley");
         logWater(carley, 6);

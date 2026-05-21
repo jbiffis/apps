@@ -81,7 +81,7 @@ public class LoggedEventService {
     @Transactional
     public LoggedEventView update(UUID id, LogEventRequest req) {
         UUID userId = CurrentUser.id();
-        LoggedEvent existing = events.findByIdAndUserId(id, userId)
+        LoggedEvent existing = events.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
                 .orElseThrow(() -> new NotFoundException("logged event not found"));
         EventType type = eventTypes.findBySlug(req.eventTypeSlug())
                 .orElseThrow(() -> new NotFoundException("event type not found"));
@@ -150,7 +150,7 @@ public class LoggedEventService {
 
     @Transactional(readOnly = true)
     public LoggedEventView getOne(UUID id) {
-        LoggedEvent e = events.findByIdAndUserId(id, CurrentUser.id())
+        LoggedEvent e = events.findByIdAndUserIdAndDeletedAtIsNull(id, CurrentUser.id())
                 .orElseThrow(() -> new NotFoundException("logged event not found"));
         return hydrate(List.of(e)).get(0);
     }
@@ -167,15 +167,29 @@ public class LoggedEventService {
         return views;
     }
 
-    // ---------- delete ----------
+    // ---------- delete / restore ----------
 
+    /** Soft-delete: mark deleted_at so the entry drops out of all reads but can be restored. */
     @Transactional
     public void delete(UUID id) {
-        long removed = events.deleteByIdAndUserId(id, CurrentUser.id());
-        if (removed == 0) {
-            throw new NotFoundException("logged event not found");
+        LoggedEvent e = events.findByIdAndUserId(id, CurrentUser.id())
+                .orElseThrow(() -> new NotFoundException("logged event not found"));
+        if (e.getDeletedAt() == null) {
+            e.setDeletedAt(OffsetDateTime.now());
+            events.save(e);
         }
-        // logged_event_options cascade via FK ON DELETE CASCADE
+    }
+
+    /** Undo a soft-delete (Home long-press undo). Another user's id → not found. */
+    @Transactional
+    public LoggedEventView restore(UUID id) {
+        LoggedEvent e = events.findByIdAndUserId(id, CurrentUser.id())
+                .orElseThrow(() -> new NotFoundException("logged event not found"));
+        if (e.getDeletedAt() != null) {
+            e.setDeletedAt(null);
+            events.save(e);
+        }
+        return hydrate(List.of(e)).get(0);
     }
 
     // ---------- helpers ----------
