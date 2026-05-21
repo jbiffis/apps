@@ -172,6 +172,34 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void list_cursorPagination_noOverlap() throws Exception {
+        String carley = token("carley");
+        for (int i = 1; i <= 5; i++) {
+            logWater(carley, i);
+        }
+
+        String p1body = mockMvc.perform(get("/api/logged-events?limit=2")
+                        .header("Authorization", "Bearer " + carley))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        JsonNode p1 = objectMapper.readTree(p1body);
+        assertThat(p1.get("events").size()).isEqualTo(2);
+        String cursor = p1.get("nextCursor").asText();
+        assertThat(cursor).isNotBlank();
+
+        String enc = java.net.URLEncoder.encode(cursor, java.nio.charset.StandardCharsets.UTF_8);
+        String p2body = mockMvc.perform(get("/api/logged-events?limit=2&cursor=" + enc)
+                        .header("Authorization", "Bearer " + carley))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        JsonNode p2 = objectMapper.readTree(p2body);
+
+        java.util.Set<String> page1Ids = new java.util.HashSet<>();
+        for (JsonNode e : p1.get("events")) page1Ids.add(e.get("id").asText());
+        for (JsonNode e : p2.get("events")) {
+            assertThat(page1Ids).doesNotContain(e.get("id").asText());
+        }
+    }
+
+    @Test
     void list_dateWindowExcludesOld() throws Exception {
         String carley = token("carley");
         // an event 10 days ago

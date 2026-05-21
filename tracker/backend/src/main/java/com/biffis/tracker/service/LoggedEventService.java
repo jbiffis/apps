@@ -18,8 +18,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +108,8 @@ public class LoggedEventService {
     // ---------- read ----------
 
     @Transactional(readOnly = true)
-    public LoggedEventsResponse list(OffsetDateTime from, OffsetDateTime to, String eventTypeSlug, Integer limit) {
+    public LoggedEventsResponse list(OffsetDateTime from, OffsetDateTime to, String eventTypeSlug,
+                                     Integer limit, String cursor) {
         UUID userId = CurrentUser.id();
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime toBound = to != null ? to : now;
@@ -120,9 +123,29 @@ public class LoggedEventService {
                     .getId();
         }
 
+        OffsetDateTime curTs = null;
+        UUID curId = null;
+        if (cursor != null && !cursor.isBlank()) {
+            try {
+                String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+                int sep = decoded.lastIndexOf('_');
+                curTs = OffsetDateTime.parse(decoded.substring(0, sep));
+                curId = UUID.fromString(decoded.substring(sep + 1));
+            } catch (RuntimeException e) {
+                throw new NotFoundException("invalid cursor");
+            }
+        }
+
         List<LoggedEvent> rows = events.findScoped(userId, fromBound, toBound, eventTypeId,
-                PageRequest.of(0, cap));
-        return new LoggedEventsResponse(hydrate(rows), null);
+                curTs == null, curTs, curId, PageRequest.of(0, cap));
+        // Full page → there may be more; hand back a keyset cursor on the last row.
+        String next = null;
+        if (rows.size() == cap && !rows.isEmpty()) {
+            LoggedEvent last = rows.get(rows.size() - 1);
+            String raw = last.getOccurredAt().toString() + "_" + last.getId();
+            next = Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+        }
+        return new LoggedEventsResponse(hydrate(rows), next);
     }
 
     @Transactional(readOnly = true)
@@ -138,7 +161,7 @@ public class LoggedEventService {
         UUID userId = CurrentUser.id();
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime startOfDay = now.toLocalDate().atStartOfDay(now.getOffset()).toOffsetDateTime();
-        List<LoggedEvent> rows = events.findScoped(userId, startOfDay, now, null, PageRequest.of(0, max));
+        List<LoggedEvent> rows = events.findScoped(userId, startOfDay, now, null, true, null, null, PageRequest.of(0, max));
         List<LoggedEventView> views = new ArrayList<>(hydrate(rows));
         views.sort(Comparator.comparing(LoggedEventView::occurredAt)); // oldest first
         return views;

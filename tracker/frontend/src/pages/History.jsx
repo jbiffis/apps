@@ -1,27 +1,53 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 import { flattenLeaves } from '../lib/catalog.js'
 import { dayKey, dayHeading, timeLabel, summarizeOptions } from '../lib/format.js'
 import { Back, Close, DynamicIcon } from '../icons/index.jsx'
 
 const WINDOW_DAYS = 30
-const LIMIT = 200
-const EMPTY = []
+const PAGE = 100
 
 export default function History() {
   const navigate = useNavigate()
   const [selected, setSelected] = useState(null)
+  const [events, setEvents] = useState([])
+  const [cursor, setCursor] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  // Fix the query window once at mount (lazy initializer) so the fetch path is
-  // stable across renders.
-  const [path] = useState(() => {
+  // Fix the query window once at mount (lazy initializer) so the base path is
+  // stable; pages are appended via the keyset cursor.
+  const [basePath] = useState(() => {
     const to = new Date()
     const from = new Date(Date.now() - WINDOW_DAYS * 86400000)
-    return `/logged-events?from=${from.toISOString()}&to=${to.toISOString()}&limit=${LIMIT}`
+    return `/logged-events?from=${from.toISOString()}&to=${to.toISOString()}&limit=${PAGE}`
   })
 
-  const { data, loading } = useApi(path)
+  useEffect(() => {
+    let alive = true
+    api.get(basePath)
+      .then((r) => { if (!alive) return; setEvents(r.events || []); setCursor(r.nextCursor || null) })
+      .catch(() => { /* surfaced as empty state */ })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [basePath])
+
+  async function loadMore() {
+    if (!cursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const r = await api.get(`${basePath}&cursor=${encodeURIComponent(cursor)}`)
+      setEvents((prev) => [...prev, ...(r.events || [])])
+      setCursor(r.nextCursor || null)
+    } catch {
+      /* keep cursor so the user can retry */
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   const catalog = useApi('/event-types')
   const iconBySlug = useMemo(() => {
     const m = {}
@@ -29,7 +55,6 @@ export default function History() {
     return m
   }, [catalog.data])
 
-  const events = data?.events || EMPTY
   // Group newest-first events into day buckets, preserving order.
   const groups = useMemo(() => {
     const out = []
@@ -87,8 +112,18 @@ export default function History() {
                 </ul>
               </section>
             ))}
-            {events.length >= LIMIT && (
-              <p className="pb-4 text-center font-body text-[11px] text-ink-3">Showing the most recent {LIMIT} entries.</p>
+            {cursor ? (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="mx-auto mb-4 block rounded-full border border-line bg-surface px-5 py-2 font-display text-[13px] font-bold text-ink disabled:opacity-50"
+              >
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            ) : (
+              <p className="pb-4 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
+                End of the last {WINDOW_DAYS} days
+              </p>
             )}
           </>
         )}
