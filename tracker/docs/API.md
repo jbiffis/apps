@@ -149,6 +149,9 @@ Response:
 ### `GET /logged-events/{id}`
 One entry. 404 if the caller isn't the owner (we don't distinguish to avoid leaking IDs).
 
+### `PUT /logged-events/{id}`
+Replace an entry the caller owns (edit flow). Same body as `POST`; `occurredAt`/`note` are overwritten and the option set is fully replaced. Keeps the same id. 404 if the caller isn't the owner. Response 200: same shape as the `POST` 201.
+
 ### `DELETE /logged-events/{id}`
 Soft-delete in Phase 2; hard delete in Phase 1 (Undo flow keeps a 5s client-side window before firing this).
 

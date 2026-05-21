@@ -18,6 +18,8 @@
 
 **Frontend data layer:** `hooks/useApi.js` (GET → `{data,loading,error,reload}`). Auth/token in `auth.js`; `api.js` attaches Bearer + clears session on 401. Catalog helpers in `lib/catalog.js`, formatting in `lib/format.js`.
 
+**Refinement (2026-05-21): long-press Edit/Delete on the Today list.** Long-pressing (or right-clicking) a Today row opens an `ActionSheet` (Edit / Delete). Delete removes the entry and shows an undo toast (re-creates from the row data). Edit opens the Entry screen in edit mode (`/log/:slug?edit=<id>`), prefilled, saving via the new `PUT /api/logged-events/{id}` (user-scoped in-place update; another user's id → 404). Backend: `LoggedEventService.update` (flushes option deletes before re-insert to avoid the unique-constraint clash), 31 tests green.
+
 **Next (Epic 9): History screen** — `pages/History.jsx` at `/history`, reachable from a bottom-nav tab (wire the inert one). List the user's entries grouped by day (Today / Yesterday / dated) from `GET /api/logged-events` (widen the window via `from`/`to`; default is last 24h, so pass ~30 days). Tap a row → read-only detail. Reuse `lib/format.js` + the catalog icon map pattern from Home. See `docs/API.md` logged-events + `docs/DESIGN.md`.
 
 **Test infra note:** the JUnit suite now runs two ways — Testcontainers (CI / Docker-compatible hosts) *or* against an external Postgres via `TRACKER_TEST_DB_URL` (this dev box, where Testcontainers can't talk to Docker 29.x). `AbstractIntegrationTest` picks automatically. The reproduce recipe is in the Epic 4 proof block.

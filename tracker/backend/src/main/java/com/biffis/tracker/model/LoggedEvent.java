@@ -70,4 +70,17 @@ public class LoggedEvent {
     public OffsetDateTime getCreatedAt() {
         return createdAt;
     }
+
+    // Mutable on edit (PUT). user_id and created_at stay fixed.
+    public void setEventTypeId(UUID eventTypeId) {
+        this.eventTypeId = eventTypeId;
+    }
+
+    public void setOccurredAt(OffsetDateTime occurredAt) {
+        this.occurredAt = occurredAt;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
+    }
 }

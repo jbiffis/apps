@@ -10,4 +10,7 @@ import java.util.UUID;
 public interface LoggedEventOptionRepository extends JpaRepository<LoggedEventOption, UUID> {
 
     List<LoggedEventOption> findByLoggedEventIdIn(Collection<UUID> loggedEventIds);
+
+    /** Clear an entry's options before re-creating them on update. */
+    void deleteByLoggedEventId(UUID loggedEventId);
 }

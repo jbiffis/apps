@@ -4,11 +4,13 @@ import { getThemePref, resolveTheme, setThemePref } from '../theme.js'
 import { clearSession, getUser } from '../auth.js'
 import { api } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
+import { useLongPress } from '../hooks/useLongPress.js'
 import { flattenLeaves } from '../lib/catalog.js'
 import { greeting, dateLabel, timeLabel, summarizeOptions } from '../lib/format.js'
 import AppShell from '../components/AppShell.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import TrackerPickerSheet from '../components/TrackerPickerSheet.jsx'
+import ActionSheet from '../components/ActionSheet.jsx'
 import Toast from '../components/Toast.jsx'
 import { Sun, Logout, Plus, DynamicIcon } from '../icons/index.jsx'
 
@@ -20,6 +22,8 @@ export default function Home() {
   const user = getUser()
   const [pref, setPref] = useState(getThemePref())
   const [sheet, setSheet] = useState(null)
+  const [menuEntry, setMenuEntry] = useState(null)
+  const [notice, setNotice] = useState(null)
 
   const hero = useApi('/home/hero')
   const today = useApi('/home/today')
@@ -75,6 +79,36 @@ export default function Home() {
   }
   function openFab() {
     setSheet({ key: 'all', title: 'Log something', nodes: tree })
+  }
+
+  function editEntry(e) {
+    navigate(`/log/${e.eventType.slug}?edit=${e.id}`)
+  }
+
+  async function deleteEntry(e) {
+    try {
+      await api.del(`/logged-events/${e.id}`)
+      hero.reload()
+      today.reload()
+      setNotice({ message: `Deleted ${e.eventType?.name || e.eventType?.slug}`, restore: e })
+    } catch { /* already gone */ }
+  }
+
+  // Undo a delete by re-creating the entry from the row we still hold.
+  async function undoDelete() {
+    const e = notice?.restore
+    setNotice(null)
+    if (!e) return
+    try {
+      await api.post('/logged-events', {
+        eventTypeSlug: e.eventType.slug,
+        occurredAt: e.occurredAt,
+        note: e.note || undefined,
+        options: (e.options || []).map((o) => ({ propertyName: o.property, value: o.value })),
+      })
+      hero.reload()
+      today.reload()
+    } catch { /* nothing to do */ }
   }
 
   const bar = (
@@ -135,18 +169,7 @@ export default function Home() {
         ) : today.data?.length ? (
           <ul className="space-y-2">
             {today.data.map((e) => (
-              <li key={e.id} className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2.5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent-2 text-accent-ink">
-                  <DynamicIcon name={iconBySlug[e.eventType?.slug]} size={18} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-body text-[13px] font-semibold text-ink">{e.eventType?.name || e.eventType?.slug}</p>
-                  {(summarizeOptions(e.options) || e.note) && (
-                    <p className="truncate font-body text-[11px] text-ink-3">{summarizeOptions(e.options) || e.note}</p>
-                  )}
-                </div>
-                <span className="shrink-0 font-mono text-[10px] text-ink-3">{timeLabel(e.occurredAt)}</span>
-              </li>
+              <TodayRow key={e.id} entry={e} icon={iconBySlug[e.eventType?.slug]} onMenu={() => setMenuEntry(e)} />
             ))}
           </ul>
         ) : (
@@ -174,9 +197,22 @@ export default function Home() {
         />
       )}
 
-      {saved && (
-        <Toast message={`Logged ${saved.name}`} onUndo={undoSave} onDismiss={clearSaved} />
+      {menuEntry && (
+        <ActionSheet
+          title={menuEntry.eventType?.name || menuEntry.eventType?.slug}
+          actions={[
+            { label: 'Edit', onSelect: () => editEntry(menuEntry) },
+            { label: 'Delete', danger: true, onSelect: () => deleteEntry(menuEntry) },
+          ]}
+          onClose={() => setMenuEntry(null)}
+        />
       )}
+
+      {notice ? (
+        <Toast message={notice.message} onUndo={undoDelete} onDismiss={() => setNotice(null)} />
+      ) : saved ? (
+        <Toast message={`${saved.verb || 'Logged'} ${saved.name}`} onUndo={saved.undoable === false ? undefined : undoSave} onDismiss={clearSaved} />
+      ) : null}
     </AppShell>
   )
 }
@@ -215,4 +251,24 @@ function HeroCard({ card, primary, onClick }) {
 
 function CardSkeleton() {
   return <div className="qcard animate-pulse bg-surface-2" />
+}
+
+function TodayRow({ entry, icon, onMenu }) {
+  const lp = useLongPress(onMenu)
+  const sub = summarizeOptions(entry.options) || entry.note
+  return (
+    <li
+      {...lp}
+      className="flex select-none items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2.5"
+    >
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent-2 text-accent-ink">
+        <DynamicIcon name={icon} size={18} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-body text-[13px] font-semibold text-ink">{entry.eventType?.name || entry.eventType?.slug}</p>
+        {sub && <p className="truncate font-body text-[11px] text-ink-3">{sub}</p>}
+      </div>
+      <span className="shrink-0 font-mono text-[10px] text-ink-3">{timeLabel(entry.occurredAt)}</span>
+    </li>
+  )
 }
