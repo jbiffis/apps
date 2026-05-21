@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -112,6 +113,37 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/logged-events/" + carleyId)
                         .header("Authorization", "Bearer " + token("carley")))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void update_own_replacesValues() throws Exception {
+        String carley = token("carley");
+        String id = logWater(carley, 3);
+        mockMvc.perform(put("/api/logged-events/" + id)
+                        .header("Authorization", "Bearer " + carley)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"eventTypeSlug":"water","note":"edited",
+                                 "options":[{"propertyName":"Glasses","value":8}]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.note").value("edited"))
+                .andExpect(jsonPath("$.options[0].value").value(8));
+        // persisted
+        mockMvc.perform(get("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
+                .andExpect(jsonPath("$.options[0].value").value(8));
+    }
+
+    @Test
+    void crossUser_cannotUpdateOthersEvent_404() throws Exception {
+        String carleyId = logWater(token("carley"), 2);
+        mockMvc.perform(put("/api/logged-events/" + carleyId)
+                        .header("Authorization", "Bearer " + token("jeremy"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"eventTypeSlug":"water","options":[{"propertyName":"Glasses","value":9}]}
+                                """))
+                .andExpect(status().isNotFound());
     }
 
     @Test

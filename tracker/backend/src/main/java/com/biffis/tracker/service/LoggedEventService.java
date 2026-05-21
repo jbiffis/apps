@@ -72,6 +72,37 @@ public class LoggedEventService {
         return hydrate(List.of(saved)).get(0);
     }
 
+    /**
+     * Replace an existing entry the caller owns. occurredAt/note are overwritten
+     * and the option set is fully replaced. Another user's id → not found.
+     */
+    @Transactional
+    public LoggedEventView update(UUID id, LogEventRequest req) {
+        UUID userId = CurrentUser.id();
+        LoggedEvent existing = events.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new NotFoundException("logged event not found"));
+        EventType type = eventTypes.findBySlug(req.eventTypeSlug())
+                .orElseThrow(() -> new NotFoundException("event type not found"));
+
+        existing.setEventTypeId(type.getId());
+        existing.setOccurredAt(req.occurredAt() != null ? req.occurredAt() : existing.getOccurredAt());
+        existing.setNote(req.note());
+        events.save(existing);
+
+        // Flush the deletes before re-inserting: Hibernate orders inserts ahead
+        // of deletes within a flush, which would otherwise trip the
+        // (logged_event_id, event_property_id) unique constraint.
+        options.deleteByLoggedEventId(existing.getId());
+        options.flush();
+        if (req.options() != null) {
+            for (LogOptionRequest opt : req.options()) {
+                EventProperty prop = resolveProperty(type.getId(), opt);
+                options.save(new LoggedEventOption(existing.getId(), prop.getId(), opt.value()));
+            }
+        }
+        return hydrate(List.of(existing)).get(0);
+    }
+
     // ---------- read ----------
 
     @Transactional(readOnly = true)
