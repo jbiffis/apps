@@ -163,7 +163,12 @@ export default function Home() {
 
       {/* Today */}
       <section className="mt-6 space-y-3">
-        <h2 className="font-display text-[15px] font-bold text-ink">Today</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-[15px] font-bold text-ink">Today</h2>
+          <button onClick={() => navigate('/history')} className="font-mono text-[11px] text-accent">
+            See all →
+          </button>
+        </div>
         {today.loading ? (
           <p className="font-body text-[13px] text-ink-3">Loading…</p>
         ) : today.data?.length ? (
