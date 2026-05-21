@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { DynamicIcon, Close, Back, Chevron } from '../icons/index.jsx'
 
-// Hierarchical bottom sheet for choosing what to log. Categories (e.g. Health →
-// Eyes) drill down a level; leaves call onPick. Mount it with a `key` so each
+// Hierarchical centered modal for choosing what to log. Categories (e.g. Health
+// → Eyes) drill down a level; leaves call onPick. Mount it with a `key` so each
 // open starts a fresh navigation stack (no effect-based resets).
 export default function TrackerPickerSheet({ rootTitle = 'Log something', rootNodes = [], onPick, onClose }) {
   const [stack, setStack] = useState([{ title: rootTitle, nodes: rootNodes }])
@@ -16,10 +16,9 @@ export default function TrackerPickerSheet({ rootTitle = 'Log something', rootNo
   const goBack = () => setStack((s) => s.slice(0, -1))
 
   return (
-    <div className="fixed inset-0 z-30 mx-auto max-w-[480px]" role="dialog" aria-modal="true" aria-label={level.title}>
+    <div className="fixed inset-0 z-30 flex items-center justify-center p-5" role="dialog" aria-modal="true" aria-label={level.title}>
       <button aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full bg-black/40" />
-      <div className="absolute inset-x-0 bottom-0 max-h-[72vh] overflow-y-auto rounded-t-3xl border-t border-line bg-surface p-4 pb-6">
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+      <div className="relative max-h-[76vh] w-full max-w-[360px] overflow-y-auto rounded-3xl border border-line bg-surface p-4 shadow-2xl">
         <div className="mb-3 flex items-center gap-2">
           {canGoBack && (
             <button onClick={goBack} aria-label="Back"
