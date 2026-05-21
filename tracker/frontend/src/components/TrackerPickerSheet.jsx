@@ -1,43 +1,54 @@
-import { DynamicIcon, Close } from '../icons/index.jsx'
+import { useState } from 'react'
+import { DynamicIcon, Close, Back, Chevron } from '../icons/index.jsx'
 
-// Bottom sheet listing trackers to log. Opened by the FAB (all leaves) or by
-// tapping a category tile (that category's leaves). Picking one calls onPick.
-export default function TrackerPickerSheet({ open, title = 'Log something', items = [], onPick, onClose }) {
-  if (!open) return null
+// Hierarchical bottom sheet for choosing what to log. Categories (e.g. Health →
+// Eyes) drill down a level; leaves call onPick. Mount it with a `key` so each
+// open starts a fresh navigation stack (no effect-based resets).
+export default function TrackerPickerSheet({ rootTitle = 'Log something', rootNodes = [], onPick, onClose }) {
+  const [stack, setStack] = useState([{ title: rootTitle, nodes: rootNodes }])
+  const level = stack[stack.length - 1]
+  const canGoBack = stack.length > 1
+
+  const choose = (node) =>
+    node.isCategory
+      ? setStack((s) => [...s, { title: node.name, nodes: node.children || [] }])
+      : onPick(node.slug)
+  const goBack = () => setStack((s) => s.slice(0, -1))
+
   return (
-    <div className="fixed inset-0 z-30 mx-auto max-w-[480px]" role="dialog" aria-modal="true" aria-label={title}>
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 h-full w-full bg-black/40"
-      />
+    <div className="fixed inset-0 z-30 mx-auto max-w-[480px]" role="dialog" aria-modal="true" aria-label={level.title}>
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0 h-full w-full bg-black/40" />
       <div className="absolute inset-x-0 bottom-0 max-h-[72vh] overflow-y-auto rounded-t-3xl border-t border-line bg-surface p-4 pb-6">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-[18px] font-extrabold text-ink">{title}</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="grid h-8 w-8 place-items-center rounded-full border border-line bg-bg text-ink-2"
-          >
+        <div className="mb-3 flex items-center gap-2">
+          {canGoBack && (
+            <button onClick={goBack} aria-label="Back"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-line bg-bg text-ink-2">
+              <Back size={16} />
+            </button>
+          )}
+          <h2 className="flex-1 font-display text-[18px] font-extrabold text-ink">{level.title}</h2>
+          <button onClick={onClose} aria-label="Close"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-line bg-bg text-ink-2">
             <Close size={16} />
           </button>
         </div>
 
-        {items.length === 0 ? (
+        {level.nodes.length === 0 ? (
           <p className="py-6 text-center font-body text-[13px] text-ink-3">Nothing to log here yet.</p>
         ) : (
           <div className="grid grid-cols-4 gap-3">
-            {items.map((t) => (
-              <button
-                key={t.slug}
-                onClick={() => onPick?.(t.slug)}
-                className="flex flex-col items-center gap-1.5"
-              >
-                <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-line bg-bg text-ink-2">
-                  <DynamicIcon name={t.icon} size={24} />
+            {level.nodes.map((node) => (
+              <button key={node.slug} onClick={() => choose(node)} className="relative flex flex-col items-center gap-1.5">
+                <span className="relative grid h-[54px] w-[54px] place-items-center rounded-2xl border border-line bg-bg text-ink-2">
+                  <DynamicIcon name={node.icon} size={24} />
+                  {node.isCategory && (
+                    <span className="absolute -bottom-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-accent text-white">
+                      <Chevron size={10} />
+                    </span>
+                  )}
                 </span>
-                <span className="w-full truncate text-center font-body text-[11px] text-ink-3">{t.name}</span>
+                <span className="w-full truncate text-center font-body text-[11px] text-ink-3">{node.name}</span>
               </button>
             ))}
           </div>

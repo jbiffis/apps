@@ -231,7 +231,7 @@ Reproduce: `cd tracker/frontend && npm install && npm run build && npm run previ
     - "All trackers" 4-col grid from `GET /api/event-types` (top-level nodes)
     - "Today" list from `GET /api/home/today`
     - FAB (gradient, bottom-right, centered-column aware)
-- [x] `components/TrackerPickerSheet.jsx` — bottom sheet from the FAB (all leaves) or a category tile (its leaves); picking → `/log/:slug`
+- [x] `components/TrackerPickerSheet.jsx` — **hierarchical** bottom sheet from the FAB (tree roots) or a category tile (its children); sub-categories (e.g. Health → Eyes) drill down, leaves → `/log/:slug`. (Refined 2026-05-21 from a flat list so nested categories like Eyes/ENT/Digestive stay grouped.)
 - [x] Dark mode toggle + logout in the app bar (persisted via `theme.js`)
 - [x] `hooks/useApi.js` (light GET hook), `lib/catalog.js` (flatten leaves), `pages/Entry.jsx` + `/log/:slug` route (stub — real form is Epic 8)
 

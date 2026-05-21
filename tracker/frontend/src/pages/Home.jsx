@@ -4,7 +4,7 @@ import { getThemePref, resolveTheme, setThemePref } from '../theme.js'
 import { clearSession, getUser } from '../auth.js'
 import { api } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
-import { flattenLeaves, leavesUnder } from '../lib/catalog.js'
+import { flattenLeaves } from '../lib/catalog.js'
 import { greeting, dateLabel, timeLabel, summarizeOptions } from '../lib/format.js'
 import AppShell from '../components/AppShell.jsx'
 import BottomNav from '../components/BottomNav.jsx'
@@ -19,7 +19,7 @@ export default function Home() {
   const location = useLocation()
   const user = getUser()
   const [pref, setPref] = useState(getThemePref())
-  const [sheet, setSheet] = useState({ open: false, title: '', items: [] })
+  const [sheet, setSheet] = useState(null)
 
   const hero = useApi('/home/hero')
   const today = useApi('/home/today')
@@ -64,15 +64,17 @@ export default function Home() {
     navigate('/login', { replace: true })
   }
   function logTracker(slug) {
-    setSheet({ open: false, title: '', items: [] })
+    setSheet(null)
     navigate(`/log/${slug}`)
   }
   function openTile(node) {
-    if (node.isCategory) setSheet({ open: true, title: node.name, items: leavesUnder(node) })
+    // Categories open the picker rooted at their children (sub-categories like
+    // Eyes drill down further); leaves go straight to logging.
+    if (node.isCategory) setSheet({ key: node.slug, title: node.name, nodes: node.children || [] })
     else logTracker(node.slug)
   }
   function openFab() {
-    setSheet({ open: true, title: 'Log something', items: flattenLeaves(tree) })
+    setSheet({ key: 'all', title: 'Log something', nodes: tree })
   }
 
   const bar = (
@@ -162,13 +164,15 @@ export default function Home() {
         <Plus size={26} />
       </button>
 
-      <TrackerPickerSheet
-        open={sheet.open}
-        title={sheet.title}
-        items={sheet.items}
-        onPick={logTracker}
-        onClose={() => setSheet({ open: false, title: '', items: [] })}
-      />
+      {sheet && (
+        <TrackerPickerSheet
+          key={sheet.key}
+          rootTitle={sheet.title}
+          rootNodes={sheet.nodes}
+          onPick={logTracker}
+          onClose={() => setSheet(null)}
+        />
+      )}
 
       {saved && (
         <Toast message={`Logged ${saved.name}`} onUndo={undoSave} onDismiss={clearSaved} />
