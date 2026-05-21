@@ -18,11 +18,11 @@ import java.util.UUID;
  */
 public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> {
 
-    /** Owner-scoped single fetch. Returns empty if the id belongs to another user. */
+    /** Owner-scoped fetch incl. soft-deleted (for delete/restore). Empty if not owner. */
     Optional<LoggedEvent> findByIdAndUserId(UUID id, UUID userId);
 
-    /** Owner-scoped delete; returns rows affected (0 if not owner / not found). */
-    long deleteByIdAndUserId(UUID id, UUID userId);
+    /** Owner-scoped fetch of a LIVE entry (reads/edits). Empty if missing or soft-deleted. */
+    Optional<LoggedEvent> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
 
     /**
      * Owner-scoped window query, newest first. {@code eventTypeId} optional
@@ -34,6 +34,7 @@ public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> 
     @Query("""
             select e from LoggedEvent e
             where e.userId = :userId
+              and e.deletedAt is null
               and e.occurredAt >= :from and e.occurredAt < :to
               and (:eventTypeId is null or e.eventTypeId = :eventTypeId)
               and (:noCursor = true
@@ -54,6 +55,7 @@ public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> 
     @Query("""
             select count(e) from LoggedEvent e
             where e.userId = :userId
+              and e.deletedAt is null
               and e.eventTypeId in :eventTypeIds
               and e.occurredAt >= :from and e.occurredAt < :to
             """)

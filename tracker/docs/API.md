@@ -153,7 +153,10 @@ One entry. 404 if the caller isn't the owner (we don't distinguish to avoid leak
 Replace an entry the caller owns (edit flow). Same body as `POST`; `occurredAt`/`note` are overwritten and the option set is fully replaced. Keeps the same id. 404 if the caller isn't the owner. Response 200: same shape as the `POST` 201.
 
 ### `DELETE /logged-events/{id}`
-Soft-delete in Phase 2; hard delete in Phase 1 (Undo flow keeps a 5s client-side window before firing this).
+**Soft-delete** (Phase 2): sets `deleted_at` so the entry drops out of every read but the row survives. 204. 404 if the caller isn't the owner. Idempotent.
+
+### `POST /logged-events/{id}/restore`
+Undo a soft-delete — clears `deleted_at`, keeping the same id/createdAt. Used by the Home long-press "undo" toast. Response 200: same shape as `POST`. 404 if the caller isn't the owner.
 
 ## Home aggregates
 
