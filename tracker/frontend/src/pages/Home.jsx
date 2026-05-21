@@ -176,7 +176,7 @@ export default function Home() {
   )
 
   return (
-    <AppShell bar={bar} nav={<BottomNav active="home" onSelect={(k) => { if (k === 'log') openFab(); else if (k === 'me') navigate('/me') }} />}>
+    <AppShell bar={bar} nav={<BottomNav active="home" onSelect={(k) => { if (k === 'log') openFab(); else if (k === 'me') navigate('/me'); else if (k === 'stats') navigate('/stats') }} />}>
       {/* Hero cards */}
       <section className="space-y-3">
         {hero.loading && <CardSkeleton />}

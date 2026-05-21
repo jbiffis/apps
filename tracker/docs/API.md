@@ -169,6 +169,20 @@ The caller's per-tracker preferences. Only trackers with a saved pref are return
 ### `PUT /me/tracker-prefs/{slug}`
 Upsert the caller's pref for one tracker. Partial — null fields are left unchanged. `{ "hidden": true }` hides it from the home grid + log picker; `{ "sortOrder": 3 }` sets its position (Phase 2d). 404 if the slug is unknown. Response 200: the updated `TrackerPrefView`.
 
+## Stats
+
+### `GET /stats?days=N`
+Activity aggregates for the caller over the trailing `N` days (default 84, max 366). UTC-day buckets.
+```json
+{
+  "from": "…", "to": "…",
+  "totalEntries": 1234,
+  "currentStreakDays": 4, "longestStreakDays": 19,
+  "perTracker": [ { "eventTypeSlug": "water", "name": "Water", "icon": "Water", "count": 410 }, … ],
+  "daily": [ { "date": "2026-05-21", "count": 17 }, … ]
+}
+```
+
 ## Home aggregates
 
 These are convenience endpoints to keep the Home screen fast (one round-trip).
