@@ -24,6 +24,7 @@ export default function Home() {
   const [sheet, setSheet] = useState(null)
   const [menuEntry, setMenuEntry] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [order, setOrder] = useState(null) // slug[] while reordering the grid
 
   const hero = useApi('/home/hero')
   const today = useApi('/home/today')
@@ -60,6 +61,22 @@ export default function Home() {
     () => tree.filter((n) => n.isCategory || !hidden.has(n.slug)),
     [tree, hidden],
   )
+  // Grid order: saved per-user sort_order first (ascending), then catalog order
+  // (Array.sort is stable, so unset entries keep their original position).
+  const orderedTree = useMemo(() => {
+    const so = new Map(
+      (prefs.data || EMPTY).filter((p) => p.sortOrder != null).map((p) => [p.eventTypeSlug, p.sortOrder]),
+    )
+    return [...visibleTree].sort(
+      (a, b) => (so.has(a.slug) ? so.get(a.slug) : Infinity) - (so.has(b.slug) ? so.get(b.slug) : Infinity),
+    )
+  }, [visibleTree, prefs.data])
+  const nodeBySlug = useMemo(() => {
+    const m = {}
+    for (const n of visibleTree) m[n.slug] = n
+    return m
+  }, [visibleTree])
+  const reordering = order != null
   // The today/logged-event payload's eventType carries only {slug, name};
   // resolve its icon from the catalog we already fetched.
   const iconBySlug = useMemo(() => {
@@ -89,6 +106,27 @@ export default function Home() {
   }
   function openFab() {
     setSheet({ key: 'all', title: 'Log something', nodes: visibleTree })
+  }
+
+  function enterReorder() {
+    setOrder(orderedTree.map((n) => n.slug))
+  }
+  function moveTile(i, dir) {
+    const j = i + dir
+    if (j < 0 || j >= order.length) return
+    setOrder((prev) => {
+      const next = [...prev]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+  async function saveOrder() {
+    const slugs = order
+    setOrder(null)
+    try {
+      await Promise.all(slugs.map((slug, i) => api.put(`/me/tracker-prefs/${slug}`, { sortOrder: i })))
+      prefs.reload()
+    } catch { /* leave as-is; reload reflects server */ }
   }
 
   function editEntry(e) {
@@ -149,18 +187,41 @@ export default function Home() {
 
       {/* All trackers */}
       <section className="mt-6 space-y-3">
-        <h2 className="font-display text-[15px] font-bold text-ink">All trackers</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-[15px] font-bold text-ink">All trackers</h2>
+          {reordering && (
+            <button onClick={saveOrder} className="font-mono text-[11px] text-accent">Done</button>
+          )}
+        </div>
         {catalog.loading ? (
           <p className="font-body text-[13px] text-ink-3">Loading…</p>
+        ) : reordering ? (
+          <>
+            <p className="font-body text-[11px] text-ink-3">Use ◀ ▶ to reorder, then tap Done.</p>
+            <div className="grid grid-cols-4 gap-3">
+              {order.map((slug, i) => {
+                const node = nodeBySlug[slug]
+                if (!node) return null
+                return (
+                  <div key={slug} className="flex flex-col items-center gap-1">
+                    <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border-2 border-accent bg-surface text-ink-2">
+                      <DynamicIcon name={node.icon} size={24} />
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => moveTile(i, -1)} disabled={i === 0} aria-label="Move left"
+                        className="font-mono text-[12px] text-accent disabled:opacity-30">◀</button>
+                      <button onClick={() => moveTile(i, 1)} disabled={i === order.length - 1} aria-label="Move right"
+                        className="font-mono text-[12px] text-accent disabled:opacity-30">▶</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
         ) : (
           <div className="grid grid-cols-4 gap-3">
-            {visibleTree.map((node) => (
-              <button key={node.slug} onClick={() => openTile(node)} className="flex flex-col items-center gap-1.5">
-                <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-line bg-surface text-ink-2">
-                  <DynamicIcon name={node.icon} size={24} />
-                </span>
-                <span className="w-full truncate text-center font-body text-[11px] text-ink-3">{node.name}</span>
-              </button>
+            {orderedTree.map((node) => (
+              <TrackerTile key={node.slug} node={node} onOpen={() => openTile(node)} onLongPress={enterReorder} />
             ))}
           </div>
         )}
@@ -262,6 +323,18 @@ function HeroCard({ card, primary, onClick }) {
 
 function CardSkeleton() {
   return <div className="qcard animate-pulse bg-surface-2" />
+}
+
+function TrackerTile({ node, onOpen, onLongPress }) {
+  const lp = useLongPress(onLongPress)
+  return (
+    <button {...lp} onClick={onOpen} className="flex select-none flex-col items-center gap-1.5">
+      <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-line bg-surface text-ink-2">
+        <DynamicIcon name={node.icon} size={24} />
+      </span>
+      <span className="w-full truncate text-center font-body text-[11px] text-ink-3">{node.name}</span>
+    </button>
+  )
 }
 
 function TodayRow({ entry, icon, onMenu }) {
