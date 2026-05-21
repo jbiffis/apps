@@ -4,10 +4,12 @@ import { DynamicIcon, Close, Back, Chevron } from '../icons/index.jsx'
 // Hierarchical centered modal for choosing what to log. Categories (e.g. Health
 // → Eyes) drill down a level; leaves call onPick. Mount it with a `key` so each
 // open starts a fresh navigation stack (no effect-based resets).
-export default function TrackerPickerSheet({ rootTitle = 'Log something', rootNodes = [], onPick, onClose }) {
+export default function TrackerPickerSheet({ rootTitle = 'Log something', rootNodes = [], hidden, onPick, onClose }) {
   const [stack, setStack] = useState([{ title: rootTitle, nodes: rootNodes }])
   const level = stack[stack.length - 1]
   const canGoBack = stack.length > 1
+  // Drop hidden leaves (Me-tab prefs); categories always stay so you can drill in.
+  const nodes = (level.nodes || []).filter((n) => n.isCategory || !(hidden && hidden.has(n.slug)))
 
   const choose = (node) =>
     node.isCategory
@@ -33,11 +35,11 @@ export default function TrackerPickerSheet({ rootTitle = 'Log something', rootNo
           </button>
         </div>
 
-        {level.nodes.length === 0 ? (
+        {nodes.length === 0 ? (
           <p className="py-6 text-center font-body text-[13px] text-ink-3">Nothing to log here yet.</p>
         ) : (
           <div className="grid grid-cols-4 gap-3">
-            {level.nodes.map((node) => (
+            {nodes.map((node) => (
               <button key={node.slug} onClick={() => choose(node)} className="relative flex flex-col items-center gap-1.5">
                 <span className="relative grid h-[54px] w-[54px] place-items-center rounded-2xl border border-line bg-bg text-ink-2">
                   <DynamicIcon name={node.icon} size={24} />

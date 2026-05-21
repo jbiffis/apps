@@ -158,6 +158,17 @@ Replace an entry the caller owns (edit flow). Same body as `POST`; `occurredAt`/
 ### `POST /logged-events/{id}/restore`
 Undo a soft-delete — clears `deleted_at`, keeping the same id/createdAt. Used by the Home long-press "undo" toast. Response 200: same shape as `POST`. 404 if the caller isn't the owner.
 
+## Me / preferences
+
+### `GET /me/tracker-prefs`
+The caller's per-tracker preferences. Only trackers with a saved pref are returned (absence = default: visible, default order).
+```json
+[ { "eventTypeSlug": "water", "hidden": true, "sortOrder": null } ]
+```
+
+### `PUT /me/tracker-prefs/{slug}`
+Upsert the caller's pref for one tracker. Partial — null fields are left unchanged. `{ "hidden": true }` hides it from the home grid + log picker; `{ "sortOrder": 3 }` sets its position (Phase 2d). 404 if the slug is unknown. Response 200: the updated `TrackerPrefView`.
+
 ## Home aggregates
 
 These are convenience endpoints to keep the Home screen fast (one round-trip).
