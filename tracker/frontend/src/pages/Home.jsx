@@ -178,7 +178,7 @@ export default function Home() {
   return (
     <AppShell bar={bar} nav={<BottomNav active="home" onSelect={(k) => { if (k === 'log') openFab(); else if (k === 'me') navigate('/me'); else if (k === 'stats') navigate('/stats') }} />}>
       {/* Hero cards */}
-      <section className="space-y-3">
+      <section className="grid grid-cols-3 gap-2">
         {hero.loading && <CardSkeleton />}
         {hero.data?.map((c, i) => (
           <HeroCard key={c.eventTypeSlug} card={c} primary={c.primary ?? i === 0} onClick={() => logTracker(c.eventTypeSlug)} />
