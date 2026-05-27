@@ -64,7 +64,7 @@ public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> 
                              @Param("from") OffsetDateTime from,
                              @Param("to") OffsetDateTime to);
 
-    // --- Stats aggregates (live rows only). UTC-day buckets. ---
+    // --- Stats aggregates (live rows only). Day buckets are caller-tz. ---
 
     /** [event_type_id text, count] for the user's live entries in [from, to). */
     @Query(value = """
@@ -78,9 +78,14 @@ public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> 
                                @Param("from") OffsetDateTime from,
                                @Param("to") OffsetDateTime to);
 
-    /** [day 'YYYY-MM-DD' (UTC), count] for the user's live entries in [from, to). */
+    /**
+     * [day 'YYYY-MM-DD' in {@code tz}, count] for the user's live entries in
+     * [from, to). {@code tz} is an IANA zone (e.g. "America/Toronto"); Postgres
+     * does the offset arithmetic via {@code at time zone}, so the bucket
+     * boundaries line up with the user's local midnight rather than UTC.
+     */
     @Query(value = """
-            select to_char(occurred_at at time zone 'UTC', 'YYYY-MM-DD'), count(*)
+            select to_char(occurred_at at time zone :tz, 'YYYY-MM-DD'), count(*)
             from logged_events
             where user_id = :userId and deleted_at is null
               and occurred_at >= :from and occurred_at < :to
@@ -88,5 +93,6 @@ public interface LoggedEventRepository extends JpaRepository<LoggedEvent, UUID> 
             """, nativeQuery = true)
     List<Object[]> countByDay(@Param("userId") UUID userId,
                               @Param("from") OffsetDateTime from,
-                              @Param("to") OffsetDateTime to);
+                              @Param("to") OffsetDateTime to,
+                              @Param("tz") String tz);
 }

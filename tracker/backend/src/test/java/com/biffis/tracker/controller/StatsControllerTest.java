@@ -68,4 +68,31 @@ class StatsControllerTest extends AbstractIntegrationTest {
         }
         assertThat(hasWater).isTrue();
     }
+
+    @Test
+    void stats_tzParam_validZoneAndInvalidFallbackBothReturn200() throws Exception {
+        String jeremy = token("jeremy");
+        logWater(jeremy, 4); // ensure the daily array isn't empty
+
+        // Valid IANA zone — daily date strings are still well-formed YYYY-MM-DD.
+        String body = mockMvc.perform(get("/api/stats?days=14&tz=America/Toronto")
+                        .header("Authorization", "Bearer " + jeremy))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode j = objectMapper.readTree(body);
+        assertThat(j.get("daily").isArray()).isTrue();
+        if (j.get("daily").size() > 0) {
+            assertThat(j.get("daily").get(0).get("date").asText()).matches("\\d{4}-\\d{2}-\\d{2}");
+        }
+
+        // Invalid zone → falls back to UTC, still 200 (tz is advisory).
+        mockMvc.perform(get("/api/stats?days=14&tz=Not/A_Real_Zone")
+                        .header("Authorization", "Bearer " + jeremy))
+                .andExpect(status().isOk());
+
+        // No tz at all → back-compat, defaults to UTC.
+        mockMvc.perform(get("/api/stats?days=14")
+                        .header("Authorization", "Bearer " + jeremy))
+                .andExpect(status().isOk());
+    }
 }

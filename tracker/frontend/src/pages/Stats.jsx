@@ -8,6 +8,10 @@ import { DynamicIcon } from '../icons/index.jsx'
 const WEEKS = 12
 const DAYS = WEEKS * 7
 
+// IANA zone (e.g. "America/Toronto") — passed to the backend so day buckets
+// align to the user's local midnight instead of UTC.
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+
 function level(count) {
   if (!count) return 0
   if (count < 3) return 1
@@ -16,11 +20,20 @@ function level(count) {
   return 4
 }
 
+// 'YYYY-MM-DD' for a Date in the user's local zone — must match the bucket
+// keys the backend emits for `tz=${TZ}`.
+function localIso(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export default function Stats() {
   const navigate = useNavigate()
-  const { data, loading } = useApi(`/stats?days=${DAYS}`)
+  const { data, loading } = useApi(`/stats?days=${DAYS}&tz=${encodeURIComponent(TZ)}`)
 
-  // date 'YYYY-MM-DD' (UTC) -> count, plus the trailing DAYS-day cell list.
+  // 'YYYY-MM-DD' (caller's tz) -> count, plus the trailing DAYS-day cell list.
   const byDay = useMemo(() => {
     const m = new Map()
     for (const d of data?.daily || []) m.set(d.date, d.count)
@@ -31,8 +44,8 @@ export default function Stats() {
     const out = []
     const today = new Date()
     for (let i = DAYS - 1; i >= 0; i--) {
-      const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - i))
-      const iso = d.toISOString().slice(0, 10)
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)
+      const iso = localIso(d)
       out.push({ iso, count: byDay.get(iso) || 0 })
     }
     return out
