@@ -1,5 +1,9 @@
-simgolf/
 .git/
-tracker/
 .env
 .env.local
+# Exclude tracker/simgolf source but keep frontend dists so the image is self-contained.
+# Bind-mounting from the Komodo repo clone was unreliable (empty dirs on reclone).
+tracker/
+!tracker/frontend/dist/
+simgolf/
+!simgolf/frontend/dist/

@@ -4,21 +4,18 @@ services:
     ports:
       - "8081:80"
     volumes:
-      - ./beer:/var/www/html/beer
+      # User data volumes — must remain bind mounts (runtime-written, not in git)
       - /var/lib/docker/volumes/apps/beer:/var/www/data/beer
-      - ./simgolf/frontend/dist:/var/www/html/simgolf
-      - ./book-log/dist:/var/www/html/bookstory
-      - ./dreamworld/dist:/var/www/html/dreamworld
-      - ./dreamworld/api:/var/www/html/dreamworld/api
       - /var/lib/docker/volumes/apps/dreamworld:/var/www/data/dreamworld
-      # Tracker SPA: static build mounted into the shared Apache (the tracker
-      # source itself is in .dockerignore so it isn't baked into the image).
-      # /tracker/api/* is reverse-proxied to the backend (see tracker-proxy.conf).
-      - ./tracker/frontend/dist:/var/www/html/tracker
+      # Apache proxy confs — bind-mounted so conf changes don't need an image rebuild.
+      # These are small text files that are reliably present in the Komodo repo clone.
       - ./webapp-proxy.conf:/etc/apache2/conf-enabled/webapp-proxy.conf:ro
       - ./bookstory-proxy.conf:/etc/apache2/conf-enabled/bookstory-proxy.conf:ro
       - ./dreamworld-proxy.conf:/etc/apache2/conf-enabled/dreamworld-proxy.conf:ro
       - ./tracker-proxy.conf:/etc/apache2/conf-enabled/tracker-proxy.conf:ro
+      # All app source and frontend dists are now baked into the image (see Dockerfile).
+      # Removed: ./beer, ./simgolf/frontend/dist, ./book-log/dist, ./dreamworld/dist,
+      #          ./dreamworld/api, ./tracker/frontend/dist
     environment:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
     depends_on:

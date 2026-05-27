@@ -21,4 +21,12 @@ RUN mkdir -p /var/www/data/beer /var/www/data/dreamworld \
 # Copy all webapp folders into the web root
 COPY . /var/www/html/
 
+# Map each frontend build to its production URL path.
+# COPY . above puts tracker/frontend/dist/ at /var/www/html/tracker/frontend/dist/
+# but Apache serves from /var/www/html/tracker/, so we copy the contents there directly.
+COPY simgolf/frontend/dist/ /var/www/html/simgolf/
+COPY tracker/frontend/dist/ /var/www/html/tracker/
+COPY book-log/dist/ /var/www/html/bookstory/
+COPY dreamworld/dist/ /var/www/html/dreamworld/
+
 EXPOSE 80
