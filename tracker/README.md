@@ -12,7 +12,7 @@ Personal event-tracking app. Log anything — headaches, medications, water, moo
 
 - **Backend:** Spring Boot 3.4.1 · Java 21 · Spring Data JPA · Spring Security + JWT · Flyway · PostgreSQL
 - **Frontend:** React 19 + Vite · Tailwind · `vite-plugin-pwa`
-- **DB:** PostgreSQL 16 in its own Docker container, no host port, volume on prod only
+- **DB:** PostgreSQL 16 in its own Docker container. Host port `15432` is bound on docker-host-4 (LAN-scoped — that host isn't publicly exposed) for ad-hoc GUI access from a laptop on the home network. Connect with `host=192.168.86.115 port=15432 db=tracker user=tracker password=$TRACKER_DB_PASSWORD`. Volume lives on prod only.
 - **Auth:** Per-user password → JWT (Bearer). Two seeded users: Carley, Jeremy.
 - **Deploy:** Komodo restart on push to `main`. Backend and frontend images need a manual `docker compose build` on the prod server when source changes (Komodo does restart-only).
 

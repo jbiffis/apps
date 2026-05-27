@@ -34,6 +34,14 @@ services:
     image: postgres:16-alpine
     networks:
       - tracker-net
+    # LAN-only host port for ad-hoc GUI access (DBeaver / TablePlus / pgAdmin).
+    # docker-host-4 isn't on the public internet (SWAG only forwards 443), so
+    # binding to 0.0.0.0 here is effectively LAN-scoped. Host port 5432 is
+    # already taken by another container on this host, hence 15432.
+    # Auth is still Postgres' own (TRACKER_DB_PASSWORD); rotate it if the
+    # value is ever exposed to anything on the LAN that shouldn't have it.
+    ports:
+      - "15432:5432"
     environment:
       - POSTGRES_DB=tracker
       - POSTGRES_USER=tracker
