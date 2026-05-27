@@ -18,7 +18,9 @@ public class StatsController {
     }
 
     @GetMapping
-    public StatsResponse summary(@RequestParam(required = false) Integer days) {
-        return stats.summary(days);
+    public StatsResponse summary(
+            @RequestParam(required = false) Integer days,
+            @RequestParam(required = false) String tz) {
+        return stats.summary(days, tz);
     }
 }

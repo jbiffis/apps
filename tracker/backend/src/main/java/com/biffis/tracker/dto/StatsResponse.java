@@ -4,7 +4,9 @@ import java.util.List;
 
 /**
  * Activity stats for the Stats tab, over a trailing window. Day buckets are
- * UTC dates (see LoggedEventRepository.countByDay).
+ * in the caller's {@code tz} (the {@code /api/stats?tz=…} query param,
+ * defaulting to UTC) so the boundaries line up with the user's local midnight.
+ * See LoggedEventRepository.countByDay.
  */
 public record StatsResponse(
         String from,

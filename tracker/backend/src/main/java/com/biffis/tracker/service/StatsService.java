@@ -8,8 +8,10 @@ import com.biffis.tracker.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 public class StatsService {
 
     private static final int MAX_DAYS = 366;
+    private static final ZoneId DEFAULT_ZONE = ZoneOffset.UTC;
 
     private final LoggedEventRepository events;
     private final EventTypeRepository eventTypes;
@@ -35,9 +38,10 @@ public class StatsService {
     }
 
     @Transactional(readOnly = true)
-    public StatsResponse summary(Integer days) {
+    public StatsResponse summary(Integer days, String tz) {
         UUID userId = CurrentUser.id();
         int window = days == null ? 84 : Math.max(1, Math.min(days, MAX_DAYS));
+        ZoneId zone = parseZone(tz);
         OffsetDateTime to = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime from = to.minusDays(window);
 
@@ -60,8 +64,9 @@ public class StatsService {
                 .sorted(Comparator.comparingLong(StatsResponse.TrackerCount::count).reversed())
                 .toList();
 
-        // Daily series for the heatmap.
-        List<Object[]> dayRows = events.countByDay(userId, from, to);
+        // Daily series for the heatmap — buckets in the caller's zone, so the
+        // boundaries line up with the user's local midnight rather than UTC.
+        List<Object[]> dayRows = events.countByDay(userId, from, to, zone.getId());
         List<StatsResponse.DayCount> daily = dayRows.stream()
                 .map(r -> new StatsResponse.DayCount((String) r[0], ((Number) r[1]).longValue()))
                 .toList();
@@ -71,13 +76,30 @@ public class StatsService {
 
         return new StatsResponse(
                 from.toString(), to.toString(), total,
-                currentStreak(activeDays), longestStreak(activeDays),
+                currentStreak(activeDays, zone), longestStreak(activeDays),
                 perTracker, daily);
     }
 
+    /**
+     * Resolve the caller's tz string to a {@link ZoneId}, falling back to UTC
+     * on null/blank/invalid input. The fallback is deliberate: the param is
+     * advisory (clients without a timezone — e.g. ancient curl scripts — still
+     * get a coherent response, just UTC-bucketed).
+     */
+    private static ZoneId parseZone(String tz) {
+        if (tz == null || tz.isBlank()) {
+            return DEFAULT_ZONE;
+        }
+        try {
+            return ZoneId.of(tz);
+        } catch (DateTimeException e) {
+            return DEFAULT_ZONE;
+        }
+    }
+
     /** Consecutive days with activity, ending today (or yesterday if nothing logged yet today). */
-    private int currentStreak(Set<LocalDate> active) {
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    private int currentStreak(Set<LocalDate> active, ZoneId zone) {
+        LocalDate today = LocalDate.now(zone);
         LocalDate cur = active.contains(today) ? today : today.minusDays(1);
         int streak = 0;
         while (active.contains(cur)) {
