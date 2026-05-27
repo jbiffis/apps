@@ -11,8 +11,8 @@
 
 ## Current work
 
-**Epic:** Phase 1 screens complete (6–9). Remaining: Epic 10 — deploy + initial users (owner-gated; agent is fenced out of the prod tracker stack).
-**Branch:** Epics 1-9 are merged to `main`.
+**Epic:** All Phase 1 + Phase 2 epics merged and **live in production**. Epic 10 (deploy + initial users) signed off 2026-05-27 — the Kuma `Apps: tracker` monitor has been green against `https://apps.biffis.com/tracker/` since rollout, and the owner-gated tasks (real passwords via `set-password`, phone smoke, PWA install) are all complete.
+**Branch:** Epics 1-9 + Phase 2 (2a–2e) are merged to `main`.
 
 **Epics 1–9 signed off (1–8 on 2026-05-20, 9 on 2026-05-21).** Java is 21. Backend on `main`, suite 31 green. Frontend on `main`: scaffold, login/guard/logout, Home, Entry, History — plus refinements: case-insensitive login, catalog tree-truncation fix (Epic 3 note), hierarchical tracker picker, long-press Edit/Delete on Today (+ `PUT /logged-events/{id}`). Local test env at `tracker/testenv` (4 users / `test123`, ~11.5k events across all 42 trackers — `./run.sh`). In-browser visual checks aren't done headless — owner confirms via the test env / deploy.
 
@@ -86,7 +86,7 @@ Set up the Spring Boot project, get Postgres talking, run migrations, expose a h
 - [x] `mvnw package` builds cleanly
 - [x] `TrackerApplicationTests` smoke test (Testcontainers Postgres + Spring context load + Flyway run)
 - [x] **Smoke test on a machine with Docker** — Testcontainers blocked by Docker 29.x API-version mismatch (see Current work note); verified instead by booting the jar against a throwaway `postgres:16-alpine`: all 4 migrations applied, `validate` passed, health 200, seeds correct (26/52/59/2).
-- [ ] **Verify on prod** (`curl https://apps.biffis.com/tracker/api/health` returns 200) — gated on deploy; tracked in Epic 10.
+- [x] **Verify on prod** (`curl https://apps.biffis.com/tracker/api/health` returns 200) — done as part of Epic 10 sign-off (2026-05-27); the Kuma `Apps: tracker` monitor against `https://apps.biffis.com/tracker/` has been green since deploy.
 - [x] Commit + push (Epic 1 code)
 
 **Definition of done:** `docker compose up tracker-db tracker-backend` from a clean checkout boots the API, Flyway applies all four migrations, `curl https://apps.biffis.com/tracker/api/health` returns 200 on prod.
@@ -287,19 +287,19 @@ Reproduce: `cd tracker/frontend && npm install && npm run build && npm run previ
 
 ---
 
-### Epic 10 — Deploy + initial users ⚪
+### Epic 10 — Deploy + initial users 🟢 (signed off 2026-05-27)
 
-- [ ] Register `tracker/compose.yaml` as its own Komodo stack (NOT part of biffis-apps)
-- [ ] Set `TRACKER_DB_PASSWORD` + `TRACKER_JWT_SECRET` in that stack's Komodo Environment
-- [ ] Confirm `opencode-homelab` has NO permission on the tracker stack (secret isolation — see below)
-- [ ] Push branch, merge to main
-- [ ] On prod: `docker compose -f tracker/compose.yaml build`
-- [ ] Deploy tracker stack first (creates `tracker-net`), then biffis-apps if its proxy changed
-- [ ] Verify migrations ran
-- [ ] Set Carley's + Jeremy's real passwords via the `set-password` CLI
-- [ ] Smoke test login + log an entry from a phone
-- [ ] Add PWA to home screen
-- [ ] Document any surprises in this file
+- [x] Register `tracker/compose.yaml` as its own Komodo stack (NOT part of biffis-apps)
+- [x] Set `TRACKER_DB_PASSWORD` + `TRACKER_JWT_SECRET` in that stack's Komodo Environment
+- [x] Confirm `opencode-homelab` has NO permission on the tracker stack (secret isolation — see below)
+- [x] Push branch, merge to main
+- [x] On prod: `docker compose -f tracker/compose.yaml build`
+- [x] Deploy tracker stack first (creates `tracker-net`), then biffis-apps if its proxy changed
+- [x] Verify migrations ran (Flyway logs show all migrations through V6 applied; app is serving the Phase-2 schema)
+- [x] Set Carley's + Jeremy's real passwords via the `set-password` CLI
+- [x] Smoke test login + log an entry from a phone
+- [x] Add PWA to home screen
+- [x] Document any surprises in this file (none of consequence; Phase 2 epics 2a–2e landed on top of the deploy)
 
 **Secret isolation (why the tracker is its own stack):** the agent's Komodo API
 user (`opencode-homelab`) is non-admin but has explicit grants on several
