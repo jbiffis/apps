@@ -62,7 +62,7 @@ Modeled on [`jbiffis/hockeypool`](https://github.com/jbiffis/hockeypool). Match 
 ## Auth model — quick reference
 
 - Every endpoint except `POST /api/auth/login` requires `Authorization: Bearer <jwt>`.
-- JWT payload: `{ sub: userId, username, exp }`. HS256 with secret from `JWT_SECRET`.
+- JWT payload: `{ sub: userId, email, exp }`. HS256 with secret from `JWT_SECRET`.
 - `JwtAuthFilter` populates `SecurityContext` so `@AuthenticationPrincipal` works in controllers.
 - **All queries that touch `logged_events` or `logged_event_options` MUST filter by `user_id` of the authenticated user.** This is enforced in the service layer — there is no `findAll()`. If you write one, you've made a privacy bug.
 

@@ -85,15 +85,24 @@ tracker/**/.env.local
 
 ## Initial user setup
 
-Users `carley` and `jeremy` are seeded by migration `V4__seed_users.sql`. The migration inserts placeholder bcrypt hashes derived from one-time passwords; **the real passwords are set out-of-band** by running:
+Users `carley401@gmail.com` and `jeremy@biffis.com` are seeded by migration
+`V4__seed_users.sql` (originally by username; `V7__email_login.sql` switched the
+login identity to email). Both rows carry a **temporary password** and
+`must_change_password = true`, so each user is forced to set their own password
+on first login via the in-app change-password flow (`POST /auth/change-password`).
+
+Two ways to (re)set a password:
 
 ```sh
-# On prod server, once after first deploy
-docker compose exec tracker-backend java -jar app.jar set-password carley
-docker compose exec tracker-backend java -jar app.jar set-password jeremy
+# In-app: log in with the temp password → forced change screen → done.
+
+# Out-of-band (operator reset), on the prod server:
+docker compose exec tracker-backend java -jar app.jar set-password jeremy@biffis.com
 ```
 
-(That CLI subcommand reads the new password from stdin, never echoes it, bcrypts it, updates the row.) The migration itself contains no real password, hashed or otherwise.
+(That CLI subcommand reads the new password from stdin, never echoes it, bcrypts
+it, updates the row, and clears the force-change flag.) No real password lives in
+the migration — only a throwaway temp hash the user replaces on first login.
 
 ## Threat model (Phase 1)
 

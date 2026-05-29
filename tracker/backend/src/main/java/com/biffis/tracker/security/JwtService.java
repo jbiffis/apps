@@ -16,7 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Issues and verifies HS256 JWTs. Payload: {@code { sub: userId, username, exp }}.
+ * Issues and verifies HS256 JWTs. Payload: {@code { sub: userId, email, exp }}.
  * Secret comes from {@code tracker.jwt.secret} (env {@code JWT_SECRET}) and must
  * be at least 32 bytes for HS256.
  */
@@ -38,12 +38,12 @@ public class JwtService {
         this.ttlDays = ttlDays;
     }
 
-    public String issue(UUID userId, String username) {
+    public String issue(UUID userId, String email) {
         Instant now = Instant.now();
         Instant exp = now.plus(ttlDays, ChronoUnit.DAYS);
         return Jwts.builder()
                 .subject(userId.toString())
-                .claim("username", username)
+                .claim("email", email)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(exp))
                 .signWith(key)
@@ -62,8 +62,8 @@ public class JwtService {
                     .parseSignedClaims(token)
                     .getPayload();
             UUID id = UUID.fromString(claims.getSubject());
-            String username = claims.get("username", String.class);
-            return Optional.of(new AuthUser(id, username));
+            String email = claims.get("email", String.class);
+            return Optional.of(new AuthUser(id, email));
         } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();
         }

@@ -46,8 +46,9 @@ export BASE=http://localhost:18080/api
 # docker rm -f tt-app tt-db && docker network rm tracker-test
 ```
 
-Seeded login for local tests: `carley` / `changeme-on-first-login` (placeholder
-from V4; same for `jeremy`).
+Seeded login for local tests: `carley401@gmail.com` / `password` (temp password
+reseeded by V7; same for `jeremy@biffis.com`). Both seeded rows have
+`must_change_password = true`, so a fresh login returns `mustChangePassword: true`.
 
 ---
 
@@ -77,22 +78,22 @@ from V4; same for `jeremy`).
 - **When:**
   ```bash
   curl -s -X POST $BASE/auth/login -H 'Content-Type: application/json' \
-    -d '{"username":"carley","password":"changeme-on-first-login"}'
+    -d '{"email":"carley401@gmail.com","password":"password"}'
   ```
-- **Then:** `200`. Body has a non-empty `token` and `user: {id, username:"carley", displayName:"Carley", gender:"female"}`. **No `passwordHash` field anywhere.**
+- **Then:** `200`. Body has a non-empty `token`, `user: {id, email:"carley401@gmail.com", displayName:"Carley", gender:"female"}`, and `mustChangePassword: true` for a freshly-seeded row. **No `passwordHash` field anywhere.**
 
 ### TC-2.2 Wrong password
 - **When:** same as TC-2.1 with `"password":"wrong"`.
 - **Then:** `401`, body `{"error":"invalid_credentials"}`. Response time should be similar to a correct login (no obvious user-enumeration timing tell — bcrypt runs either way... see TC-2.3 note).
 
 ### TC-2.3 Unknown user
-- **When:** `{"username":"nobody","password":"x"}`.
-- **Then:** `401`, `{"error":"invalid_credentials"}` — **identical** to TC-2.2. The error must not reveal whether the username exists.
+- **When:** `{"email":"nobody@biffis.com","password":"x"}`.
+- **Then:** `401`, `{"error":"invalid_credentials"}` — **identical** to TC-2.2. The error must not reveal whether the email exists.
 - *Note:* current impl returns early when the user is absent (skips bcrypt), a minor timing oracle. Acceptable for Phase 1 (LAN-only, low threat). Flag for Phase 2 hardening if exposed publicly.
 
 ### TC-2.4 Malformed login body
 - **When:** `POST /auth/login` with `{}` or missing fields.
-- **Then:** `400` (bean validation on `@NotBlank` username/password). No stack trace in the body (`server.error.include-stacktrace=never`).
+- **Then:** `400` (bean validation on `@NotBlank @Email email` / `@NotBlank password`). No stack trace in the body (`server.error.include-stacktrace=never`).
 
 ### TC-2.5 Protected endpoint without token
 - **When:** `curl -s -o /dev/null -w '%{http_code}' $BASE/auth/me`
@@ -100,7 +101,7 @@ from V4; same for `jeremy`).
 
 ### TC-2.6 Protected endpoint with valid token
 - **When:** login, capture `token`, then `curl $BASE/auth/me -H "Authorization: Bearer $TOKEN"`.
-- **Then:** `200`, body identifies the logged-in user (`username`).
+- **Then:** `200`, body identifies the logged-in user (`email`).
 
 ### TC-2.7 Protected endpoint with garbage / tampered token
 - **When:** `…/auth/me -H "Authorization: Bearer not.a.jwt"` and a token with a flipped character.

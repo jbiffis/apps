@@ -7,9 +7,9 @@ import java.util.UUID;
 /**
  * Public projection of a {@link User} — never includes the password hash.
  */
-public record UserView(UUID id, String username, String displayName, String gender) {
+public record UserView(UUID id, String email, String displayName, String gender) {
 
     public static UserView of(User user) {
-        return new UserView(user.getId(), user.getUsername(), user.getDisplayName(), user.getGender());
+        return new UserView(user.getId(), user.getEmail(), user.getDisplayName(), user.getGender());
     }
 }

@@ -28,16 +28,17 @@ users ──┐
 | col | type | notes |
 |---|---|---|
 | `id` | uuid | PK, default `gen_random_uuid()` |
-| `username` | text | unique, lowercase, immutable |
+| `email` | text | login identity; unique, case-insensitive (replaced `username` in V7) |
 | `display_name` | text | shown in greeting / "Good morning, Alex." |
 | `password_hash` | text | bcrypt; never returned via API |
+| `must_change_password` | boolean | NOT NULL default `true`; forces a password change on first login |
 | `gender` | text | `male` / `female` / `other` / null. Drives default visibility of audience-gated trackers. |
 | `created_at` | timestamptz | default `now()` |
 
 Seeded users (see [PRIVACY.md](PRIVACY.md) for password handling):
 
-- `carley` — display "Carley", gender `female`
-- `jeremy` — display "Jeremy", gender `male`
+- `carley401@gmail.com` — display "Carley", gender `female`
+- `jeremy@biffis.com` — display "Jeremy", gender `male`
 
 ### `event_types`
 

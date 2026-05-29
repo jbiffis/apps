@@ -73,11 +73,11 @@ export default function Me() {
       <section className="rounded-qcard border border-line bg-surface p-4">
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 place-items-center rounded-2xl bg-accent text-white font-display text-[20px] font-extrabold">
-            {(user?.displayName || user?.username || '?').slice(0, 1).toUpperCase()}
+            {(user?.displayName || user?.email || '?').slice(0, 1).toUpperCase()}
           </span>
           <div>
-            <p className="font-display text-[18px] font-extrabold text-ink">{user?.displayName || user?.username}</p>
-            <p className="font-mono text-[11px] text-ink-3">@{user?.username}{user?.gender ? ` · ${user.gender}` : ''}</p>
+            <p className="font-display text-[18px] font-extrabold text-ink">{user?.displayName || user?.email}</p>
+            <p className="font-mono text-[11px] text-ink-3">{user?.email}{user?.gender ? ` · ${user.gender}` : ''}</p>
           </div>
         </div>
       </section>

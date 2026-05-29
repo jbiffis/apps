@@ -1,4 +1,4 @@
 package com.biffis.tracker.dto;
 
-public record LoginResponse(String token, UserView user) {
+public record LoginResponse(String token, UserView user, boolean mustChangePassword) {
 }

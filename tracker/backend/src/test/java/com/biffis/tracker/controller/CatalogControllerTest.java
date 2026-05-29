@@ -18,7 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class CatalogControllerTest extends AbstractIntegrationTest {
 
-    private static final String SEED_PASSWORD = "changeme-on-first-login";
+    private static final String SEED_PASSWORD = "password";
 
     @Autowired
     MockMvc mockMvc;
@@ -26,10 +26,10 @@ class CatalogControllerTest extends AbstractIntegrationTest {
     @Autowired
     ObjectMapper objectMapper;
 
-    private String token(String username) throws Exception {
+    private String token(String email) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"" + username + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).get("token").asText();
@@ -65,7 +65,7 @@ class CatalogControllerTest extends AbstractIntegrationTest {
 
     @Test
     void tree_hasTopLevelCategoriesWithChildren() throws Exception {
-        JsonNode root = tree(token("carley"), null);
+        JsonNode root = tree(token("carley401@gmail.com"), null);
         assertThat(root.isArray()).isTrue();
         assertThat(root.size()).isGreaterThan(0);
         // 'health' is a seeded top-level category with children
@@ -83,7 +83,7 @@ class CatalogControllerTest extends AbstractIntegrationTest {
         // Regression: tree() used to convert a root to an immutable view before
         // all its descendants were linked, silently dropping most of the tree.
         // Assert the full multi-level structure survives.
-        JsonNode root = tree(token("carley"), "all");
+        JsonNode root = tree(token("carley401@gmail.com"), "all");
 
         // health's direct leaves AND sub-categories are all present
         assertThat(containsSlug(root, "mood")).as("health direct leaf 'mood'").isTrue();
@@ -110,19 +110,19 @@ class CatalogControllerTest extends AbstractIntegrationTest {
     @Test
     void audienceFilter_femaleCategoryHiddenForMaleByDefault() throws Exception {
         // Carley (female) sees lady-stuff; Jeremy (male) does not.
-        assertThat(containsSlug(tree(token("carley"), null), "lady-stuff")).isTrue();
-        assertThat(containsSlug(tree(token("jeremy"), null), "lady-stuff")).isFalse();
+        assertThat(containsSlug(tree(token("carley401@gmail.com"), null), "lady-stuff")).isTrue();
+        assertThat(containsSlug(tree(token("jeremy@biffis.com"), null), "lady-stuff")).isFalse();
     }
 
     @Test
     void audienceFilter_includeAllBypassesForMale() throws Exception {
-        assertThat(containsSlug(tree(token("jeremy"), "all"), "lady-stuff")).isTrue();
+        assertThat(containsSlug(tree(token("jeremy@biffis.com"), "all"), "lady-stuff")).isTrue();
     }
 
     @Test
     void presets_returnsSeededSet() throws Exception {
         String body = mockMvc.perform(get("/api/property-presets")
-                        .header("Authorization", "Bearer " + token("carley")))
+                        .header("Authorization", "Bearer " + token("carley401@gmail.com")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode presets = objectMapper.readTree(body);
@@ -137,7 +137,7 @@ class CatalogControllerTest extends AbstractIntegrationTest {
     void leaf_hasHydratedProperties() throws Exception {
         // Find any leaf with at least one property in the full tree and check
         // its preset is hydrated.
-        JsonNode root = tree(token("carley"), "all");
+        JsonNode root = tree(token("carley401@gmail.com"), "all");
         JsonNode leafWithProps = findLeafWithProperties(root);
         assertThat(leafWithProps).as("expected at least one leaf with properties").isNotNull();
         JsonNode prop = leafWithProps.get("properties").get(0);
@@ -161,7 +161,7 @@ class CatalogControllerTest extends AbstractIntegrationTest {
 
     @Test
     void create_thenDelete_byCreator() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         String created = mockMvc.perform(post("/api/event-types")
                         .header("Authorization", "Bearer " + carley)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -186,7 +186,7 @@ class CatalogControllerTest extends AbstractIntegrationTest {
 
     @Test
     void delete_seedType_forbidden() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         // resolve a seed type's id
         String health = mockMvc.perform(get("/api/event-types/health")
                         .header("Authorization", "Bearer " + carley))
@@ -202,7 +202,7 @@ class CatalogControllerTest extends AbstractIntegrationTest {
     @Test
     void delete_unknownId_notFound() throws Exception {
         mockMvc.perform(delete("/api/event-types/00000000-0000-0000-0000-000000000000")
-                        .header("Authorization", "Bearer " + token("carley")))
+                        .header("Authorization", "Bearer " + token("carley401@gmail.com")))
                 .andExpect(status().isNotFound());
     }
 }

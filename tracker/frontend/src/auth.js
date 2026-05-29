@@ -5,6 +5,7 @@
 
 const TOKEN_KEY = 'tracker.token'
 const USER_KEY = 'tracker.user'
+const MUST_CHANGE_KEY = 'tracker.mustChangePassword'
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -15,14 +16,21 @@ export function getUser() {
   return raw ? JSON.parse(raw) : null
 }
 
-export function setSession(token, user) {
+export function setSession(token, user, mustChangePassword = false) {
   localStorage.setItem(TOKEN_KEY, token)
   if (user) localStorage.setItem(USER_KEY, JSON.stringify(user))
+  if (mustChangePassword) localStorage.setItem(MUST_CHANGE_KEY, '1')
+  else localStorage.removeItem(MUST_CHANGE_KEY)
+}
+
+export function mustChangePassword() {
+  return localStorage.getItem(MUST_CHANGE_KEY) === '1'
 }
 
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+  localStorage.removeItem(MUST_CHANGE_KEY)
 }
 
 // Decode the JWT payload without verifying the signature — UI only.

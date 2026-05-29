@@ -8,24 +8,41 @@ All responses are JSON. Times are ISO 8601 UTC. IDs are UUID v4.
 ## Auth
 
 ### `POST /auth/login`
-Exchange username + password for a JWT.
+Exchange email + password for a JWT.
 
 Request:
 ```json
-{ "username": "carley", "password": "…" }
+{ "email": "carley401@gmail.com", "password": "…" }
 ```
 
 Response 200:
 ```json
 {
   "token": "eyJhbGciOi…",
-  "user": { "id": "…", "username": "carley", "displayName": "Carley", "gender": "female" }
+  "user": { "id": "…", "email": "carley401@gmail.com", "displayName": "Carley", "gender": "female" },
+  "mustChangePassword": false
 }
 ```
 
+`mustChangePassword: true` means the account still has its temp password — the
+client must route the user to the change-password flow before anything else.
+
 Response 401: `{ "error": "invalid_credentials" }`
 
-Token: HS256 JWT, claims `{ sub: <userId>, username, exp }`. TTL 30 days. Sent on every subsequent request as `Authorization: Bearer <token>`.
+Token: HS256 JWT, claims `{ sub: <userId>, email, exp }`. TTL 30 days. Sent on every subsequent request as `Authorization: Bearer <token>`.
+
+### `POST /auth/change-password`
+Set a new password for the authenticated user (forced first-login change or a
+voluntary change). Verifies the current password, clears the force-change flag,
+and returns a fresh token so the client drops the stale one.
+
+Request:
+```json
+{ "currentPassword": "…", "newPassword": "… (min 8 chars)" }
+```
+
+Response 200: same shape as login (`mustChangePassword` is now `false`).
+Response 401: `{ "error": "invalid_credentials" }` (wrong current password).
 
 ### `POST /auth/logout`
 Optional. Client-side simply deletes the token. Server may keep a denylist in a later phase.

@@ -108,7 +108,8 @@ Apache `web` in biffis-apps only reverse-proxies `/tracker/api/*` to
 3. Deploy the **tracker** stack first (it creates `tracker-net`), then redeploy
    **biffis-apps** if its `web`/proxy changed (it joins `tracker-net` as external).
 4. Flyway runs pending migrations on backend startup.
-5. First deploy only: set real passwords with the `set-password` CLI (see
-   PRIVACY.md) before exposing the public URL.
+5. Users log in by email and are forced to replace the seeded temp password on
+   first login (or reset it out-of-band with the `set-password` CLI — see
+   PRIVACY.md).
 
 See [docs/API.md](docs/API.md), [docs/DATA_MODEL.md](docs/DATA_MODEL.md), [docs/DESIGN.md](docs/DESIGN.md), [docs/PRIVACY.md](docs/PRIVACY.md), [docs/SEED_CATALOG.md](docs/SEED_CATALOG.md) for detail.

@@ -26,13 +26,16 @@ public class User {
     private UUID id;
 
     @Column(nullable = false, unique = true)
-    private String username;
+    private String email;
 
     @Column(name = "display_name", nullable = false)
     private String displayName;
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
 
     @Column
     private String gender;
@@ -48,8 +51,8 @@ public class User {
         return id;
     }
 
-    public String getUsername() {
-        return username;
+    public String getEmail() {
+        return email;
     }
 
     public String getDisplayName() {
@@ -62,6 +65,14 @@ public class User {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public boolean isMustChangePassword() {
+        return mustChangePassword;
+    }
+
+    public void setMustChangePassword(boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
     }
 
     public String getGender() {

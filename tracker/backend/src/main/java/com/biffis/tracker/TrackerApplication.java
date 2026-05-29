@@ -8,7 +8,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 public class TrackerApplication {
 
     public static void main(String[] args) {
-        // `set-password <username>` runs as a web-less one-shot so it doesn't
+        // `set-password <email>` runs as a web-less one-shot so it doesn't
         // try to bind port 8080 (e.g. when docker-exec'd into the running
         // container). See cli/SetPasswordRunner.
         WebApplicationType type = (args.length > 0 && "set-password".equals(args[0]))

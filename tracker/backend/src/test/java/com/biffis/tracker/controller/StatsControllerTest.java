@@ -18,17 +18,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class StatsControllerTest extends AbstractIntegrationTest {
 
-    private static final String SEED_PASSWORD = "changeme-on-first-login";
+    private static final String SEED_PASSWORD = "password";
 
     @Autowired
     MockMvc mockMvc;
     @Autowired
     ObjectMapper objectMapper;
 
-    private String token(String username) throws Exception {
+    private String token(String email) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"" + username + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).get("token").asText();
@@ -49,7 +49,7 @@ class StatsControllerTest extends AbstractIntegrationTest {
 
     @Test
     void stats_reflectLoggedEntries() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         logWater(carley, 3);
         logWater(carley, 5);
 
@@ -71,7 +71,7 @@ class StatsControllerTest extends AbstractIntegrationTest {
 
     @Test
     void stats_tzParam_validZoneAndInvalidFallbackBothReturn200() throws Exception {
-        String jeremy = token("jeremy");
+        String jeremy = token("jeremy@biffis.com");
         logWater(jeremy, 4); // ensure the daily array isn't empty
 
         // Valid IANA zone — daily date strings are still well-formed YYYY-MM-DD.

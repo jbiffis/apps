@@ -24,17 +24,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class LoggedEventControllerTest extends AbstractIntegrationTest {
 
-    private static final String SEED_PASSWORD = "changeme-on-first-login";
+    private static final String SEED_PASSWORD = "password";
 
     @Autowired
     MockMvc mockMvc;
     @Autowired
     ObjectMapper objectMapper;
 
-    private String token(String username) throws Exception {
+    private String token(String email) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"" + username + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).get("token").asText();
@@ -60,7 +60,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void create_andReadBack() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         String id = logWater(carley, 5);
 
         mockMvc.perform(get("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
@@ -74,7 +74,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
     @Test
     void create_unknownEventType_404() throws Exception {
         mockMvc.perform(post("/api/logged-events")
-                        .header("Authorization", "Bearer " + token("carley"))
+                        .header("Authorization", "Bearer " + token("carley401@gmail.com"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"eventTypeSlug\":\"does-not-exist\"}"))
                 .andExpect(status().isNotFound());
@@ -82,19 +82,19 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void crossUser_cannotReadOthersEventById_404() throws Exception {
-        String carleyId = logWater(token("carley"), 3);
+        String carleyId = logWater(token("carley401@gmail.com"), 3);
         // Jeremy must not be able to read Carley's event — 404 (not 403).
         mockMvc.perform(get("/api/logged-events/" + carleyId)
-                        .header("Authorization", "Bearer " + token("jeremy")))
+                        .header("Authorization", "Bearer " + token("jeremy@biffis.com")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void crossUser_listExcludesOthersEvents() throws Exception {
-        String carleyId = logWater(token("carley"), 2);
+        String carleyId = logWater(token("carley401@gmail.com"), 2);
 
         String jeremyList = mockMvc.perform(get("/api/logged-events?limit=200")
-                        .header("Authorization", "Bearer " + token("jeremy")))
+                        .header("Authorization", "Bearer " + token("jeremy@biffis.com")))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode events = objectMapper.readTree(jeremyList).get("events");
@@ -105,19 +105,19 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void crossUser_cannotDeleteOthersEvent_404() throws Exception {
-        String carleyId = logWater(token("carley"), 1);
+        String carleyId = logWater(token("carley401@gmail.com"), 1);
         mockMvc.perform(delete("/api/logged-events/" + carleyId)
-                        .header("Authorization", "Bearer " + token("jeremy")))
+                        .header("Authorization", "Bearer " + token("jeremy@biffis.com")))
                 .andExpect(status().isNotFound());
         // still readable by the owner afterwards
         mockMvc.perform(get("/api/logged-events/" + carleyId)
-                        .header("Authorization", "Bearer " + token("carley")))
+                        .header("Authorization", "Bearer " + token("carley401@gmail.com")))
                 .andExpect(status().isOk());
     }
 
     @Test
     void update_own_replacesValues() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         String id = logWater(carley, 3);
         mockMvc.perform(put("/api/logged-events/" + id)
                         .header("Authorization", "Bearer " + carley)
@@ -136,9 +136,9 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void crossUser_cannotUpdateOthersEvent_404() throws Exception {
-        String carleyId = logWater(token("carley"), 2);
+        String carleyId = logWater(token("carley401@gmail.com"), 2);
         mockMvc.perform(put("/api/logged-events/" + carleyId)
-                        .header("Authorization", "Bearer " + token("jeremy"))
+                        .header("Authorization", "Bearer " + token("jeremy@biffis.com"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"eventTypeSlug":"water","options":[{"propertyName":"Glasses","value":9}]}
@@ -148,7 +148,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void delete_own_thenGone() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         String id = logWater(carley, 4);
         mockMvc.perform(delete("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
                 .andExpect(status().isNoContent());
@@ -158,7 +158,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void delete_thenRestore_bringsItBack() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         String id = logWater(carley, 4);
         mockMvc.perform(delete("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
                 .andExpect(status().isNoContent());
@@ -176,18 +176,18 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void crossUser_cannotRestoreOthersEvent_404() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         String id = logWater(carley, 2);
         mockMvc.perform(delete("/api/logged-events/" + id).header("Authorization", "Bearer " + carley))
                 .andExpect(status().isNoContent());
         mockMvc.perform(post("/api/logged-events/" + id + "/restore")
-                        .header("Authorization", "Bearer " + token("jeremy")))
+                        .header("Authorization", "Bearer " + token("jeremy@biffis.com")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void list_filterByEventType() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         logWater(carley, 6);
         String body = mockMvc.perform(get("/api/logged-events?eventTypeSlug=water&limit=200")
                         .header("Authorization", "Bearer " + carley))
@@ -202,7 +202,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void list_cursorPagination_noOverlap() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         for (int i = 1; i <= 5; i++) {
             logWater(carley, i);
         }
@@ -230,7 +230,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void list_dateWindowExcludesOld() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         // an event 10 days ago
         mockMvc.perform(post("/api/logged-events")
                         .header("Authorization", "Bearer " + carley)
@@ -253,7 +253,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void home_today_shape() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         logWater(carley, 7);
         mockMvc.perform(get("/api/home/today").header("Authorization", "Bearer " + carley))
                 .andExpect(status().isOk())
@@ -262,7 +262,7 @@ class LoggedEventControllerTest extends AbstractIntegrationTest {
 
     @Test
     void home_hero_shape() throws Exception {
-        mockMvc.perform(get("/api/home/hero").header("Authorization", "Bearer " + token("carley")))
+        mockMvc.perform(get("/api/home/hero").header("Authorization", "Bearer " + token("carley401@gmail.com")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[0].eventTypeSlug").exists())

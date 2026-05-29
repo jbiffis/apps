@@ -9,12 +9,12 @@
 // Usage: node seed.mjs   (run.sh sets sensible defaults / waits for health)
 //   TRACKER_TEST_API   default http://localhost:18080/tracker/api
 //   TRACKER_TEST_DAYS  default 90
-//   TRACKER_TEST_USERS default carley,jeremy,morgan,dave
+//   TRACKER_TEST_USERS default carley401@gmail.com,jeremy@biffis.com,morgan@biffis.com,dave@biffis.com
 //   TRACKER_TEST_PW     default test123
 
 const BASE = process.env.TRACKER_TEST_API || 'http://localhost:18080/tracker/api'
 const DAYS = parseInt(process.env.TRACKER_TEST_DAYS || '90', 10)
-const USERS = (process.env.TRACKER_TEST_USERS || 'carley,jeremy,morgan,dave').split(',')
+const USERS = (process.env.TRACKER_TEST_USERS || 'carley401@gmail.com,jeremy@biffis.com,morgan@biffis.com,dave@biffis.com').split(',')
 const PASSWORD = process.env.TRACKER_TEST_PW || 'test123'
 const CONCURRENCY = 16
 
@@ -63,13 +63,13 @@ function weighted(vals, low) {
   return vals[clamp(Math.floor(r * vals.length), 0, vals.length - 1)]
 }
 
-async function login(username) {
+async function login(email) {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password: PASSWORD }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   })
-  if (!res.ok) throw new Error(`login ${username} → ${res.status}`)
+  if (!res.ok) throw new Error(`login ${email} → ${res.status}`)
   return res.json()
 }
 
@@ -181,8 +181,8 @@ async function main() {
   const tasks = []
   const perUser = {}
 
-  for (const username of USERS) {
-    const { token, user } = await login(username)
+  for (const email of USERS) {
+    const { token, user } = await login(email)
     const ls = leaves(await catalog(token))
     let count = 0
     for (let daysAgo = DAYS - 1; daysAgo >= 0; daysAgo--) {
@@ -197,7 +197,7 @@ async function main() {
         }
       }
     }
-    perUser[user.username] = count
+    perUser[user.email] = count
   }
 
   console.log('Planned entries:', perUser, '→ total', tasks.length)

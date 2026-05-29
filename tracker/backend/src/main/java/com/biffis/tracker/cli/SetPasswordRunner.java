@@ -15,9 +15,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * One-shot admin tool: {@code java -jar app.jar set-password <username>}.
+ * One-shot admin tool: {@code java -jar app.jar set-password <email>}.
  * Reads the new password from stdin (no echo when a console is attached),
- * bcrypts it, updates the row, exits. Never logs or echoes the password.
+ * bcrypts it, updates the row, clears the force-change flag, exits. Never
+ * logs or echoes the password.
  *
  * Only acts when the first program argument is {@code set-password}; on a
  * normal boot it's a no-op. The CLI run uses {@code WebApplicationType.NONE}
@@ -41,17 +42,17 @@ public class SetPasswordRunner implements ApplicationRunner {
             return; // normal boot
         }
         if (nonOption.size() < 2) {
-            System.err.println("usage: set-password <username>");
+            System.err.println("usage: set-password <email>");
             exit(2);
             return;
         }
-        String username = nonOption.get(1);
+        String email = nonOption.get(1);
 
-        User user = users.findByUsernameIgnoreCase(username).orElse(null);
+        User user = users.findByEmailIgnoreCase(email).orElse(null);
         if (user == null) {
-            // No PII: username is an account handle, not health data, and the
+            // No PII: email is an account handle, not health data, and the
             // operator typed it. Safe to name it back so they know it missed.
-            System.err.println("No such user: " + username);
+            System.err.println("No such user: " + email);
             exit(1);
             return;
         }
@@ -64,8 +65,9 @@ public class SetPasswordRunner implements ApplicationRunner {
                 return;
             }
             user.setPasswordHash(passwordEncoder.encode(new String(pw)));
+            user.setMustChangePassword(false);
             users.save(user);
-            System.out.println("Password updated for " + username + ".");
+            System.out.println("Password updated for " + email + ".");
             exit(0);
         } finally {
             if (pw != null) {

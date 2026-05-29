@@ -7,7 +7,7 @@ import { Pin } from '../icons/index.jsx'
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -24,13 +24,17 @@ export default function Login() {
     setError('')
     setBusy(true)
     try {
-      const { token, user } = await authApi.login(username.trim(), password)
-      setSession(token, user)
+      const { token, user, mustChangePassword } = await authApi.login(email.trim(), password)
+      setSession(token, user, mustChangePassword)
+      if (mustChangePassword) {
+        navigate('/set-password', { replace: true })
+        return
+      }
       const dest = location.state?.from?.pathname || '/'
       navigate(dest, { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError('Incorrect username or password.')
+        setError('Incorrect email or password.')
       } else {
         setError('Something went wrong. Please try again.')
       }
@@ -50,11 +54,12 @@ export default function Login() {
 
       <form onSubmit={onSubmit} className="space-y-3">
         <Field
-          id="username"
-          label="Username"
-          value={username}
-          onChange={setUsername}
-          autoComplete="username"
+          id="email"
+          label="Email"
+          type="email"
+          value={email}
+          onChange={setEmail}
+          autoComplete="email"
           autoFocus
         />
         <Field
@@ -74,7 +79,7 @@ export default function Login() {
 
         <button
           type="submit"
-          disabled={busy || !username || !password}
+          disabled={busy || !email || !password}
           className="w-full rounded-[14px] px-4 py-3.5 font-display text-[15px] font-bold text-white shadow-md transition disabled:opacity-50"
           style={{ background: 'linear-gradient(160deg, var(--accent), var(--accent-deep))' }}
         >

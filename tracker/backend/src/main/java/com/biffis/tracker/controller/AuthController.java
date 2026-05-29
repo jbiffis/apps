@@ -1,5 +1,6 @@
 package com.biffis.tracker.controller;
 
+import com.biffis.tracker.dto.ChangePasswordRequest;
 import com.biffis.tracker.dto.LoginRequest;
 import com.biffis.tracker.dto.LoginResponse;
 import com.biffis.tracker.dto.UserView;
@@ -29,7 +30,18 @@ public class AuthController {
 
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request.username(), request.password());
+        return authService.login(request.email(), request.password());
+    }
+
+    /**
+     * Set a new password for the authenticated user. Used by the forced
+     * first-login change flow and by voluntary password changes. Returns a
+     * fresh token + cleared must-change flag.
+     */
+    @PostMapping("/change-password")
+    public LoginResponse changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        var current = CurrentUser.get();
+        return authService.changePassword(current.id(), request.currentPassword(), request.newPassword());
     }
 
     /**
@@ -40,7 +52,7 @@ public class AuthController {
     @GetMapping("/me")
     public UserView me() {
         var current = CurrentUser.get();
-        return new UserView(current.id(), current.username(), null, null);
+        return new UserView(current.id(), current.email(), null, null);
     }
 
     @ExceptionHandler(AuthService.InvalidCredentialsException.class)

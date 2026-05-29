@@ -19,17 +19,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class MeControllerTest extends AbstractIntegrationTest {
 
-    private static final String SEED_PASSWORD = "changeme-on-first-login";
+    private static final String SEED_PASSWORD = "password";
 
     @Autowired
     MockMvc mockMvc;
     @Autowired
     ObjectMapper objectMapper;
 
-    private String token(String username) throws Exception {
+    private String token(String email) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"" + username + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + SEED_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).get("token").asText();
@@ -42,7 +42,7 @@ class MeControllerTest extends AbstractIntegrationTest {
 
     @Test
     void hideTracker_thenListed_andCrossUserIsolated() throws Exception {
-        String carley = token("carley");
+        String carley = token("carley401@gmail.com");
         mockMvc.perform(put("/api/me/tracker-prefs/water")
                         .header("Authorization", "Bearer " + carley)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -60,7 +60,7 @@ class MeControllerTest extends AbstractIntegrationTest {
         assertThat(waterHidden).isTrue();
 
         // Jeremy doesn't see Carley's prefs.
-        String jeremyList = mockMvc.perform(get("/api/me/tracker-prefs").header("Authorization", "Bearer " + token("jeremy")))
+        String jeremyList = mockMvc.perform(get("/api/me/tracker-prefs").header("Authorization", "Bearer " + token("jeremy@biffis.com")))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         for (JsonNode p : objectMapper.readTree(jeremyList)) {
             assertThat(p.get("eventTypeSlug").asText()).isNotEqualTo("water");
@@ -70,7 +70,7 @@ class MeControllerTest extends AbstractIntegrationTest {
     @Test
     void setPref_unknownTracker_404() throws Exception {
         mockMvc.perform(put("/api/me/tracker-prefs/does-not-exist")
-                        .header("Authorization", "Bearer " + token("carley"))
+                        .header("Authorization", "Bearer " + token("carley401@gmail.com"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"hidden\":true}"))
                 .andExpect(status().isNotFound());

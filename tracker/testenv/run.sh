@@ -29,12 +29,13 @@ echo "    healthy."
 
 echo "==> Adding extra test users + setting all passwords to test123 + wiping logged data (idempotent)"
 $COMPOSE exec -T tracker-test-db psql -U tracker -d tracker >/dev/null <<SQL
-INSERT INTO users (username, display_name, password_hash, gender) VALUES
-  ('morgan','Morgan','${TEST_HASH}','female'),
-  ('dave','Dave','${TEST_HASH}','male')
-ON CONFLICT (username) DO NOTHING;
--- Test env only: every user logs in with test123 (prod keeps its own hashes).
-UPDATE users SET password_hash='${TEST_HASH}';
+INSERT INTO users (email, display_name, password_hash, gender) VALUES
+  ('morgan@biffis.com','Morgan','${TEST_HASH}','female'),
+  ('dave@biffis.com','Dave','${TEST_HASH}','male')
+ON CONFLICT (email) DO NOTHING;
+-- Test env only: every user logs in with test123 and skips the forced
+-- first-login change (prod keeps its own hashes + must-change flags).
+UPDATE users SET password_hash='${TEST_HASH}', must_change_password=false;
 TRUNCATE logged_event_options, logged_events;
 SQL
 
@@ -45,6 +46,6 @@ TOTAL=$($COMPOSE exec -T tracker-test-db psql -U tracker -d tracker -tA -c 'SELE
 echo
 echo "================================================================"
 echo " Test env ready:  http://$(hostname -I | awk '{print $1}'):18080/tracker/"
-echo " Users: carley / jeremy / morgan / dave     Password: test123"
+echo " Users: carley@ / jeremy@ / morgan@ / dave@biffis.com   Password: test123"
 echo " Logged events in DB: ${TOTAL}"
 echo "================================================================"

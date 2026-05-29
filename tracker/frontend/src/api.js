@@ -62,7 +62,9 @@ export const api = {
 
 // Convenience wrappers used across screens (Epics 6+ build on these).
 export const auth = {
-  login: (username, password) =>
-    api.post('/auth/login', { username, password }, { auth: false }),
+  login: (email, password) =>
+    api.post('/auth/login', { email, password }, { auth: false }),
+  changePassword: (currentPassword, newPassword) =>
+    api.post('/auth/change-password', { currentPassword, newPassword }),
   me: () => api.get('/auth/me'),
 }

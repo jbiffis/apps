@@ -19,13 +19,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Auth integration tests against the real schema (Flyway-seeded carley/jeremy).
- * The seeded placeholder password is the publicly-documented
- * "changeme-on-first-login" — no real credential is involved.
+ * After V7 the login identity is email and the seeded temp password is the
+ * placeholder "password" (must-change-on-first-login) — no real credential.
  */
 @AutoConfigureMockMvc
 class AuthControllerTest extends AbstractIntegrationTest {
 
-    private static final String SEED_PASSWORD = "changeme-on-first-login";
+    private static final String SEED_PASSWORD = "password";
 
     @Autowired
     MockMvc mockMvc;
@@ -37,28 +37,29 @@ class AuthControllerTest extends AbstractIntegrationTest {
     void login_happyPath_returnsTokenAndUser() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"carley\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                        .content("{\"email\":\"carley401@gmail.com\",\"password\":\"" + SEED_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token", is(not(emptyOrNullString()))))
-                .andExpect(jsonPath("$.user.username", is("carley")))
+                .andExpect(jsonPath("$.user.email", is("carley401@gmail.com")))
                 .andExpect(jsonPath("$.user.displayName", is("Carley")))
-                .andExpect(jsonPath("$.user.gender", is("female")));
+                .andExpect(jsonPath("$.user.gender", is("female")))
+                .andExpect(jsonPath("$.mustChangePassword", is(true)));
     }
 
     @Test
-    void login_usernameIsCaseInsensitive() throws Exception {
+    void login_emailIsCaseInsensitive() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"CaRLeY\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                        .content("{\"email\":\"CaRLeY401@GMAIL.com\",\"password\":\"" + SEED_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.user.username", is("carley")));
+                .andExpect(jsonPath("$.user.email", is("carley401@gmail.com")));
     }
 
     @Test
     void login_wrongPassword_returns401() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"carley\",\"password\":\"definitely-wrong\"}"))
+                        .content("{\"email\":\"carley401@gmail.com\",\"password\":\"definitely-wrong\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error", is("invalid_credentials")));
     }
@@ -67,7 +68,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
     void login_unknownUser_returns401() throws Exception {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"nobody\",\"password\":\"whatever\"}"))
+                        .content("{\"email\":\"nobody@biffis.com\",\"password\":\"whatever\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error", is("invalid_credentials")));
     }
@@ -82,7 +83,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
     void protectedEndpoint_withValidToken_returns200() throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"jeremy\",\"password\":\"" + SEED_PASSWORD + "\"}"))
+                        .content("{\"email\":\"jeremy@biffis.com\",\"password\":\"" + SEED_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode token = objectMapper.readTree(body).get("token");
@@ -90,7 +91,7 @@ class AuthControllerTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/auth/me")
                         .header("Authorization", "Bearer " + token.asText()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username", is("jeremy")));
+                .andExpect(jsonPath("$.email", is("jeremy@biffis.com")));
     }
 
     @Test
