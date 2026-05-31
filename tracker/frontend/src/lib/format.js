@@ -43,12 +43,16 @@ export function dayHeading(iso) {
   return `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`
 }
 
-/** Compact one-line summary of an entry's option values for the Today feed. */
-export function summarizeOptions(options) {
+/**
+ * Compact one-line summary of an entry's option values for the Today feed.
+ * Pass `format(option) => string` to control value rendering (e.g. unit
+ * conversion); otherwise values are shown raw.
+ */
+export function summarizeOptions(options, format) {
   if (!options || !options.length) return ''
   return options
     .map((o) => {
-      const v = Array.isArray(o.value) ? o.value.join(', ') : o.value
+      const v = format ? format(o) : (Array.isArray(o.value) ? o.value.join(', ') : o.value)
       return o.property ? `${o.property}: ${v}` : `${v}`
     })
     .join(' · ')

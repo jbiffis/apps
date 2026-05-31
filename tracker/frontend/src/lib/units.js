@@ -4,6 +4,8 @@
 // weight / height / temperature trackers are ever converted; every other
 // number/dose/duration field is left exactly as-is.
 
+import { flattenLeaves } from './catalog.js'
+
 export const DEFAULT_UNITS = { weightUnit: 'kg', heightUnit: 'cm', temperatureUnit: 'c' }
 
 // preset.slug -> dimension
@@ -124,4 +126,40 @@ export function formatMeasurement(dimension, unit, canonicalValue) {
   if (dimension === 'height') return `${v} cm`
   if (dimension === 'temperature') return `${v} ${unit === 'f' ? '°F' : '°C'}`
   return `${v}`
+}
+
+// --- Logged-value display (History/Today) ---
+// A logged option only carries a property name + value, so to convert it for
+// display we map (eventTypeSlug, propertyName) back to a dimension via the
+// catalog.
+
+/** eventTypeSlug -> { propertyName -> dimension } for the unit-bearing leaves. */
+export function dimensionIndex(catalogTree) {
+  const idx = {}
+  for (const leaf of flattenLeaves(catalogTree || [])) {
+    for (const p of leaf.properties || []) {
+      const dim = dimensionForPreset(p.preset)
+      if (dim) {
+        if (!idx[leaf.slug]) idx[leaf.slug] = {}
+        idx[leaf.slug][p.name] = dim
+      }
+    }
+  }
+  return idx
+}
+
+/**
+ * Build a display formatter for logged option values. Weight/height/temperature
+ * are converted to the user's unit (with the unit appended); everything else is
+ * rendered as-is.
+ */
+export function optionFormatter(dimIndex, prefs) {
+  return (eventTypeSlug, option) => {
+    const dim = dimIndex?.[eventTypeSlug]?.[option.property]
+    if (dim) {
+      const s = formatMeasurement(dim, unitFor(dim, prefs), option.value)
+      if (s != null) return s
+    }
+    return Array.isArray(option.value) ? option.value.join(', ') : String(option.value)
+  }
 }

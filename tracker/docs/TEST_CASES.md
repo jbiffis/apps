@@ -189,6 +189,10 @@ reseeded by V7; same for `jeremy@biffis.com`). Both seeded rows have
 ### TC-UP.4 Presentation only (UI)
 - With `lb`/`ftin`/`f` set: the Weight/Height/Fever entry screens show lb / a ft+in dropdown pair / °F, and the Me biometric tiles render in those units — but the stored `logged_events` values are still kg/cm/°C (verify via DB or by switching back to metric and re-reading).
 
+### TC-UP.5 Logged values convert in History + Today
+- With `lb`/`ftin`/`f` set: a logged Weight/Height/Fever entry shows the converted value **with its unit** everywhere it's displayed — the Home "Today" feed subline, the History list subline, and the History detail sheet (e.g. `Weight: 165.3 lb`, `Height: 6′1″`, `Temperature: 100.4 °F`). Non-measurement options (dose, severity, etc.) are unchanged.
+- Switch back to metric and re-read: the same entries now show kg/cm/°C. The underlying `logged_events` rows never changed — only the display.
+
 ---
 
 ## Epics 5–9 — Frontend ⏳ (acceptance criteria, fill in when built)
