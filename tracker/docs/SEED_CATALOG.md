@@ -32,6 +32,8 @@ All seed rows have `is_seed = true` so they cannot be deleted via the API. They 
 | `duration-minutes` | `duration` | unit minutes, default 30 |
 | `duration-hours` | `duration` | unit hours, default 7 |
 | `temperature-c` | `number` | unit °C, min 34, max 42, step 0.1, default 37 |
+| `weight-kg` | `number` | unit kg, min 20, max 350, step 0.1, default 70 |
+| `height-cm` | `number` | unit cm, min 50, max 250, step 0.5, default 170 |
 
 ## Event type hierarchy
 
@@ -63,6 +65,8 @@ Categories (`is_category = true`) are containers. Leaves are loggable.
 | ├ Body pain | `Workout` | Severity · Location (`body-location-multi`) |
 | └ Fever | `Workout` | Temperature (`temperature-c`, required) |
 | Mood | `Mood` | How (`face-mood-1-5`, required) · Note |
+| Weight | `Weight` | Measurement (`weight-kg`, required) — feeds derived biometrics |
+| Height | `Steps` | Measurement (`height-cm`, required) — feeds derived biometrics |
 
 ### Medication (category, icon `Pill`, color `t-amber`)
 | name | icon | properties |

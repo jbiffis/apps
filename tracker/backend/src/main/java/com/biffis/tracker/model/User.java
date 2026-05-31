@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -39,6 +40,29 @@ public class User {
 
     @Column
     private String gender;
+
+    // --- Biometrics (V8). Stable facts only; weight/height/age are derived. ---
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(name = "biological_sex")
+    private String biologicalSex;
+
+    @Column(name = "blood_type")
+    private String bloodType;
+
+    @Column(name = "activity_level")
+    private String activityLevel;
+
+    @Column(name = "weight_goal")
+    private String weightGoal;
+
+    @Column(name = "drug_allergies")
+    private String drugAllergies;
+
+    @Column(name = "chronic_conditions")
+    private String chronicConditions;
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -77,6 +101,62 @@ public class User {
 
     public String getGender() {
         return gender;
+    }
+
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public String getBiologicalSex() {
+        return biologicalSex;
+    }
+
+    public void setBiologicalSex(String biologicalSex) {
+        this.biologicalSex = biologicalSex;
+    }
+
+    public String getBloodType() {
+        return bloodType;
+    }
+
+    public void setBloodType(String bloodType) {
+        this.bloodType = bloodType;
+    }
+
+    public String getActivityLevel() {
+        return activityLevel;
+    }
+
+    public void setActivityLevel(String activityLevel) {
+        this.activityLevel = activityLevel;
+    }
+
+    public String getWeightGoal() {
+        return weightGoal;
+    }
+
+    public void setWeightGoal(String weightGoal) {
+        this.weightGoal = weightGoal;
+    }
+
+    public String getDrugAllergies() {
+        return drugAllergies;
+    }
+
+    public void setDrugAllergies(String drugAllergies) {
+        this.drugAllergies = drugAllergies;
+    }
+
+    public String getChronicConditions() {
+        return chronicConditions;
+    }
+
+    public void setChronicConditions(String chronicConditions) {
+        this.chronicConditions = chronicConditions;
     }
 
     public OffsetDateTime getCreatedAt() {

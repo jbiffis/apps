@@ -186,6 +186,21 @@ The caller's per-tracker preferences. Only trackers with a saved pref are return
 ### `PUT /me/tracker-prefs/{slug}`
 Upsert the caller's pref for one tracker. Partial — null fields are left unchanged. `{ "hidden": true }` hides it from the home grid + log picker; `{ "sortOrder": 3 }` sets its position (Phase 2d). 404 if the slug is unknown. Response 200: the updated `TrackerPrefView`.
 
+### `GET /me/biometrics`
+The caller's biometric profile. **Stored** fields are stable facts on the user row; **derived** fields are computed at read time so they never go stale — `age` from `dateOfBirth`, `latestWeightKg`/`latestHeightCm` from the most recent logged Weight/Height entry, and `bmi` from the two latest measurements. Weight/height are never stored here; log the Weight/Height trackers to change them.
+```json
+{
+  "dateOfBirth": "1990-05-15", "biologicalSex": "male", "bloodType": "O+",
+  "activityLevel": "moderate", "weightGoal": "maintain",
+  "drugAllergies": "penicillin", "chronicConditions": "none",
+  "age": 36, "latestWeightKg": 70.5, "latestHeightCm": 165.0, "bmi": 25.9
+}
+```
+Any field may be null (unset / never logged).
+
+### `PUT /me/biometrics`
+Replace the **stored** fields (the derived fields are read-only and ignored if sent). Each field is optional; null or `""` clears it. Validated against the same vocabularies as the DB constraints: `biologicalSex` ∈ {male, female, intersex}; `bloodType` ∈ {A+, A−, B+, B−, AB+, AB−, O+, O−}; `activityLevel` ∈ {sedentary, light, moderate, active, very_active}; `weightGoal` ∈ {lose, maintain, gain}; `dateOfBirth` must be in the past. Invalid values → `422 validation_failed`. Response 200: the full `BiometricsView` (stored + freshly-derived).
+
 ## Stats
 
 ### `GET /stats?days=N`

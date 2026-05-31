@@ -127,7 +127,7 @@ class CatalogControllerTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         JsonNode presets = objectMapper.readTree(body);
         assertThat(presets.isArray()).isTrue();
-        assertThat(presets.size()).isEqualTo(26);
+        assertThat(presets.size()).isEqualTo(28); // +weight-kg, +height-cm (V8)
         // each preset has a widget + options
         assertThat(presets.get(0).has("widget")).isTrue();
         assertThat(presets.get(0).has("options")).isTrue();

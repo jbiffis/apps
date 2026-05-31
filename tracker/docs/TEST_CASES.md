@@ -64,7 +64,8 @@ reseeded by V7; same for `jeremy@biffis.com`). Both seeded rows have
 
 ### TC-1.3 Seed data present
 - **When (DB):** `docker exec tt-db psql -U tracker -d tracker -c "SELECT count(*) FROM property_presets;"` etc.
-- **Then:** `property_presets` = 26, `event_types` = 52, `event_properties` = 59, `users` = 2.
+- **Then:** `property_presets` = 28, `event_types` = 54, `event_properties` = 61, `users` = 2.
+  (V8 added the `weight-kg`/`height-cm` presets and the Weight/Height trackers.)
 
 ### TC-1.4 Schema matches entities (no drift)
 - **When:** app boots with `spring.jpa.hibernate.ddl-auto=validate`.
@@ -146,7 +147,7 @@ reseeded by V7; same for `jeremy@biffis.com`). Both seeded rows have
 - Deleting a seed type → `403`. Deleting someone else's type → `403`.
 
 ### TC-3.5 Property presets
-- `GET /property-presets` → all 26, each with a valid `widget` + `options` jsonb of the right shape for its widget.
+- `GET /property-presets` → all 28, each with a valid `widget` + `options` jsonb of the right shape for its widget.
 
 ---
 
