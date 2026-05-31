@@ -82,6 +82,9 @@ export default function Me() {
         </div>
       </section>
 
+      {/* Biometrics */}
+      <BiometricsSection />
+
       {/* Export */}
       <section className="mt-5 space-y-2">
         <h2 className="font-display text-[15px] font-bold text-ink">Export my data</h2>
@@ -132,5 +135,147 @@ export default function Me() {
         <Logout size={16} /> Sign out
       </button>
     </AppShell>
+  )
+}
+
+const SEX_OPTS = [['', '—'], ['male', 'Male'], ['female', 'Female'], ['intersex', 'Intersex']]
+const BLOOD_OPTS = [['', '—'], ['A+', 'A+'], ['A-', 'A−'], ['B+', 'B+'], ['B-', 'B−'],
+  ['AB+', 'AB+'], ['AB-', 'AB−'], ['O+', 'O+'], ['O-', 'O−']]
+const ACTIVITY_OPTS = [['', '—'], ['sedentary', 'Sedentary'], ['light', 'Light'],
+  ['moderate', 'Moderate'], ['active', 'Active'], ['very_active', 'Very active']]
+const GOAL_OPTS = [['', '—'], ['lose', 'Lose'], ['maintain', 'Maintain'], ['gain', 'Gain']]
+
+const BLANK_FORM = {
+  dateOfBirth: '', biologicalSex: '', bloodType: '',
+  activityLevel: '', weightGoal: '', drugAllergies: '', chronicConditions: '',
+}
+
+// Pull only the editable (stored) fields out of the API view; derived fields
+// (age, weight, height, bmi) are read-only and never go into the form.
+function toForm(d) {
+  if (!d) return BLANK_FORM
+  return {
+    dateOfBirth: d.dateOfBirth ?? '',
+    biologicalSex: d.biologicalSex ?? '',
+    bloodType: d.bloodType ?? '',
+    activityLevel: d.activityLevel ?? '',
+    weightGoal: d.weightGoal ?? '',
+    drugAllergies: d.drugAllergies ?? '',
+    chronicConditions: d.chronicConditions ?? '',
+  }
+}
+
+/**
+ * Biometric profile. Stored facts are editable; weight/height/age/BMI are
+ * derived server-side (weight & height come from the most recent log, so they
+ * update by logging the Weight / Height trackers, not here).
+ */
+function BiometricsSection() {
+  const { data, loading, reload } = useApi('/me/biometrics')
+  const [form, setForm] = useState(BLANK_FORM)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  // Sync the form from the server view when it (re)loads — render-phase rather
+  // than in an effect, per the React "adjusting state on data change" pattern.
+  const [syncedFrom, setSyncedFrom] = useState(null)
+  if (data && data !== syncedFrom) {
+    setSyncedFrom(data)
+    setForm(toForm(data))
+  }
+
+  const set = (k) => (e) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }))
+    setSaved(false)
+  }
+
+  async function save() {
+    if (saving) return
+    setSaving(true)
+    try {
+      await api.put('/me/biometrics', { ...form, dateOfBirth: form.dateOfBirth || null })
+      await reload()
+      setSaved(true)
+    } catch { /* surfaced by the 401 handler / left silent for field errors */ } finally {
+      setSaving(false)
+    }
+  }
+
+  const stat = (label, value) => (
+    <div className="rounded-2xl border border-line bg-surface px-3 py-2.5">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-ink-3">{label}</p>
+      <p className="font-display text-[18px] font-extrabold text-ink">{value}</p>
+    </div>
+  )
+
+  return (
+    <section className="mt-5 space-y-3">
+      <h2 className="font-display text-[15px] font-bold text-ink">Biometrics</h2>
+      <p className="font-body text-[11px] text-ink-3">
+        Weight &amp; height come from your most recent log — update them by logging the Weight or Height trackers.
+      </p>
+
+      {/* Derived (read-only) */}
+      <div className="grid grid-cols-2 gap-2">
+        {stat('Age', data?.age != null ? `${data.age}` : '—')}
+        {stat('BMI', data?.bmi != null ? `${data.bmi}` : '—')}
+        {stat('Weight', data?.latestWeightKg != null ? `${data.latestWeightKg} kg` : '—')}
+        {stat('Height', data?.latestHeightCm != null ? `${data.latestHeightCm} cm` : '—')}
+      </div>
+
+      {/* Stored (editable) */}
+      <div className="space-y-3 rounded-qcard border border-line bg-surface p-4">
+        <Field label="Date of birth">
+          <input type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')}
+            className="w-full rounded-[14px] border border-line bg-surface px-3 py-2.5 font-body text-[14px] text-ink" />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Biological sex">
+            <Select value={form.biologicalSex} onChange={set('biologicalSex')} opts={SEX_OPTS} />
+          </Field>
+          <Field label="Blood type">
+            <Select value={form.bloodType} onChange={set('bloodType')} opts={BLOOD_OPTS} />
+          </Field>
+          <Field label="Activity level">
+            <Select value={form.activityLevel} onChange={set('activityLevel')} opts={ACTIVITY_OPTS} />
+          </Field>
+          <Field label="Weight goal">
+            <Select value={form.weightGoal} onChange={set('weightGoal')} opts={GOAL_OPTS} />
+          </Field>
+        </div>
+        <Field label="Drug allergies">
+          <textarea value={form.drugAllergies} onChange={set('drugAllergies')} rows={2}
+            placeholder="e.g. penicillin"
+            className="w-full resize-none rounded-[14px] border border-line bg-surface px-3 py-2.5 font-body text-[14px] text-ink" />
+        </Field>
+        <Field label="Chronic conditions">
+          <textarea value={form.chronicConditions} onChange={set('chronicConditions')} rows={2}
+            placeholder="e.g. asthma"
+            className="w-full resize-none rounded-[14px] border border-line bg-surface px-3 py-2.5 font-body text-[14px] text-ink" />
+        </Field>
+        <button onClick={save} disabled={saving || loading}
+          className="w-full rounded-[14px] bg-accent px-4 py-3 font-display text-[14px] font-bold text-white disabled:opacity-50">
+          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save biometrics'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block space-y-1">
+      <span className="font-body text-[11px] text-ink-3">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function Select({ value, onChange, opts }) {
+  return (
+    <select value={value} onChange={onChange}
+      className="w-full rounded-[14px] border border-line bg-surface px-3 py-2.5 font-body text-[14px] text-ink">
+      {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
   )
 }

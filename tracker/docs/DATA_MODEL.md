@@ -33,7 +33,21 @@ users ──┐
 | `password_hash` | text | bcrypt; never returned via API |
 | `must_change_password` | boolean | NOT NULL default `true`; forces a password change on first login |
 | `gender` | text | `male` / `female` / `other` / null. Drives default visibility of audience-gated trackers. |
+| `date_of_birth` | date | nullable (V8). Age is **derived** from this at read time — never stored. |
+| `biological_sex` | text | `male` / `female` / `intersex` / null (V8). Clinical sex for biomedical context; distinct from `gender`. |
+| `blood_type` | text | `A+ A- B+ B- AB+ AB- O+ O-` / null (V8). |
+| `activity_level` | text | `sedentary` / `light` / `moderate` / `active` / `very_active` / null (V8). |
+| `weight_goal` | text | `lose` / `maintain` / `gain` / null (V8). |
+| `drug_allergies` | text | free text, nullable (V8). |
+| `chronic_conditions` | text | free text, nullable (V8). |
 | `created_at` | timestamptz | default `now()` |
+
+**Biometrics derivation (V8).** Stable facts live on `users`; everything that
+changes is derived so it can't go stale: `age` from `date_of_birth`, and the
+latest **weight**/**height** (plus computed **BMI**) from the most recent
+`logged_events` row of the `weight` / `height` trackers. There is no stored
+weight/height column — to update them you log the tracker. Surfaced via
+`GET/PUT /api/me/biometrics`.
 
 Seeded users (see [PRIVACY.md](PRIVACY.md) for password handling):
 
