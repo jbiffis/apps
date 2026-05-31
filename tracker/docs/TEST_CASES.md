@@ -60,7 +60,7 @@ reseeded by V7; same for `jeremy@biffis.com`). Both seeded rows have
 
 ### TC-1.2 All migrations applied
 - **When:** check the running container's startup logs (`docker logs tt-app | grep Flyway`).
-- **Then:** "Successfully applied 4 migrations", schema at v4, no `ddl-auto` validation error.
+- **Then:** Flyway validates all migrations (currently through `V9`), schema at the latest version, no `ddl-auto` validation error.
 
 ### TC-1.3 Seed data present
 - **When (DB):** `docker exec tt-db psql -U tracker -d tracker -c "SELECT count(*) FROM property_presets;"` etc.
@@ -171,6 +171,27 @@ reseeded by V7; same for `jeremy@biffis.com`). Both seeded rows have
 
 ### TC-4.5 Delete
 - `DELETE /logged-events/{id}` for own event → `204`, gone on next read. Another user's id → `404`.
+
+---
+
+## Unit preferences ✅ (`/me/preferences`)
+
+### TC-UP.1 Metric by default
+- `GET /me/preferences` on a fresh user → `200`, `{weightUnit:"kg", heightUnit:"cm", temperatureUnit:"c"}`.
+
+### TC-UP.2 Round-trip + partial update
+- `PUT {"weightUnit":"lb","heightUnit":"ftin","temperatureUnit":"f"}` → `200` echoes those; next `GET` reflects them.
+- `PUT {"weightUnit":"lb"}` (partial) leaves `heightUnit`/`temperatureUnit` unchanged.
+
+### TC-UP.3 Validation
+- `PUT {"weightUnit":"stone"}` → `422 validation_failed`.
+
+### TC-UP.4 Presentation only (UI)
+- With `lb`/`ftin`/`f` set: the Weight/Height/Fever entry screens show lb / a ft+in dropdown pair / °F, and the Me biometric tiles render in those units — but the stored `logged_events` values are still kg/cm/°C (verify via DB or by switching back to metric and re-reading).
+
+### TC-UP.5 Logged values convert in History + Today
+- With `lb`/`ftin`/`f` set: a logged Weight/Height/Fever entry shows the converted value **with its unit** everywhere it's displayed — the Home "Today" feed subline, the History list subline, and the History detail sheet (e.g. `Weight: 165.3 lb`, `Height: 6′1″`, `Temperature: 100.4 °F`). Non-measurement options (dose, severity, etc.) are unchanged.
+- Switch back to metric and re-read: the same entries now show kg/cm/°C. The underlying `logged_events` rows never changed — only the display.
 
 ---
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 import { flattenLeaves } from '../lib/catalog.js'
+import { dimensionIndex, optionFormatter } from '../lib/units.js'
 import { dayKey, dayHeading, timeLabel, summarizeOptions } from '../lib/format.js'
 import { Back, Close, DynamicIcon } from '../icons/index.jsx'
 
@@ -49,11 +50,17 @@ export default function History() {
   }
 
   const catalog = useApi('/event-types')
+  const unitPrefs = useApi('/me/preferences')
   const iconBySlug = useMemo(() => {
     const m = {}
     flattenLeaves(catalog.data || []).forEach((l) => { m[l.slug] = l.icon })
     return m
   }, [catalog.data])
+  // Convert weight/height/temperature option values to the user's units.
+  const formatOption = useMemo(
+    () => optionFormatter(dimensionIndex(catalog.data || []), unitPrefs.data),
+    [catalog.data, unitPrefs.data],
+  )
 
   // Group newest-first events into day buckets, preserving order.
   const groups = useMemo(() => {
@@ -92,7 +99,7 @@ export default function History() {
                 <h2 className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">{g.heading}</h2>
                 <ul className="space-y-2">
                   {g.items.map((e) => {
-                    const sub = summarizeOptions(e.options) || e.note
+                    const sub = summarizeOptions(e.options, (o) => formatOption(e.eventType?.slug, o)) || e.note
                     return (
                       <li key={e.id}>
                         <button onClick={() => setSelected(e)}
@@ -130,13 +137,18 @@ export default function History() {
       </main>
 
       {selected && (
-        <EntryDetail entry={selected} icon={iconBySlug[selected.eventType?.slug]} onClose={() => setSelected(null)} />
+        <EntryDetail
+          entry={selected}
+          icon={iconBySlug[selected.eventType?.slug]}
+          formatValue={(o) => formatOption(selected.eventType?.slug, o)}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   )
 }
 
-function EntryDetail({ entry, icon, onClose }) {
+function EntryDetail({ entry, icon, formatValue, onClose }) {
   const d = new Date(entry.occurredAt)
   return (
     <div className="fixed inset-0 z-30 mx-auto max-w-[480px]" role="dialog" aria-modal="true" aria-label="Entry detail">
@@ -165,7 +177,7 @@ function EntryDetail({ entry, icon, onClose }) {
               <div key={i} className="flex items-start justify-between gap-3 rounded-xl border border-line bg-bg px-3 py-2">
                 <dt className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">{o.property}</dt>
                 <dd className="text-right font-body text-[13px] font-semibold text-ink">
-                  {Array.isArray(o.value) ? o.value.join(', ') : String(o.value)}
+                  {formatValue(o)}
                 </dd>
               </div>
             ))}

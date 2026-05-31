@@ -6,6 +6,7 @@ import { api } from '../api.js'
 import { useApi } from '../hooks/useApi.js'
 import { useLongPress } from '../hooks/useLongPress.js'
 import { flattenLeaves } from '../lib/catalog.js'
+import { dimensionIndex, optionFormatter } from '../lib/units.js'
 import { greeting, dateLabel, timeLabel, summarizeOptions } from '../lib/format.js'
 import AppShell from '../components/AppShell.jsx'
 import BottomNav from '../components/BottomNav.jsx'
@@ -30,6 +31,7 @@ export default function Home() {
   const today = useApi('/home/today')
   const catalog = useApi('/event-types')
   const prefs = useApi('/me/tracker-prefs')
+  const unitPrefs = useApi('/me/preferences')
 
   // A just-saved entry hands off via router state; derive the undo toast from
   // it (no extra state) and refresh the feeds once it appears.
@@ -84,6 +86,11 @@ export default function Home() {
     flattenLeaves(tree).forEach((l) => { m[l.slug] = l.icon })
     return m
   }, [tree])
+  // Convert weight/height/temperature option values to the user's units.
+  const formatOption = useMemo(
+    () => optionFormatter(dimensionIndex(tree), unitPrefs.data),
+    [tree, unitPrefs.data],
+  )
 
   function cycleTheme() {
     const next = resolveTheme(pref) === 'dark' ? 'light' : 'dark'
@@ -240,7 +247,7 @@ export default function Home() {
         ) : today.data?.length ? (
           <ul className="space-y-2">
             {today.data.map((e) => (
-              <TodayRow key={e.id} entry={e} icon={iconBySlug[e.eventType?.slug]} onMenu={() => setMenuEntry(e)} />
+              <TodayRow key={e.id} entry={e} icon={iconBySlug[e.eventType?.slug]} formatOption={formatOption} onMenu={() => setMenuEntry(e)} />
             ))}
           </ul>
         ) : (
@@ -337,9 +344,9 @@ function TrackerTile({ node, onOpen, onLongPress }) {
   )
 }
 
-function TodayRow({ entry, icon, onMenu }) {
+function TodayRow({ entry, icon, formatOption, onMenu }) {
   const lp = useLongPress(onMenu)
-  const sub = summarizeOptions(entry.options) || entry.note
+  const sub = summarizeOptions(entry.options, (o) => formatOption(entry.eventType?.slug, o)) || entry.note
   return (
     <li
       {...lp}

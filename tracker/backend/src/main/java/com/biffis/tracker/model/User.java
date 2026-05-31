@@ -64,6 +64,18 @@ public class User {
     @Column(name = "chronic_conditions")
     private String chronicConditions;
 
+    // --- Measurement unit preferences (V9). Presentation only; logged data
+    // stays canonical metric. DB defaults keep existing rows on metric. ---
+
+    @Column(name = "weight_unit", nullable = false)
+    private String weightUnit = "kg";
+
+    @Column(name = "height_unit", nullable = false)
+    private String heightUnit = "cm";
+
+    @Column(name = "temperature_unit", nullable = false)
+    private String temperatureUnit = "c";
+
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -157,6 +169,30 @@ public class User {
 
     public void setChronicConditions(String chronicConditions) {
         this.chronicConditions = chronicConditions;
+    }
+
+    public String getWeightUnit() {
+        return weightUnit;
+    }
+
+    public void setWeightUnit(String weightUnit) {
+        this.weightUnit = weightUnit;
+    }
+
+    public String getHeightUnit() {
+        return heightUnit;
+    }
+
+    public void setHeightUnit(String heightUnit) {
+        this.heightUnit = heightUnit;
+    }
+
+    public String getTemperatureUnit() {
+        return temperatureUnit;
+    }
+
+    public void setTemperatureUnit(String temperatureUnit) {
+        this.temperatureUnit = temperatureUnit;
     }
 
     public OffsetDateTime getCreatedAt() {

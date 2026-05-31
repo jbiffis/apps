@@ -1,3 +1,8 @@
+import {
+  dimensionForPreset, unitFor, isCanonicalUnit, stepperConfig,
+  fromCanonical, toCanonical, cmToFtIn, ftInToCm, ftRange,
+} from '../lib/units.js'
+
 // Renders one entry field based on its preset widget. Controlled: the parent
 // owns the value and gets updates via onChange. `value` types by widget:
 //   step/single_select/face_select → option.value (number|string)
@@ -5,7 +10,9 @@
 //   number/dose/duration           → number
 //   text                           → string
 //   bool                           → boolean
-export default function FieldRenderer({ property, value, onChange }) {
+// Stored values are always canonical metric; `units` (the user's unit prefs)
+// only changes how weight/height/temperature fields are shown and entered.
+export default function FieldRenderer({ property, value, onChange, units }) {
   const preset = property.preset || {}
   const opts = preset.options
 
@@ -17,12 +24,13 @@ export default function FieldRenderer({ property, value, onChange }) {
           {property.required && <span className="text-warn"> *</span>}
         </span>
       </div>
-      {renderWidget(preset.widget, opts, value, onChange)}
+      {renderWidget(preset, opts, value, onChange, units)}
     </div>
   )
 }
 
-function renderWidget(widget, opts, value, onChange) {
+function renderWidget(preset, opts, value, onChange, units) {
+  const widget = preset.widget
   switch (widget) {
     case 'step':
     case 'single_select':
@@ -33,7 +41,7 @@ function renderWidget(widget, opts, value, onChange) {
     case 'number':
     case 'dose':
     case 'duration':
-      return <Stepper opts={opts || {}} value={value} onChange={onChange} />
+      return <MeasureField preset={preset} opts={opts || {}} value={value} onChange={onChange} units={units} />
     case 'bool':
       return <Toggle opts={opts || {}} value={!!value} onChange={onChange} />
     case 'text':
@@ -41,6 +49,47 @@ function renderWidget(widget, opts, value, onChange) {
     default:
       return <p className="font-body text-[12px] text-ink-3">Unsupported field</p>
   }
+}
+
+// A number/dose/duration field. Weight/height/temperature get unit-converted;
+// the stored value stays canonical metric. Height in feet/inches uses a
+// dual-dropdown picker; everything else is the plain stepper.
+function MeasureField({ preset, opts, value, onChange, units }) {
+  const dim = dimensionForPreset(preset)
+  const unit = dim ? unitFor(dim, units) : null
+
+  if (dim && !isCanonicalUnit(dim, unit)) {
+    if (dim === 'height') {
+      return <FtInPicker opts={opts} value={value} onChange={onChange} />
+    }
+    const cfg = stepperConfig(dim, unit, opts)
+    const display = fromCanonical(dim, unit, num(value, num(opts.default, num(opts.min, 0))))
+    return <Stepper opts={cfg} value={display} onChange={(d) => onChange(toCanonical(dim, unit, d))} />
+  }
+  return <Stepper opts={opts} value={value} onChange={onChange} />
+}
+
+// Feet + inches dropdowns. Value in/out is canonical cm.
+function FtInPicker({ opts, value, onChange }) {
+  const minCm = num(opts.min, 50)
+  const maxCm = num(opts.max, 250)
+  const cm = num(value, num(opts.default, minCm))
+  const { ft, in: inch } = cmToFtIn(cm)
+  const ftOpts = ftRange(minCm, maxCm)
+  const inOpts = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  const change = (nf, ni) => onChange(ftInToCm(nf, ni))
+  const cls =
+    'flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-center font-display text-[18px] font-extrabold text-ink'
+  return (
+    <div className="flex items-center gap-3">
+      <select aria-label="Feet" value={ft} onChange={(e) => change(Number(e.target.value), inch)} className={cls}>
+        {ftOpts.map((f) => <option key={f} value={f}>{f} ft</option>)}
+      </select>
+      <select aria-label="Inches" value={inch} onChange={(e) => change(ft, Number(e.target.value))} className={cls}>
+        {inOpts.map((i) => <option key={i} value={i}>{i} in</option>)}
+      </select>
+    </div>
+  )
 }
 
 function ChipGroup({ options, selected, onPick, multi = false, face = false }) {

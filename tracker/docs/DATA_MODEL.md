@@ -40,6 +40,9 @@ users ──┐
 | `weight_goal` | text | `lose` / `maintain` / `gain` / null (V8). |
 | `drug_allergies` | text | free text, nullable (V8). |
 | `chronic_conditions` | text | free text, nullable (V8). |
+| `weight_unit` | text | `kg` (default) / `lb` (V9). Display unit only — logged data stays kg. |
+| `height_unit` | text | `cm` (default) / `ftin` (V9). Display unit only — logged data stays cm. |
+| `temperature_unit` | text | `c` (default) / `f` (V9). Display unit only — logged data stays °C. |
 | `created_at` | timestamptz | default `now()` |
 
 **Biometrics derivation (V8).** Stable facts live on `users`; everything that
@@ -48,6 +51,14 @@ latest **weight**/**height** (plus computed **BMI**) from the most recent
 `logged_events` row of the `weight` / `height` trackers. There is no stored
 weight/height column — to update them you log the tracker. Surfaced via
 `GET/PUT /api/me/biometrics`.
+
+**Unit preferences (V9).** `weight_unit` / `height_unit` / `temperature_unit`
+are presentation-only: logged values are always stored in canonical metric
+(kg / cm / °C); these columns just tell the frontend how to display and enter
+them. Existing rows default to metric, so behaviour is unchanged until a user
+opts in. Surfaced via `GET/PUT /api/me/preferences`. The frontend does all
+conversion (see `frontend/src/lib/units.js`); the backend only stores the
+choice.
 
 Seeded users (see [PRIVACY.md](PRIVACY.md) for password handling):
 
@@ -167,5 +178,7 @@ Located in `backend/src/main/resources/db/migration/`:
 - `V2__seed_presets.sql` — `property_presets` rows
 - `V3__seed_event_types.sql` — full catalog from [SEED_CATALOG.md](SEED_CATALOG.md)
 - `V4__seed_users.sql` — Carley + Jeremy with bcrypted initial passwords (passwords supplied out-of-band, never committed)
+- `V8__biometrics.sql` — biometric `users` columns + `weight-kg`/`height-cm` presets + Weight/Height trackers
+- `V9__unit_preferences.sql` — `weight_unit`/`height_unit`/`temperature_unit` on `users` (metric defaults)
 
 Flyway runs these on Spring Boot startup. `spring.jpa.hibernate.ddl-auto=validate` ensures Hibernate doesn't drift from the migrations.
