@@ -201,6 +201,25 @@ Any field may be null (unset / never logged).
 ### `PUT /me/biometrics`
 Replace the **stored** fields (the derived fields are read-only and ignored if sent). Each field is optional; null or `""` clears it. Validated against the same vocabularies as the DB constraints: `biologicalSex` ∈ {male, female, intersex}; `bloodType` ∈ {A+, A−, B+, B−, AB+, AB−, O+, O−}; `activityLevel` ∈ {sedentary, light, moderate, active, very_active}; `weightGoal` ∈ {lose, maintain, gain}; `dateOfBirth` must be in the past. Invalid values → `422 validation_failed`. Response 200: the full `BiometricsView` (stored + freshly-derived).
 
+### `GET /me/preferences`
+The caller's measurement unit preferences. **Presentation only** — logged
+values are always stored in canonical metric; these just tell the client how to
+show and enter them. Fresh accounts default to metric.
+```json
+{ "weightUnit": "kg", "heightUnit": "cm", "temperatureUnit": "c" }
+```
+- `weightUnit` ∈ {`kg`, `lb`}
+- `heightUnit` ∈ {`cm`, `ftin`} (`ftin` = feet/inches, shown as `6′1″`)
+- `temperatureUnit` ∈ {`c`, `f`}
+
+### `PUT /me/preferences`
+Update the unit preferences. **Partial** — each field is optional; a null field
+is left unchanged. Values are validated against the vocabularies above; invalid
+values → `422 validation_failed`. Response 200: the full `PreferencesView`.
+```json
+{ "weightUnit": "lb", "heightUnit": "ftin", "temperatureUnit": "f" }
+```
+
 ## Stats
 
 ### `GET /stats?days=N`

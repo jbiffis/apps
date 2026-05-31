@@ -6,6 +6,7 @@ import Home from './pages/Home.jsx'
 import Entry from './pages/Entry.jsx'
 import History from './pages/History.jsx'
 import Me from './pages/Me.jsx'
+import Settings from './pages/Settings.jsx'
 import Stats from './pages/Stats.jsx'
 
 export default function App() {
@@ -42,6 +43,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Me />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <Settings />
           </RequireAuth>
         }
       />

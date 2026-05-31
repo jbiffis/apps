@@ -6,9 +6,10 @@ import { getThemePref, resolveTheme, setThemePref } from '../theme.js'
 import { clearSession, getUser } from '../auth.js'
 import { flattenLeaves } from '../lib/catalog.js'
 import { exportCsv, exportJson } from '../lib/export.js'
+import { formatMeasurement, unitFor } from '../lib/units.js'
 import AppShell from '../components/AppShell.jsx'
 import BottomNav from '../components/BottomNav.jsx'
-import { Sun, Logout, DynamicIcon } from '../icons/index.jsx'
+import { Sun, Logout, Settings, DynamicIcon } from '../icons/index.jsx'
 
 const EMPTY = []
 
@@ -58,10 +59,16 @@ export default function Me() {
   const bar = (
     <header className="flex items-center justify-between px-[18px] pb-2.5 pt-3">
       <h1 className="font-display text-[22px] font-extrabold text-ink">Me</h1>
-      <button onClick={cycleTheme} aria-label="Toggle theme"
-        className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-2">
-        <Sun size={18} />
-      </button>
+      <div className="flex items-center gap-2">
+        <button onClick={() => navigate('/settings')} aria-label="Settings"
+          className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-2">
+          <Settings size={18} />
+        </button>
+        <button onClick={cycleTheme} aria-label="Toggle theme"
+          className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-2">
+          <Sun size={18} />
+        </button>
+      </div>
     </header>
   )
 
@@ -172,6 +179,7 @@ function toForm(d) {
  */
 function BiometricsSection() {
   const { data, loading, reload } = useApi('/me/biometrics')
+  const prefs = useApi('/me/preferences')
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -215,12 +223,12 @@ function BiometricsSection() {
         Weight &amp; height come from your most recent log — update them by logging the Weight or Height trackers.
       </p>
 
-      {/* Derived (read-only) */}
+      {/* Derived (read-only) — weight/height shown in the user's chosen units. */}
       <div className="grid grid-cols-2 gap-2">
         {stat('Age', data?.age != null ? `${data.age}` : '—')}
         {stat('BMI', data?.bmi != null ? `${data.bmi}` : '—')}
-        {stat('Weight', data?.latestWeightKg != null ? `${data.latestWeightKg} kg` : '—')}
-        {stat('Height', data?.latestHeightCm != null ? `${data.latestHeightCm} cm` : '—')}
+        {stat('Weight', formatMeasurement('weight', unitFor('weight', prefs.data), data?.latestWeightKg) ?? '—')}
+        {stat('Height', formatMeasurement('height', unitFor('height', prefs.data), data?.latestHeightCm) ?? '—')}
       </div>
 
       {/* Stored (editable) */}

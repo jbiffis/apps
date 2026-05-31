@@ -35,6 +35,7 @@ export default function Entry() {
   const { data: type, loading, error } = useApi(`/event-types/${slug}`)
   const edit = useApi(`/logged-events/${editId}`, { enabled: !!editId })
   const editEntry = edit.data
+  const prefs = useApi('/me/preferences')
 
   const properties = useMemo(() => type?.properties || [], [type])
   // Existing values when editing, keyed by property name.
@@ -132,7 +133,7 @@ export default function Entry() {
           <>
             {properties.map((p) => (
               <div key={p.id}>
-                <FieldRenderer property={p} value={valueFor(p)} onChange={(v) => setValue(p.name, v)} />
+                <FieldRenderer property={p} value={valueFor(p)} onChange={(v) => setValue(p.name, v)} units={prefs.data} />
                 {missing.includes(p.name) && (
                   <p className="mt-1 px-1 font-body text-[11px] text-warn">{p.name} is required.</p>
                 )}
