@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   dimensionForPreset, unitFor, isCanonicalUnit, stepperConfig,
   fromCanonical, toCanonical, cmToFtIn, ftInToCm, ftRange,
@@ -128,20 +129,38 @@ function Stepper({ opts, value, onChange }) {
   const max = num(opts.max, Number.MAX_SAFE_INTEGER)
   const step = num(opts.step, 1)
   const v = num(value, num(opts.default, min))
-  const round = (n) => Number(Math.min(max, Math.max(min, n)).toFixed(step < 1 ? 2 : 0))
+  const clamp = (n) => Number(Math.min(max, Math.max(min, n)).toFixed(step < 1 ? 2 : 0))
+
+  // While typing, hold the raw string so the field can be emptied/retyped; only
+  // clamp to min/max on commit (blur / Enter). `null` = not editing → show `v`.
+  const [draft, setDraft] = useState(null)
+  const commit = () => {
+    if (draft === null) return
+    const parsed = parseFloat(draft)
+    onChange(clamp(Number.isFinite(parsed) ? parsed : v))
+    setDraft(null)
+  }
+  const stepBy = (delta) => {
+    const base = draft !== null && Number.isFinite(parseFloat(draft)) ? parseFloat(draft) : v
+    setDraft(null)
+    onChange(clamp(base + delta))
+  }
+
   return (
     <div className="flex items-center gap-3">
-      <button type="button" aria-label="Decrease" onClick={() => onChange(round(v - step))}
+      <button type="button" aria-label="Decrease" onClick={() => stepBy(-step)}
         className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-surface-2 font-display text-[20px] text-ink-2">−</button>
       <div className="flex flex-1 items-baseline justify-center gap-1">
         <input
-          type="number" inputMode="decimal" value={v} min={min} max={max} step={step}
-          onChange={(e) => onChange(round(parseFloat(e.target.value) || 0))}
+          type="number" inputMode="decimal" value={draft ?? v} min={min} max={max} step={step}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
           className="w-20 bg-transparent text-center font-display text-[22px] font-extrabold text-ink outline-none"
         />
         {opts.unit && <span className="font-body text-[13px] text-ink-3">{opts.unit}</span>}
       </div>
-      <button type="button" aria-label="Increase" onClick={() => onChange(round(v + step))}
+      <button type="button" aria-label="Increase" onClick={() => stepBy(step)}
         className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-surface-2 font-display text-[20px] text-ink-2">+</button>
     </div>
   )
