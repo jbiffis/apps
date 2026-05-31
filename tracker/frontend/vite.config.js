@@ -23,9 +23,6 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Caching disabled for now so changes are visible immediately. The
-      // generated SW unregisters itself and clears caches on next visit.
-      selfDestroying: true,
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
         id: '/tracker/',
@@ -45,10 +42,18 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
-        navigateFallback: '/tracker/index.html',
-        // Never serve the SPA shell for API calls.
-        navigateFallbackDenylist: [/^\/tracker\/api\//],
+        // No caching while we iterate: precache nothing and route every request
+        // straight to the network. The service worker exists only to make the
+        // app installable — there is never a stale asset to clear during
+        // testing. Add precaching/offline support here once the UI settles.
+        globPatterns: [],
+        navigateFallback: null,
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
+        runtimeCaching: [
+          { urlPattern: () => true, handler: 'NetworkOnly' },
+        ],
       },
     }),
   ],
