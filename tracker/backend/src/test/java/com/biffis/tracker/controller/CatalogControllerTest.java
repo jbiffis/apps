@@ -185,6 +185,113 @@ class CatalogControllerTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void create_topLevelTracker_noParent() throws Exception {
+        String carley = token("carley401@gmail.com");
+        String created = mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + carley)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Top Level Tracker AAA","icon":"Heart"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode node = objectMapper.readTree(created);
+        assertThat(node.path("isCategory").asBoolean()).isFalse();
+        assertThat(node.path("parentId").isNull()).isTrue();
+        // surfaces as a top-level node in the tree
+        boolean topLevel = false;
+        for (JsonNode n : tree(carley, "all")) {
+            if ("top-level-tracker-aaa".equals(n.path("slug").asText())) topLevel = true;
+        }
+        assertThat(topLevel).isTrue();
+    }
+
+    @Test
+    void create_category() throws Exception {
+        String carley = token("carley401@gmail.com");
+        String created = mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + carley)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"My Category BBB","icon":"Sparkle","isCategory":true}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode node = objectMapper.readTree(created);
+        assertThat(node.path("isCategory").asBoolean()).isTrue();
+        assertThat(node.path("slug").asText()).isEqualTo("my-category-bbb");
+    }
+
+    @Test
+    void create_trackerWithProperties_hydratesPreset() throws Exception {
+        String carley = token("carley401@gmail.com");
+        String presetSlug = firstPresetSlug(carley);
+        mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + carley)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"With Fields CCC","icon":"Journal","properties":[
+                                  {"name":"How much","presetSlug":"%s","required":true,"sortOrder":0}
+                                ]}
+                                """.formatted(presetSlug)))
+                .andExpect(status().isCreated());
+
+        // GET by slug returns the property with its preset hydrated
+        String body = mockMvc.perform(get("/api/event-types/with-fields-ccc")
+                        .header("Authorization", "Bearer " + carley))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode node = objectMapper.readTree(body);
+        assertThat(node.path("properties").size()).isEqualTo(1);
+        JsonNode prop = node.path("properties").get(0);
+        assertThat(prop.path("name").asText()).isEqualTo("How much");
+        assertThat(prop.path("required").asBoolean()).isTrue();
+        assertThat(prop.path("preset").path("widget").asText()).isNotBlank();
+    }
+
+    @Test
+    void create_duplicateName_conflict() throws Exception {
+        String carley = token("carley401@gmail.com");
+        String payload = """
+                {"name":"Duplicate Name DDD","icon":"Pill"}
+                """;
+        mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + carley)
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + carley)
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void create_missingName_unprocessable() throws Exception {
+        mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + token("carley401@gmail.com"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"icon\":\"Pill\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void create_missingIcon_unprocessable() throws Exception {
+        mockMvc.perform(post("/api/event-types")
+                        .header("Authorization", "Bearer " + token("carley401@gmail.com"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"No Icon EEE\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    private String firstPresetSlug(String token) throws Exception {
+        String body = mockMvc.perform(get("/api/property-presets")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).get(0).get("slug").asText();
+    }
+
+    @Test
     void delete_seedType_forbidden() throws Exception {
         String carley = token("carley401@gmail.com");
         // resolve a seed type's id

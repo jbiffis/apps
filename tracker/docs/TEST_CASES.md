@@ -205,6 +205,46 @@ reseeded by V7; same for `jeremy@biffis.com`). Both seeded rows have
 
 ---
 
+## User-created trackers ✅ (Phase 3) — backend + UI
+
+Backend cases live in `CatalogControllerTest` (run with the suite). The rest are UI acceptance.
+
+### TC-CT.1 Create a top-level tracker
+- **When (API):** `POST /event-types {"name":"Top Level Tracker AAA","icon":"Heart"}`.
+- **Then:** `201`, `isCategory:false`, `parentId:null`; appears as a top-level node in `GET /event-types?include=all`.
+
+### TC-CT.2 Create a category
+- **When (API):** `POST /event-types {"name":"My Category BBB","icon":"Sparkle","isCategory":true}`.
+- **Then:** `201`, `isCategory:true`, slug `my-category-bbb`.
+
+### TC-CT.3 Create a tracker with fields
+- **When (API):** `POST /event-types` with one `properties[]` entry referencing a real preset slug.
+- **Then:** `201`; `GET /event-types/{slug}` returns the property with its `preset.widget` hydrated and `required` preserved.
+
+### TC-CT.4 Duplicate name
+- **When (API):** POST the same `name` twice.
+- **Then:** second call → `409 conflict`. UI shows the inline "already exists — pick another name" message and stays on the form.
+
+### TC-CT.5 Missing required fields
+- **When (API):** POST without `name`, or without `icon`.
+- **Then:** `422 validation_failed` (bean validation on `@NotBlank name`/`@NotBlank icon`). The UI prevents this client-side ("Give it a name.").
+
+### TC-CT.6 "+ New" entry points (UI)
+- Home top-level grid shows a dashed **New** tile → `/new` (no parent).
+- The log picker (FAB and any category drill-down) shows a **New** tile → `/new?parent=<that level's slug>`. The header reads "Inside &lt;parent&gt;".
+- Create → returns to Home; the new tracker/category is in the grid (catalog refetches on mount).
+
+### TC-CT.7 Fields builder (UI)
+- "Add field" lists all 28 presets; picking one adds a row (name prefilled from the preset). Rename, toggle **Required**, reorder ▲▼, remove ✕. A tracker with zero fields is allowed (logs just a timestamp). Category mode hides the builder entirely.
+
+### TC-CT.8 Edit mode: hide + restore (UI)
+- Long-press a Home tile → edit mode. Each tile gets a ✕ **hide** badge + ◀▶ move.
+- Tapping ✕ hides the tile (optimistic `PUT /me/tracker-prefs/{slug} {hidden:true}`) and drops it into the **"Hidden (n)"** tray below the grid.
+- Tapping a tray item restores it (`{hidden:false}`) back into the grid.
+- **Done** persists the current order via `{sortOrder:i}` and exits. Reload: grid + hidden state match what was set. Hidden trackers also remain manageable per-leaf in the **Me** tab.
+
+---
+
 ## Deploy verification (prod) — run after every deploy
 
 Order matters — do these on prod after `docker compose build tracker-backend` + Komodo restart, **with real `TRACKER_DB_PASSWORD` + `TRACKER_JWT_SECRET` set first**:

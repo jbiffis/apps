@@ -90,7 +90,7 @@ Properties on a leaf event type:
 Single event type with properties. Used when navigating directly to `/log/{slug}`.
 
 ### `POST /event-types`
-Create a new (non-seed) event type. Available to all authenticated users; the result is visible to everyone.
+Create a new (non-seed) event type. Available to all authenticated users; the result is visible to everyone. This is what the in-app **"+ New"** tile drives (Home grid, the log picker, and any category drill-down) → the `/new?parent=<slug>` create screen.
 
 Request:
 ```json
@@ -100,12 +100,19 @@ Request:
   "icon": "Pill",
   "colorClass": "t-amber",
   "audience": "all",
+  "isCategory": false,
   "properties": [
     { "name": "Dose", "presetSlug": "dose-tablets", "required": true, "sortOrder": 1 },
     { "name": "With", "presetSlug": "with-food-single", "sortOrder": 2 }
   ]
 }
 ```
+
+- `name` and `icon` are required; missing/blank → `422 validation_failed`.
+- `parentSlug` optional — omit/null for a top-level type; unknown slug → 404.
+- `isCategory: true` makes a grouping node (no `properties`); leaves omit it / pass `false`.
+- `colorClass` and `audience` optional (`audience` defaults `"all"`); the create UI doesn't set `colorClass` today.
+- The slug is derived from `name`; a collision → `409 conflict` (the UI surfaces this inline).
 
 Response 201: the created event type with properties hydrated.
 

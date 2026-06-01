@@ -3,6 +3,7 @@ import RequireAuth from './components/RequireAuth.jsx'
 import Login from './pages/Login.jsx'
 import SetPassword from './pages/SetPassword.jsx'
 import Home from './pages/Home.jsx'
+import CreateTracker from './pages/CreateTracker.jsx'
 import Entry from './pages/Entry.jsx'
 import History from './pages/History.jsx'
 import Me from './pages/Me.jsx'
@@ -19,6 +20,14 @@ export default function App() {
         element={
           <RequireAuth>
             <Home />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/new"
+        element={
+          <RequireAuth>
+            <CreateTracker />
           </RequireAuth>
         }
       />

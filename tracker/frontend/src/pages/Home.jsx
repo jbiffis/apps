@@ -13,7 +13,7 @@ import BottomNav from '../components/BottomNav.jsx'
 import TrackerPickerSheet from '../components/TrackerPickerSheet.jsx'
 import ActionSheet from '../components/ActionSheet.jsx'
 import Toast from '../components/Toast.jsx'
-import { Sun, Logout, Plus, DynamicIcon } from '../icons/index.jsx'
+import { Sun, Logout, Plus, Close, DynamicIcon } from '../icons/index.jsx'
 
 const EMPTY = []
 
@@ -25,7 +25,8 @@ export default function Home() {
   const [sheet, setSheet] = useState(null)
   const [menuEntry, setMenuEntry] = useState(null)
   const [notice, setNotice] = useState(null)
-  const [order, setOrder] = useState(null) // slug[] while reordering the grid
+  const [order, setOrder] = useState(null) // slug[] of visible tiles while in edit mode
+  const [hiddenEdits, setHiddenEdits] = useState(() => new Map()) // slug -> hidden, optimistic during edit
 
   const hero = useApi('/home/hero')
   const today = useApi('/home/today')
@@ -73,12 +74,22 @@ export default function Home() {
       (a, b) => (so.has(a.slug) ? so.get(a.slug) : Infinity) - (so.has(b.slug) ? so.get(b.slug) : Infinity),
     )
   }, [visibleTree, prefs.data])
-  const nodeBySlug = useMemo(() => {
+  // Edit mode renders both visible and just-hidden tiles, so look up over the
+  // full top-level tree (visibleTree drops hidden ones).
+  const topBySlug = useMemo(() => {
     const m = {}
-    for (const n of visibleTree) m[n.slug] = n
+    for (const n of tree) m[n.slug] = n
     return m
-  }, [visibleTree])
+  }, [tree])
   const reordering = order != null
+  // Effective hidden state during edit mode (optimistic edits over server prefs).
+  const effHidden = (slug) => (hiddenEdits.has(slug) ? hiddenEdits.get(slug) : hidden.has(slug))
+  // Top-level loggable tiles the user has hidden — shown in the edit-mode tray.
+  const hiddenTiles = useMemo(
+    () => tree.filter((n) => !n.isCategory && effHidden(n.slug)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tree, hidden, hiddenEdits],
+  )
   // The today/logged-event payload's eventType carries only {slug, name};
   // resolve its icon from the catalog we already fetched.
   const iconBySlug = useMemo(() => {
@@ -108,14 +119,19 @@ export default function Home() {
   function openTile(node) {
     // Categories open the picker rooted at their children (sub-categories like
     // Eyes drill down further); leaves go straight to logging.
-    if (node.isCategory) setSheet({ key: node.slug, title: node.name, nodes: node.children || [] })
+    if (node.isCategory) setSheet({ key: node.slug, title: node.name, nodes: node.children || [], slug: node.slug })
     else logTracker(node.slug)
   }
   function openFab() {
-    setSheet({ key: 'all', title: 'Log something', nodes: visibleTree })
+    setSheet({ key: 'all', title: 'Log something', nodes: visibleTree, slug: '' })
+  }
+  function newThing(parentSlug) {
+    setSheet(null)
+    navigate(parentSlug ? `/new?parent=${encodeURIComponent(parentSlug)}` : '/new')
   }
 
-  function enterReorder() {
+  function enterEdit() {
+    setHiddenEdits(new Map())
     setOrder(orderedTree.map((n) => n.slug))
   }
   function moveTile(i, dir) {
@@ -127,9 +143,28 @@ export default function Home() {
       return next
     })
   }
+  // Hide a tile from the grid (still creatable/loggable via the Me tab) —
+  // optimistic, drops it from the working order and the persisted prefs.
+  function hideTile(slug) {
+    setHiddenEdits((prev) => new Map(prev).set(slug, true))
+    setOrder((prev) => prev.filter((s) => s !== slug))
+    api.put(`/me/tracker-prefs/${slug}`, { hidden: true }).catch(() => {
+      setHiddenEdits((prev) => new Map(prev).set(slug, false))
+      setOrder((prev) => (prev.includes(slug) ? prev : [...prev, slug]))
+    })
+  }
+  function showTile(slug) {
+    setHiddenEdits((prev) => new Map(prev).set(slug, false))
+    setOrder((prev) => (prev.includes(slug) ? prev : [...prev, slug]))
+    api.put(`/me/tracker-prefs/${slug}`, { hidden: false }).catch(() => {
+      setHiddenEdits((prev) => new Map(prev).set(slug, true))
+      setOrder((prev) => prev.filter((s) => s !== slug))
+    })
+  }
   async function saveOrder() {
     const slugs = order
     setOrder(null)
+    setHiddenEdits(new Map())
     try {
       await Promise.all(slugs.map((slug, i) => api.put(`/me/tracker-prefs/${slug}`, { sortOrder: i })))
       prefs.reload()
@@ -204,15 +239,19 @@ export default function Home() {
           <p className="font-body text-[13px] text-ink-3">Loading…</p>
         ) : reordering ? (
           <>
-            <p className="font-body text-[11px] text-ink-3">Use ◀ ▶ to reorder, then tap Done.</p>
+            <p className="font-body text-[11px] text-ink-3">Use ◀ ▶ to reorder, ✕ to hide, then tap Done.</p>
             <div className="grid grid-cols-4 gap-3">
               {order.map((slug, i) => {
-                const node = nodeBySlug[slug]
+                const node = topBySlug[slug]
                 if (!node) return null
                 return (
                   <div key={slug} className="flex flex-col items-center gap-1">
-                    <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border-2 border-accent bg-surface text-ink-2">
+                    <span className="relative grid h-[54px] w-[54px] place-items-center rounded-2xl border-2 border-accent bg-surface text-ink-2">
                       <DynamicIcon name={node.icon} size={24} />
+                      <button onClick={() => hideTile(slug)} aria-label={`Hide ${node.name}`}
+                        className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-warn text-white shadow">
+                        <Close size={12} />
+                      </button>
                     </span>
                     <div className="flex items-center gap-1">
                       <button onClick={() => moveTile(i, -1)} disabled={i === 0} aria-label="Move left"
@@ -224,12 +263,34 @@ export default function Home() {
                 )
               })}
             </div>
+            {hiddenTiles.length > 0 && (
+              <div className="mt-4 space-y-2 rounded-2xl border border-line bg-surface-2 p-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">Hidden ({hiddenTiles.length})</p>
+                <div className="grid grid-cols-4 gap-3">
+                  {hiddenTiles.map((node) => (
+                    <button key={node.slug} onClick={() => showTile(node.slug)} aria-label={`Restore ${node.name}`}
+                      className="flex flex-col items-center gap-1">
+                      <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-dashed border-line bg-bg text-ink-3 opacity-60">
+                        <DynamicIcon name={node.icon} size={24} />
+                      </span>
+                      <span className="w-full truncate text-center font-body text-[11px] text-ink-3">{node.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="grid grid-cols-4 gap-3">
             {orderedTree.map((node) => (
-              <TrackerTile key={node.slug} node={node} onOpen={() => openTile(node)} onLongPress={enterReorder} />
+              <TrackerTile key={node.slug} node={node} onOpen={() => openTile(node)} onLongPress={enterEdit} />
             ))}
+            <button onClick={() => newThing('')} className="flex select-none flex-col items-center gap-1.5">
+              <span className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-dashed border-accent bg-surface text-accent">
+                <Plus size={24} />
+              </span>
+              <span className="w-full truncate text-center font-body text-[11px] text-accent">New</span>
+            </button>
           </div>
         )}
       </section>
@@ -270,8 +331,10 @@ export default function Home() {
           key={sheet.key}
           rootTitle={sheet.title}
           rootNodes={sheet.nodes}
+          rootSlug={sheet.slug}
           hidden={hidden}
           onPick={logTracker}
+          onNew={newThing}
           onClose={() => setSheet(null)}
         />
       )}

@@ -223,6 +223,14 @@ export const icons = {
   Meditation, Weight, Heart, Clock, Music, Sun, Pin, Sparkle, Logout, Settings,
 }
 
+// Content icons a user can assign to a tracker/category they create. Excludes
+// UI chrome (Back, Close, Chevron, Plus, Menu, Logout, Settings, Stats, Home).
+export const pickableIconNames = [
+  'Pill', 'Water', 'Sleep', 'Mood', 'Steps', 'Workout', 'Coffee', 'Food',
+  'Journal', 'Meditation', 'Weight', 'Heart', 'Clock', 'Music', 'Pin',
+  'Sparkle', 'Sun', 'Bell', 'User',
+]
+
 // Look up an icon by its stored name (event_types.icon). Falls back to a
 // neutral mark so an unknown name never crashes a screen.
 export function DynamicIcon({ name, fallback = 'Sparkle', ...rest }) {

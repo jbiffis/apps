@@ -324,7 +324,11 @@ Underway 2026-05-21. Building the deferred backlog epic-by-epic.
 - **2d — Long-press reorder 🟢** — frontend-only (reuses V6 `sort_order` + `PUT /me/tracker-prefs/{slug}`). Long-press a Home "All trackers" tile → reorder mode; ◀ ▶ move tiles, **Done** persists `sortOrder` for each; the grid sorts by saved order (stable, unset keep catalog order). Used ◀▶ moves rather than touch drag-and-drop (a hand-rolled touch DnD can't be verified headless). "Create categories" from that backlog bullet is deferred (separate feature).
 - **2e — Stats tab 🟢** — Backend `GET /api/stats?days=N` (`StatsService`/`StatsController`): per-tracker totals + a daily activity series (UTC-day buckets via two native aggregate queries on live rows) + current/longest streaks computed from the day set. `pages/Stats.jsx` (Stats nav tab): summary cards (entries / current streak / best streak), a 12-week activity **heatmap** (CSS grid, accent-opacity tiers), and a "Most logged" bar list. Suite 39 green (`StatsControllerTest`). Day buckets are UTC (documented) — slight skew vs the client's local-day grouping elsewhere.
 
-**Phase 2 complete (2a–2e), 2026-05-21.** All five backlog items shipped to `main`. Remaining out-of-scope items below (notifications, sharing, goals, smart suggestions, "create categories") are untouched.
+**Phase 2 complete (2a–2e), 2026-05-21.** All five backlog items shipped to `main`. Remaining out-of-scope items below (notifications, sharing, goals, smart suggestions) are untouched.
+
+## Phase 3
+
+- **User-created trackers + categories 🟢 (2026-06-01)** — users build their own things to log. Backend already supported it (`POST /event-types` creates trackers *and* categories with properties; per-user hide via `PUT /me/tracker-prefs/{slug}`), so this was mostly frontend. New `pages/CreateTracker.jsx` at `/new?parent=<slug>`: Tracker|Category toggle, name, **icon picker** (curated `pickableIconNames` set), and a tracker-only **fields builder** (pick one of the 28 presets, name it, mark required, reorder ▲▼, remove). Submits to `POST /event-types`; 409 (duplicate name) surfaces inline. **"+ New" tiles** added to the Home top-level grid and the `TrackerPickerSheet` (creates inside the level you're viewing — `rootSlug` threads the parent). Home long-press **edit mode** reworked: tiles now carry a ✕ **hide** badge alongside ◀▶ move, plus a **"Hidden (n)" tray** to restore — hide/restore write `{hidden}` to tracker-prefs optimistically, **Done** persists `sortOrder`. Everything created is **global** (shared with all users) for now; per-user ownership is deferred, and *hide* is the forward-compatible escape hatch (also still available per-leaf in the Me tab). No schema change. `CatalogControllerTest` extended (top-level tracker, category, tracker-with-properties, duplicate 409, missing name/icon 422). **Deferred:** color picker (the stored `colorClass` isn't rendered anywhere yet, so a picker would be invisible), true drag-and-drop, audience/gender in the form (defaults `all`), and any UI to globally delete a shared tracker (hide-only — restore from the Me tab).
 
 ## Out of scope (Phase 2+)
 
@@ -332,7 +336,7 @@ Logged here so they don't get sneaked in:
 
 - Stats tab (charts, streaks, heatmaps, correlations)
 - Me tab (profile, hide/show trackers, export to CSV/JSON)
-- Long-press to drag/reorder home tiles, create categories
+- True touch drag-and-drop reorder (we ship ◀▶ move instead)
 - Smart suggestions / time-of-day pinning
 - Notifications / reminders
 - Sharing / read-only doctor link
