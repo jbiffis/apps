@@ -107,7 +107,7 @@ function Stage({ onLogout }: { onLogout: () => void }) {
   async function handleReset() {
     if (
       !confirm(
-        'Reset all votes to zero? Use this between sets. Songs stay on the list.',
+        'Reset all requests to zero? Use this between sets. Songs stay on the list.',
       )
     )
       return
@@ -115,12 +115,12 @@ function Stage({ onLogout }: { onLogout: () => void }) {
     setResetMsg('')
     try {
       const count = await resetVotes()
-      setResetMsg(`Cleared votes on ${count} ${count === 1 ? 'song' : 'songs'}.`)
+      setResetMsg(`Cleared requests on ${count} ${count === 1 ? 'song' : 'songs'}.`)
       if (songs) patch(songs.map((s) => ({ ...s, votes: 0, voted: false })))
       reload()
       setTimeout(() => setResetMsg(''), 3500)
     } catch {
-      setResetMsg('Could not reset votes.')
+      setResetMsg('Could not reset requests.')
     } finally {
       setResetting(false)
     }
@@ -160,7 +160,7 @@ function Stage({ onLogout }: { onLogout: () => void }) {
           }}
         >
           <Stat label="Setlist" value={list.length} />
-          <Stat label="Votes" value={totalVotes} accent />
+          <Stat label="Requests" value={totalVotes} accent />
           <Stat label="Top" value={maxVotes} accent />
         </div>
 
@@ -183,7 +183,7 @@ function Stage({ onLogout }: { onLogout: () => void }) {
             className="btn"
             style={{ justifyContent: 'center', padding: '14px 16px' }}
           >
-            <Icon name="reset" size={16} /> {resetting ? 'Resetting…' : 'Reset votes'}
+            <Icon name="reset" size={16} /> {resetting ? 'Resetting…' : 'Reset requests'}
           </button>
         </div>
 
