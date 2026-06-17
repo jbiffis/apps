@@ -352,10 +352,10 @@ export default function Audience() {
                     rotation={voted ? 135 : -135}
                     on={voted}
                     showTicks
-                    label={voted ? 'UNDO' : 'VOTE'}
+                    label={voted ? 'UNDO' : 'REQUEST'}
                     onClick={() => handleVote(s)}
                     disabled={isPending}
-                    aria-label={voted ? `Remove vote for ${s.title}` : `Vote for ${s.title}`}
+                    aria-label={voted ? `Remove request for ${s.title}` : `Request ${s.title}`}
                   >
                     {voted ? <Icon name="check" size={14} stroke="#1a0f08" /> : null}
                   </Knob>

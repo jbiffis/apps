@@ -13,6 +13,7 @@ export type IconName =
   | 'reset'
   | 'logout'
   | 'edit'
+  | 'shuffle'
 
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName
@@ -115,6 +116,12 @@ export default function Icon({
         <svg {...common}>
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
           <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+        </svg>
+      )
+    case 'shuffle':
+      return (
+        <svg {...common}>
+          <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
         </svg>
       )
     default:
