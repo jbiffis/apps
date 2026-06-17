@@ -88,7 +88,7 @@ export default function QrModal({ url, onClose }: QrModalProps) {
           </button>
         </div>
         <h2 className="serif" style={{ fontSize: 22, color: 'var(--cream)', textAlign: 'center' }}>
-          Scan to vote
+          Scan to request
         </h2>
 
         <div
@@ -104,7 +104,7 @@ export default function QrModal({ url, onClose }: QrModalProps) {
           {pngUrl ? (
             <img
               src={pngUrl}
-              alt="QR code linking to the vote page"
+              alt="QR code linking to the request page"
               style={{ display: 'block', width: 240, height: 240 }}
             />
           ) : (

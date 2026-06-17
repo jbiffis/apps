@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import AddSongForm from '../components/AddSongForm'
 import AppHeader from '../components/AppHeader'
 import Icon from '../components/Icon'
@@ -8,6 +8,10 @@ import VuMeter from '../components/VuMeter'
 import { useSongs } from '../hooks/useSongs'
 import { addSong, deleteSong, resetVotes, updateSong } from '../lib/api'
 import { clearAdminPassword, getAdminPassword } from '../lib/auth'
+
+type SortKey = 'votes' | 'title' | 'artist'
+interface SortState { key: SortKey; dir: 'asc' | 'desc' }
+const DEFAULT_SORT: SortState = { key: 'votes', dir: 'desc' }
 
 export default function Musician() {
   const [unlocked, setUnlocked] = useState(() => Boolean(getAdminPassword()))
@@ -26,6 +30,9 @@ function Stage({ onLogout }: { onLogout: () => void }) {
   const [qrOpen, setQrOpen] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [resetMsg, setResetMsg] = useState('')
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT)
+  const [randomId, setRandomId] = useState<string | null>(null)
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const voteUrl = `${window.location.origin}/dreamworld/vote`
   const list = songs ?? []
@@ -37,6 +44,40 @@ function Stage({ onLogout }: { onLogout: () => void }) {
     () => list.reduce((sum, s) => sum + s.votes, 0),
     [list],
   )
+
+  const sorted = useMemo(() => {
+    const factor = sort.dir === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => {
+      if (sort.key === 'votes') {
+        if (a.votes === b.votes) return a.title.localeCompare(b.title)
+        return (a.votes - b.votes) * factor
+      }
+      if (sort.key === 'title') return a.title.localeCompare(b.title) * factor
+      return a.artist.localeCompare(b.artist) * factor
+    })
+  }, [list, sort])
+
+  const randomSong = useMemo(
+    () => list.find((s) => s.id === randomId) ?? null,
+    [list, randomId],
+  )
+
+  function toggleSort(key: SortKey) {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, dir: key === 'votes' ? 'desc' : 'asc' }
+      return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+    })
+  }
+
+  function handleRandom() {
+    if (list.length === 0) return
+    const pick = list[Math.floor(Math.random() * list.length)]
+    setRandomId(pick.id)
+    // Scroll the chosen row into view once it has been highlighted.
+    requestAnimationFrame(() => {
+      rowRefs.current[pick.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
 
   async function handleAdd(title: string, artist: string) {
     const created = await addSong(title, artist)
@@ -66,7 +107,7 @@ function Stage({ onLogout }: { onLogout: () => void }) {
   async function handleReset() {
     if (
       !confirm(
-        'Reset all votes to zero? Use this between sets. Songs stay on the list.',
+        'Reset all requests to zero? Use this between sets. Songs stay on the list.',
       )
     )
       return
@@ -74,12 +115,12 @@ function Stage({ onLogout }: { onLogout: () => void }) {
     setResetMsg('')
     try {
       const count = await resetVotes()
-      setResetMsg(`Cleared votes on ${count} ${count === 1 ? 'song' : 'songs'}.`)
+      setResetMsg(`Cleared requests on ${count} ${count === 1 ? 'song' : 'songs'}.`)
       if (songs) patch(songs.map((s) => ({ ...s, votes: 0, voted: false })))
       reload()
       setTimeout(() => setResetMsg(''), 3500)
     } catch {
-      setResetMsg('Could not reset votes.')
+      setResetMsg('Could not reset requests.')
     } finally {
       setResetting(false)
     }
@@ -119,7 +160,7 @@ function Stage({ onLogout }: { onLogout: () => void }) {
           }}
         >
           <Stat label="Setlist" value={list.length} />
-          <Stat label="Votes" value={totalVotes} accent />
+          <Stat label="Requests" value={totalVotes} accent />
           <Stat label="Top" value={maxVotes} accent />
         </div>
 
@@ -142,9 +183,75 @@ function Stage({ onLogout }: { onLogout: () => void }) {
             className="btn"
             style={{ justifyContent: 'center', padding: '14px 16px' }}
           >
-            <Icon name="reset" size={16} /> {resetting ? 'Resetting…' : 'Reset votes'}
+            <Icon name="reset" size={16} /> {resetting ? 'Resetting…' : 'Reset requests'}
           </button>
         </div>
+
+        {/* Random pick */}
+        <button
+          type="button"
+          onClick={handleRandom}
+          disabled={list.length === 0}
+          className="btn"
+          style={{ justifyContent: 'center', padding: '14px 16px' }}
+        >
+          <Icon name="shuffle" size={16} /> Pick a random song
+        </button>
+        {randomSong && (
+          <div
+            className="panel"
+            style={{
+              padding: '12px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              borderColor: 'var(--orange)',
+              boxShadow: '0 0 14px var(--orange-glow)',
+            }}
+          >
+            <Icon name="shuffle" size={18} stroke="var(--orange-bright)" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="label-cap" style={{ color: 'var(--orange-bright)' }}>
+                Random pick
+              </div>
+              <div
+                className="serif"
+                style={{
+                  fontSize: 18,
+                  color: 'var(--cream)',
+                  lineHeight: 1.15,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {randomSong.title}
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'rgba(244,229,200,0.55)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {randomSong.artist}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRandomId(null)}
+              className="btn btn-ghost"
+              style={{ padding: '6px 8px', flexShrink: 0 }}
+              aria-label="Clear random pick"
+              title="Clear"
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        )}
         {resetMsg && (
           <div
             className="panel"
@@ -170,7 +277,7 @@ function Stage({ onLogout }: { onLogout: () => void }) {
               justifyContent: 'space-between',
             }}
           >
-            <span className="label-cap">Setlist · sorted by votes</span>
+            <span className="label-cap">Setlist</span>
             {error && (
               <span
                 style={{ fontSize: 11, color: 'var(--orange-bright)', fontWeight: 700 }}
@@ -180,12 +287,54 @@ function Stage({ onLogout }: { onLogout: () => void }) {
             )}
           </div>
 
+          {/* Sort row */}
+          <div style={{ display: 'flex', gap: 5 }}>
+            {(
+              [
+                { key: 'votes', label: 'Requests' },
+                { key: 'title', label: 'Title' },
+                { key: 'artist', label: 'Artist' },
+              ] as { key: SortKey; label: string }[]
+            ).map((opt) => {
+              const active = sort.key === opt.key
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => toggleSort(opt.key)}
+                  className="btn"
+                  style={{
+                    flex: 1,
+                    justifyContent: 'center',
+                    padding: '7px 8px',
+                    background: active
+                      ? 'linear-gradient(180deg, var(--orange-bright) 0%, var(--orange) 100%)'
+                      : 'transparent',
+                    color: active ? '#1a0d04' : 'var(--cream)',
+                    borderColor: active ? 'rgba(0,0,0,0.4)' : 'var(--panel-edge)',
+                    boxShadow: active ? '0 2px 0 rgba(0,0,0,0.5)' : 'none',
+                    fontSize: 11,
+                    gap: 4,
+                  }}
+                >
+                  {opt.label}
+                  {active && (
+                    <Icon
+                      name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'}
+                      size={11}
+                    />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
           {songs === undefined && <SkeletonRows />}
 
           {songs && songs.length === 0 && <EmptySetlist />}
 
           {songs &&
-            songs.map((s) => (
+            sorted.map((s) => (
               <SongRow
                 key={s.id}
                 id={s.id}
@@ -193,6 +342,8 @@ function Stage({ onLogout }: { onLogout: () => void }) {
                 artist={s.artist}
                 votes={s.votes}
                 maxVotes={maxVotes || 1}
+                highlight={s.id === randomId}
+                setRef={(el) => { rowRefs.current[s.id] = el }}
                 onDelete={() => handleDelete(s.id, s.title)}
                 onEdit={async (title, artist) => {
                   const updated = await updateSong(s.id, title, artist)
@@ -243,6 +394,8 @@ function SongRow({
   artist,
   votes,
   maxVotes,
+  highlight = false,
+  setRef,
   onDelete,
   onEdit,
 }: {
@@ -251,6 +404,8 @@ function SongRow({
   artist: string
   votes: number
   maxVotes: number
+  highlight?: boolean
+  setRef?: (el: HTMLDivElement | null) => void
   onDelete: () => void
   onEdit: (title: string, artist: string) => Promise<void>
 }) {
@@ -320,7 +475,15 @@ function SongRow({
   }
 
   return (
-    <div className="panel" style={{ padding: '12px 14px' }}>
+    <div
+      ref={setRef}
+      className="panel"
+      style={{
+        padding: '12px 14px',
+        borderColor: highlight ? 'var(--orange)' : undefined,
+        boxShadow: highlight ? '0 0 14px var(--orange-glow)' : undefined,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div

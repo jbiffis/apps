@@ -119,7 +119,7 @@ export default function Audience() {
 
   return (
     <div style={{ minHeight: '100svh', maxWidth: 560, margin: '0 auto' }}>
-      <AppHeader subtitle="Vote your favorites" />
+      <AppHeader subtitle="Request your favorites" />
 
       <main style={{ padding: '10px 12px 72px', display: 'grid', gap: 8 }}>
 
@@ -217,7 +217,7 @@ export default function Audience() {
               <div style={{ display: 'flex', gap: 5 }}>
                 {(
                   [
-                    { key: 'votes', label: 'Votes' },
+                    { key: 'votes', label: 'Requests' },
                     { key: 'title', label: 'Title' },
                     { key: 'artist', label: 'Artist' },
                   ] as { key: SortKey; label: string }[]
@@ -352,10 +352,10 @@ export default function Audience() {
                     rotation={voted ? 135 : -135}
                     on={voted}
                     showTicks
-                    label={voted ? 'UNDO' : 'VOTE'}
+                    label={voted ? 'UNDO' : 'REQUEST'}
                     onClick={() => handleVote(s)}
                     disabled={isPending}
-                    aria-label={voted ? `Remove vote for ${s.title}` : `Vote for ${s.title}`}
+                    aria-label={voted ? `Remove request for ${s.title}` : `Request ${s.title}`}
                   >
                     {voted ? <Icon name="check" size={14} stroke="#1a0f08" /> : null}
                   </Knob>
@@ -376,7 +376,7 @@ export default function Audience() {
               margin: 0,
             }}
           >
-            Tap again to remove a vote
+            Tap again to remove a request
           </p>
         )}
       </main>
