@@ -7,6 +7,7 @@ services:
       # User data volumes — must remain bind mounts (runtime-written, not in git)
       - /var/lib/docker/volumes/apps/beer:/var/www/data/beer
       - /var/lib/docker/volumes/apps/dreamworld:/var/www/data/dreamworld
+      - /var/lib/docker/volumes/apps/golf:/var/www/data/golf
       # Apache proxy confs — bind-mounted so conf changes don't need an image rebuild.
       # These are small text files that are reliably present in the Komodo repo clone.
       - ./webapp-proxy.conf:/etc/apache2/conf-enabled/webapp-proxy.conf:ro
