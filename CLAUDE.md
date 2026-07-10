@@ -53,7 +53,12 @@ assets/JS libraries; charts and the round map are inline SVG).
     per device by cross-checking the msg 191 summary total)
   - msg **191** round summary (player, front/back/total score, total putts)
   - msg **194** shot-by-shot GPS; msg **18/20** activity session + GPS/HR track
-- `_ui.php` — shared page chrome, score badges, inline SVG scorecard/map/HR charts.
+- `_ui.php` — shared page chrome, score badges, inline SVG scorecard + heart-rate
+  charts, and the round map. The map uses **Leaflet** (vendored locally at
+  `golf/vendor/leaflet/`, not a CDN) over an aerial tile layer (Esri World
+  Imagery, with an OpenStreetMap street toggle); the track/shots/pins are
+  overlaid as vectors. Only the map tiles are fetched externally, by the
+  viewer's browser at view time — the app itself needs no outbound network.
 - `index.php` — dashboard (aggregate stats, scoring trend, round list, upload).
 - `upload.php` — validates + parses uploaded `.FIT` files, persists a round.
 - `round.php` — single-round detail (scorecard, activity, map, raw messages).

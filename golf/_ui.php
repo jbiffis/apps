@@ -72,6 +72,8 @@ function golf_head(string $title, string $active = ''): void { ?>
   .dropzone{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;background:var(--fair)}
   .dropzone input[type=file]{margin:10px 0}
   svg{max-width:100%;height:auto;display:block}
+  .round-map{height:440px;width:100%;border-radius:12px;overflow:hidden;z-index:0}
+  .round-map .leaflet-container{background:#dcece0}
   .scroll{overflow-x:auto}
   .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:.75em;color:var(--muted);margin-top:8px}
   .legend span{display:inline-flex;align-items:center;gap:4px}
@@ -140,65 +142,90 @@ function render_scorecard(array $sc, int $tz): void {
 }
 
 /**
- * Render an inline SVG of the round: GPS walk track (if any), shot lines,
- * and pin positions. Pure geometry, no external tiles.
+ * Render an interactive Leaflet map of the round over aerial/street tiles,
+ * with the GPS walk track, shot lines, and pin positions overlaid. Leaflet is
+ * vendored locally (golf/vendor/leaflet); only the map tiles are fetched from
+ * an external tile server by the viewer's browser.
  */
-function render_map(?array $track, array $shots, array $holes, int $w=820, int $hgt=560): void {
-    // collect points for bounds
-    $pts = [];
-    if ($track) foreach ($track as $p) if ($p[0]!==null) $pts[] = [$p[0],$p[1]];
-    foreach ($shots as $s){ if($s['slat']!==null)$pts[]=[$s['slat'],$s['slon']]; if($s['elat']!==null)$pts[]=[$s['elat'],$s['elon']]; }
-    foreach ($holes as $h){ if(($h['pin_lat']??null)!==null)$pts[]=[$h['pin_lat'],$h['pin_lon']]; }
-    if (count($pts) < 2){ echo '<p class="muted">No GPS coordinates in this round.</p>'; return; }
+function render_map(?array $track, array $shots, array $holes, int $hgt=440): void {
+    // overlay geometry
+    $trackPts = [];
+    if ($track) foreach ($track as $p) if ($p[0]!==null && $p[1]!==null) $trackPts[] = [$p[0],$p[1]];
+    $shotArr = [];
+    foreach ($shots as $s) {
+        if ($s['slat']===null && $s['elat']===null) continue;
+        $shotArr[] = ['s'=>[$s['slat'],$s['slon']], 'e'=>[$s['elat'],$s['elon']], 'h'=>$s['hole']];
+    }
+    $pinArr = [];
+    foreach ($holes as $h) {
+        if (($h['pin_lat']??null)===null) continue;
+        $pinArr[] = ['ll'=>[$h['pin_lat'],$h['pin_lon']], 'h'=>$h['number'], 'par'=>$h['par']];
+    }
 
-    // Robust bounds: trim a small percentile off each end so a few stray GPS
-    // fixes don't blow up the scale. Points outside the box are clipped by the
-    // SVG viewport. Fall back to min/max for small point sets.
-    $lats=array_column($pts,0); $lons=array_column($pts,1);
+    // Bounds: prefer clean course features (pins + shots); fall back to track.
+    // Trim a small percentile so a few stray GPS fixes don't zoom the map out.
+    $bpts = [];
+    foreach ($pinArr as $p) $bpts[] = $p['ll'];
+    foreach ($shotArr as $s){ if($s['s'][0]!==null)$bpts[]=$s['s']; if($s['e'][0]!==null)$bpts[]=$s['e']; }
+    if (count($bpts) < 2) $bpts = $trackPts;
+    if (count($bpts) < 2){ echo '<p class="muted">No GPS coordinates in this round.</p>'; return; }
+
+    $lats=array_column($bpts,0); $lons=array_column($bpts,1);
     sort($lats); sort($lons);
-    $pct=function(array $a,float $p){ $i=(int)round($p*(count($a)-1)); return $a[max(0,min(count($a)-1,$i))]; };
-    if (count($pts) >= 40) {
-        $minLat=$pct($lats,0.02);$maxLat=$pct($lats,0.98);
-        $minLon=$pct($lons,0.02);$maxLon=$pct($lons,0.98);
-    } else {
-        $minLat=min($lats);$maxLat=max($lats);$minLon=min($lons);$maxLon=max($lons);
-    }
-    $midLat=($minLat+$maxLat)/2; $kx=cos(deg2rad($midLat));
-    $pad=28;
-    $spanX=max(($maxLon-$minLon)*$kx, 1e-6); $spanY=max($maxLat-$minLat,1e-6);
-    $scale=min(($w-2*$pad)/$spanX, ($hgt-2*$pad)/$spanY);
-    $ox=($w-$spanX*$scale)/2; $oy=($hgt-$spanY*$scale)/2;
-    $px=function($lat,$lon) use($minLon,$maxLat,$kx,$scale,$ox,$oy){
-        return [ $ox+($lon-$minLon)*$kx*$scale, $oy+($maxLat-$lat)*$scale ];
-    };
+    $pct=function(array $a,float $p){ return $a[max(0,min(count($a)-1,(int)round($p*(count($a)-1))))]; };
+    $trim = count($bpts) >= 40;
+    $bounds = [
+        [$trim?$pct($lats,0.02):min($lats), $trim?$pct($lons,0.02):min($lons)],
+        [$trim?$pct($lats,0.98):max($lats), $trim?$pct($lons,0.98):max($lons)],
+    ];
 
-    echo '<svg viewBox="0 0 '.$w.' '.$hgt.'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Round map">';
-    echo '<rect width="'.$w.'" height="'.$hgt.'" rx="12" fill="#dcece0"/>';
-    // walk track
-    if ($track){
-        $d=''; $started=false;
-        foreach($track as $p){ if($p[0]===null)continue; [$x,$y]=$px($p[0],$p[1]); $d.=($started?'L':'M').round($x,1).' '.round($y,1).' '; $started=true; }
-        if($d) echo '<path d="'.$d.'" fill="none" stroke="#3f8f5c" stroke-width="2" stroke-opacity=".55" stroke-linejoin="round"/>';
-    }
-    // shots
-    foreach($shots as $s){
-        if($s['slat']===null||$s['elat']===null)continue;
-        [$x1,$y1]=$px($s['slat'],$s['slon']); [$x2,$y2]=$px($s['elat'],$s['elon']);
-        echo '<line x1="'.round($x1,1).'" y1="'.round($y1,1).'" x2="'.round($x2,1).'" y2="'.round($y2,1).'" stroke="#c0392b" stroke-width="1.6" stroke-opacity=".8"/>';
-        echo '<circle cx="'.round($x1,1).'" cy="'.round($y1,1).'" r="2.4" fill="#c0392b"/>';
-    }
-    // pins
-    foreach($holes as $h){
-        if(($h['pin_lat']??null)===null)continue;
-        [$x,$y]=$px($h['pin_lat'],$h['pin_lon']);
-        echo '<circle cx="'.round($x,1).'" cy="'.round($y,1).'" r="3.2" fill="#1f5d33" stroke="#fff" stroke-width="1"/>';
-        echo '<text x="'.round($x+5,1).'" y="'.round($y+3,1).'" font-size="9" fill="#14401f">'.($h['number']??'').'</text>';
-    }
-    echo '</svg>';
+    $json = json_encode(
+        ['track'=>$trackPts, 'shots'=>$shotArr, 'pins'=>$pinArr, 'bounds'=>$bounds],
+        JSON_UNESCAPED_SLASHES
+    );
+    $id = 'gmap_' . substr(md5($json), 0, 8);
+
+    echo '<link rel="stylesheet" href="vendor/leaflet/leaflet.css">';
+    echo '<div id="'.$id.'" class="round-map"></div>';
+    echo '<script type="application/json" id="'.$id.'-data">'.$json.'</script>';
+    echo '<script src="vendor/leaflet/leaflet.js"></script>';
+    ?>
+    <script>
+    (function(){
+      var id = <?= json_encode($id) ?>;
+      var data = JSON.parse(document.getElementById(id + '-data').textContent);
+      var map = L.map(id, {scrollWheelZoom:false});
+      var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {maxZoom:20, maxNativeZoom:19, attribution:'Imagery &copy; Esri'});
+      var street = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {maxZoom:19, attribution:'&copy; OpenStreetMap'});
+      sat.addTo(map);
+      L.control.layers({'Satellite':sat, 'Street':street}, null, {collapsed:true}).addTo(map);
+
+      if (data.track && data.track.length > 1) {
+        L.polyline(data.track, {color:'#f2ff00', weight:2, opacity:.55}).addTo(map);
+      }
+      (data.shots||[]).forEach(function(s){
+        if (s.s[0]!=null && s.e[0]!=null)
+          L.polyline([s.s, s.e], {color:'#ff3b30', weight:2, opacity:.9}).addTo(map);
+        if (s.s[0]!=null)
+          L.circleMarker(s.s, {radius:3, weight:0, fillColor:'#ff3b30', fillOpacity:1}).addTo(map);
+      });
+      (data.pins||[]).forEach(function(p){
+        L.circleMarker(p.ll, {radius:5, color:'#fff', weight:2, fillColor:'#18a145', fillOpacity:1})
+          .bindTooltip('Hole ' + p.h + (p.par ? ' &middot; par ' + p.par : ''), {direction:'top'})
+          .addTo(map);
+      });
+      map.fitBounds(data.bounds, {padding:[20,20]});
+      setTimeout(function(){ map.invalidateSize(); map.fitBounds(data.bounds, {padding:[20,20]}); }, 60);
+    })();
+    </script>
+    <?php
     echo '<div class="legend">'
-        .'<span><i class="dot" style="background:#3f8f5c"></i>Walk track</span>'
-        .'<span><i class="dot" style="background:#c0392b"></i>Shots</span>'
-        .'<span><i class="dot" style="background:#1f5d33"></i>Pins</span></div>';
+        .'<span><i class="dot" style="background:#f2ff00;border:1px solid #999"></i>Walk track</span>'
+        .'<span><i class="dot" style="background:#ff3b30"></i>Shots</span>'
+        .'<span><i class="dot" style="background:#18a145"></i>Pins</span>'
+        .'<span class="muted">Tiles load in your browser (needs internet).</span></div>';
 }
 
 /** Inline SVG heart-rate area chart from the activity track. */
