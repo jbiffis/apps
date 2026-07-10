@@ -15,8 +15,8 @@ COPY tracker-proxy.conf /etc/apache2/conf-enabled/tracker-proxy.conf
 RUN echo "expose_php = Off" > /usr/local/etc/php/conf.d/security.ini
 
 # Create data directories outside web root
-RUN mkdir -p /var/www/data/beer /var/www/data/dreamworld \
- && chown www-data:www-data /var/www/data/beer /var/www/data/dreamworld
+RUN mkdir -p /var/www/data/beer /var/www/data/dreamworld /var/www/data/golf/rounds \
+ && chown -R www-data:www-data /var/www/data/beer /var/www/data/dreamworld /var/www/data/golf
 
 # Copy all webapp folders into the web root
 COPY . /var/www/html/
