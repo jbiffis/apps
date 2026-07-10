@@ -16,9 +16,21 @@ Connect account required).
   shot locations: numbered markers at each shot's start point, shot lines,
   your walked GPS track, and the pin position. Shot list with club and
   distance in yards.
+- **Shot-by-shot view** — Garmin-style *drawn* hole map (flat vector
+  rendering, no satellite imagery) built from OpenStreetMap course polygons:
+  fairways, greens, bunkers, tees, water and trees. Step through each shot
+  with distance bubbles on every segment, see its lie (tee/fairway/rough/
+  bunker/green — detected by point-in-polygon against the course map) and its
+  result (fairway hit, missed left/right, short), **reassign the club**, or
+  **delete phantom shots** the watch invented (AutoShot loves fake putts).
+  Course geometry is fetched from the Overpass API automatically on import
+  and cached in the database; a retry button appears if the download failed.
 - **Club stats** — per-club average / median / longest distance, left–right
   miss percentages measured against the shot→pin target line, short/long
-  distribution for approach shots, and a dispersion scatter plot.
+  distribution for approach shots, and a dispersion scatter plot. When the
+  course is mapped on OSM, tee shots on par 4/5s also get true **driving
+  accuracy**: % fairways hit and a breakdown of misses (left/right/short/
+  bunker/water) measured against the actual fairway polygons.
 - **Bag** — the watch only records opaque club IDs; name them once here
   (Driver, 7 Iron, …) and every screen uses your names.
 - **Watch sync (experimental)** — direct BLE link to the watch speaking the
@@ -91,10 +103,13 @@ standard `session`/`record` messages are read with the same code.
 ```
 app/src/main/java/dev/jbiffis/caddie/
   fit/    FitReader.kt (generic decoder), GolfFit.kt (golf messages)
-  data/   Db.kt (Room), Repository.kt (import + miss geometry)
+  data/   Db.kt (Room), Repository.kt (import + miss geometry),
+          Lie.kt (point-in-polygon lie detection, fairway miss classifier),
+          Overpass.kt (OpenStreetMap course geometry fetch)
   ble/    Cobs.kt, Crc16.kt, Gfdi.kt (protocol), GarminBleClient.kt (GATT)
-  ui/     Rounds, Scorecard, Hole (map), Stats, Clubs, Sync screens (Compose)
-app/src/test/  parser + framing tests using the real sample files
+  ui/     Rounds, Scorecard, Hole (satellite map), ShotMap (drawn hole view),
+          Stats, Clubs, Sync screens (Compose)
+app/src/test/  parser + framing + lie-detection tests (real sample files)
 ```
 
 ## Known limitations / next steps

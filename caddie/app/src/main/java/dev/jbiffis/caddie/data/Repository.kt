@@ -82,6 +82,10 @@ class Repository(private val dao: CaddieDao) {
         val matched = pendingActivities.filter { overlaps(score.startedAtS, it) }
         for (activity in matched) attach(roundId, activity)
         pendingActivities.removeAll(matched)
+        // Best-effort: grab the course polygons from OpenStreetMap for lie
+        // detection and the drawn hole map. Failure is fine — there is a
+        // manual retry button on the shot view.
+        runCatching { downloadCourseFeatures(roundId) }
         return ImportResult.NewRound(roundId, score.courseName, score.totalScore)
     }
 
@@ -108,6 +112,28 @@ class Repository(private val dao: CaddieDao) {
     }
 
     private fun defaultClubName(clubId: Long) = "Club ${clubId % 1000}"
+
+    /**
+     * Fetch golf course polygons from OpenStreetMap covering everywhere this
+     * round was played. Returns the number of features stored.
+     */
+    suspend fun downloadCourseFeatures(roundId: Long): Int {
+        val shots = dao.shotsList(roundId)
+        val holes = dao.holesList(roundId)
+        val lats = shots.flatMap { listOf(it.startLat, it.endLat) } + holes.mapNotNull { it.pinLat }
+        val lons = shots.flatMap { listOf(it.startLon, it.endLon) } + holes.mapNotNull { it.pinLon }
+        if (lats.isEmpty()) return 0
+        val padLat = 300.0 / 111320.0
+        val padLon = padLat / kotlin.math.cos(Math.toRadians(lats.average()))
+        val features = Overpass.fetchCourseFeatures(
+            south = lats.min() - padLat,
+            west = lons.min() - padLon,
+            north = lats.max() + padLat,
+            east = lons.max() + padLon,
+        )
+        dao.replaceFeatures(roundId, features.map { CourseFeatureEntity.encode(roundId, it) })
+        return features.size
+    }
 
     companion object {
         const val M_TO_YD = 1.0936133

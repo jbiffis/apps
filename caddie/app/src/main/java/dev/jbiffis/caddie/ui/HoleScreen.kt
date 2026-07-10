@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,7 +57,13 @@ private val SatelliteTiles = object : OnlineTileSourceBase(
 }
 
 @Composable
-fun HoleScreen(app: CaddieApp, roundId: Long, hole: Int, onNavigateHole: (Int) -> Unit) {
+fun HoleScreen(
+    app: CaddieApp,
+    roundId: Long,
+    hole: Int,
+    onNavigateHole: (Int) -> Unit,
+    onOpenShotView: (hole: Int, shot: Int) -> Unit,
+) {
     val dao = app.db.dao()
     val round by dao.round(roundId).collectAsState(initial = null)
     val holes by dao.holes(roundId).collectAsState(initial = emptyList())
@@ -103,7 +110,11 @@ fun HoleScreen(app: CaddieApp, roundId: Long, hole: Int, onNavigateHole: (Int) -
             }
         }
         holeInfo?.let { h ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     "Score ${h.strokes} (${toParString(h.strokes, h.par)})" +
                         (h.putts?.let { "  ·  $it putts" } ?: ""),
@@ -111,6 +122,9 @@ fun HoleScreen(app: CaddieApp, roundId: Long, hole: Int, onNavigateHole: (Int) -
                     color = scoreColor(h.strokes, h.par) ?: MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                 )
+                androidx.compose.material3.TextButton(onClick = { onOpenShotView(hole, 0) }) {
+                    Text("Shot view")
+                }
             }
         }
 
@@ -184,11 +198,15 @@ fun HoleScreen(app: CaddieApp, roundId: Long, hole: Int, onNavigateHole: (Int) -
             },
         )
 
-        // Shot list
+        // Shot list — tap a row to open the drawn shot-by-shot view
         LazyColumn(Modifier.fillMaxWidth().height(140.dp)) {
             items(shots.size) { i ->
                 val shot = shots[i]
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable { onOpenShotView(hole, i) }
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
                     Text("${i + 1}.", Modifier.padding(end = 8.dp), fontWeight = FontWeight.Bold)
                     Text(
                         clubNames[shot.clubId] ?: if (shot.clubId == 0L) "Putt / no club" else "Club ${shot.clubId}",

@@ -85,6 +85,36 @@ data class TrackPointEntity(
     val heartRate: Int?,
 )
 
+@Entity(tableName = "course_features", indices = [Index("roundId")])
+data class CourseFeatureEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val roundId: Long,
+    val type: String,      // Lie.Type name
+    val holeRef: Int?,     // OSM ref tag = hole number, when mapped
+    val points: String,    // "lat,lon;lat,lon;..."
+) {
+    fun decode(): CourseFeature? {
+        val type = runCatching { Lie.Type.valueOf(type) }.getOrNull() ?: return null
+        val pts = points.split(';').mapNotNull { pair ->
+            val comma = pair.indexOf(',')
+            if (comma <= 0) return@mapNotNull null
+            val lat = pair.substring(0, comma).toDoubleOrNull() ?: return@mapNotNull null
+            val lon = pair.substring(comma + 1).toDoubleOrNull() ?: return@mapNotNull null
+            lat to lon
+        }
+        return if (pts.size >= 3) CourseFeature(type, holeRef, pts) else null
+    }
+
+    companion object {
+        fun encode(roundId: Long, f: CourseFeature) = CourseFeatureEntity(
+            roundId = roundId,
+            type = f.type.name,
+            holeRef = f.holeRef,
+            points = f.points.joinToString(";") { "${it.first},${it.second}" },
+        )
+    }
+}
+
 data class ClubDistanceRow(
     val clubId: Long,
     val shots: Int,
@@ -139,6 +169,18 @@ interface CaddieDao {
     @Query("SELECT * FROM holes")
     fun allHoles(): Flow<List<HoleEntity>>
 
+    @Query("DELETE FROM shots WHERE id = :shotId")
+    suspend fun deleteShot(shotId: Long)
+
+    @Query("UPDATE shots SET clubId = :clubId WHERE id = :shotId")
+    suspend fun updateShotClub(shotId: Long, clubId: Long)
+
+    @Query("SELECT * FROM shots WHERE roundId = :roundId ORDER BY hole, timeS")
+    suspend fun shotsList(roundId: Long): List<ShotEntity>
+
+    @Query("SELECT * FROM holes WHERE roundId = :roundId ORDER BY hole")
+    suspend fun holesList(roundId: Long): List<HoleEntity>
+
     @Insert
     suspend fun insertTrackPoints(points: List<TrackPointEntity>)
 
@@ -171,11 +213,34 @@ interface CaddieDao {
     )
     fun clubDistances(minDistanceM: Double = 10.0): Flow<List<ClubDistanceRow>>
 
+    // Course features (OpenStreetMap polygons)
+    @Query("SELECT * FROM course_features WHERE roundId = :roundId")
+    fun features(roundId: Long): Flow<List<CourseFeatureEntity>>
+
+    @Query("SELECT * FROM course_features")
+    fun allFeatures(): Flow<List<CourseFeatureEntity>>
+
+    @Query("SELECT COUNT(*) FROM course_features WHERE roundId = :roundId")
+    suspend fun featureCount(roundId: Long): Int
+
+    @Insert
+    suspend fun insertFeatures(features: List<CourseFeatureEntity>)
+
+    @Query("DELETE FROM course_features WHERE roundId = :roundId")
+    suspend fun deleteFeatures(roundId: Long)
+
+    @Transaction
+    suspend fun replaceFeatures(roundId: Long, features: List<CourseFeatureEntity>) {
+        deleteFeatures(roundId)
+        insertFeatures(features)
+    }
+
     @Transaction
     suspend fun deleteRoundCascade(roundId: Long) {
         deleteHoles(roundId)
         deleteShots(roundId)
         deleteTrack(roundId)
+        deleteFeatures(roundId)
         deleteRound(roundId)
     }
 }
@@ -183,9 +248,9 @@ interface CaddieDao {
 @Database(
     entities = [
         RoundEntity::class, HoleEntity::class, ShotEntity::class,
-        ClubEntity::class, TrackPointEntity::class,
+        ClubEntity::class, TrackPointEntity::class, CourseFeatureEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class CaddieDb : RoomDatabase() {
@@ -196,6 +261,8 @@ abstract class CaddieDb : RoomDatabase() {
 
         fun get(context: Context): CaddieDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, CaddieDb::class.java, "caddie.db")
+                // Pre-1.0: rebuild on schema change; rounds can be re-imported from FIT files
+                .fallbackToDestructiveMigration()
                 .build()
                 .also { instance = it }
         }

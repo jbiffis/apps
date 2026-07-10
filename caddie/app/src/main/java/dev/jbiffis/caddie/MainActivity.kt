@@ -28,6 +28,7 @@ import dev.jbiffis.caddie.ui.ClubsScreen
 import dev.jbiffis.caddie.ui.HoleScreen
 import dev.jbiffis.caddie.ui.RoundsScreen
 import dev.jbiffis.caddie.ui.ScorecardScreen
+import dev.jbiffis.caddie.ui.ShotMapScreen
 import dev.jbiffis.caddie.ui.StatsScreen
 import dev.jbiffis.caddie.ui.SyncScreen
 
@@ -92,12 +93,35 @@ class MainActivity : ComponentActivity() {
                                 navArgument("hole") { type = NavType.IntType },
                             ),
                         ) { entry ->
+                            val roundId = entry.arguments!!.getLong("roundId")
                             HoleScreen(
                                 app,
-                                entry.arguments!!.getLong("roundId"),
+                                roundId,
                                 entry.arguments!!.getInt("hole"),
                                 onNavigateHole = { h ->
-                                    nav.navigate("hole/${entry.arguments!!.getLong("roundId")}/$h") {
+                                    nav.navigate("hole/$roundId/$h") {
+                                        popUpTo("scorecard/{roundId}")
+                                    }
+                                },
+                                onOpenShotView = { h, shot -> nav.navigate("shotmap/$roundId/$h?shot=$shot") },
+                            )
+                        }
+                        composable(
+                            "shotmap/{roundId}/{hole}?shot={shot}",
+                            arguments = listOf(
+                                navArgument("roundId") { type = NavType.LongType },
+                                navArgument("hole") { type = NavType.IntType },
+                                navArgument("shot") { type = NavType.IntType; defaultValue = 0 },
+                            ),
+                        ) { entry ->
+                            val roundId = entry.arguments!!.getLong("roundId")
+                            ShotMapScreen(
+                                app,
+                                roundId,
+                                entry.arguments!!.getInt("hole"),
+                                entry.arguments!!.getInt("shot"),
+                                onNavigateHole = { h ->
+                                    nav.navigate("shotmap/$roundId/$h") {
                                         popUpTo("scorecard/{roundId}")
                                     }
                                 },

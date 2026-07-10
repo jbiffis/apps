@@ -41,6 +41,8 @@ private class ClubStat(
     val clubId: Long,
     val name: String,
     val samples: List<ShotSample>,
+    /** Tee shots on par 4/5 holes, classified against the actual fairway polygons. */
+    val driving: Map<dev.jbiffis.caddie.data.Lie.Miss, Int> = emptyMap(),
 ) {
     val count get() = samples.size
     val avgYd get() = samples.map { it.distanceM }.average() * M_TO_YD
@@ -64,8 +66,13 @@ fun StatsScreen(app: CaddieApp) {
     val shots by app.db.dao().allShots().collectAsState(initial = emptyList())
     val holes by app.db.dao().allHoles().collectAsState(initial = emptyList())
     val clubs by app.db.dao().clubs().collectAsState(initial = emptyList())
+    val featureEntities by app.db.dao().allFeatures().collectAsState(initial = emptyList())
 
-    val stats = remember(shots, holes, clubs) { computeStats(shots, holes, clubs.associate { it.clubId to it.name }) }
+    val stats = remember(shots, holes, clubs, featureEntities) {
+        val featuresByRound = featureEntities.groupBy({ it.roundId }, { it.decode() })
+            .mapValues { (_, v) -> v.filterNotNull() }
+        computeStats(shots, holes, clubs.associate { it.clubId to it.name }, featuresByRound)
+    }
 
     if (stats.isEmpty()) {
         Column(
@@ -101,9 +108,17 @@ private fun computeStats(
     shots: List<ShotEntity>,
     holes: List<HoleEntity>,
     clubNames: Map<Long, String>,
+    featuresByRound: Map<Long, List<dev.jbiffis.caddie.data.CourseFeature>>,
 ): List<ClubStat> {
     val pinByRoundHole = holes.associateBy({ it.roundId to it.hole }, { it })
     val samplesByClub = HashMap<Long, MutableList<ShotSample>>()
+    val drivingByClub = HashMap<Long, MutableMap<dev.jbiffis.caddie.data.Lie.Miss, Int>>()
+
+    // First tracked shot on each hole = the tee shot
+    val teeShotIds = shots.groupBy { it.roundId to it.hole }
+        .mapNotNull { (_, holeShots) -> holeShots.minByOrNull { it.timeS }?.id }
+        .toHashSet()
+
     for (shot in shots) {
         if (shot.clubId == 0L || shot.distanceM < MIN_SHOT_M) continue
         val hole = pinByRoundHole[shot.roundId to shot.hole]
@@ -119,12 +134,22 @@ private fun computeStats(
                     shot.startLat, shot.startLon, shot.endLat, shot.endLon, hole.pinLat, hole.pinLon,
                 )
             }
+            // Driving accuracy vs the mapped fairway (par 4/5 tee shots only)
+            val features = featuresByRound[shot.roundId].orEmpty()
+            if (shot.id in teeShotIds && (hole.par >= 4) && features.isNotEmpty()) {
+                val miss = dev.jbiffis.caddie.data.Lie.classifyMiss(
+                    shot.startLat, shot.startLon, shot.endLat, shot.endLon,
+                    hole.pinLat, hole.pinLon, features,
+                )
+                val bucket = drivingByClub.getOrPut(shot.clubId) { HashMap() }
+                bucket[miss] = (bucket[miss] ?: 0) + 1
+            }
         }
         samplesByClub.getOrPut(shot.clubId) { ArrayList() }
             .add(ShotSample(shot.distanceM, lateral, depth))
     }
     return samplesByClub.map { (clubId, samples) ->
-        ClubStat(clubId, clubNames[clubId] ?: "Club $clubId", samples)
+        ClubStat(clubId, clubNames[clubId] ?: "Club $clubId", samples, drivingByClub[clubId] ?: emptyMap())
     }.sortedByDescending { it.avgYd }
 }
 
@@ -146,6 +171,24 @@ private fun ClubCard(stat: ClubStat) {
                 MissCol("Left", stat.lefts, stat.count, Color(0xFFE57373))
                 MissCol("Straight", stat.straight, stat.count, Color(0xFF81C784))
                 MissCol("Right", stat.rights, stat.count, Color(0xFF64B5F6))
+            }
+            // Driving accuracy from the actual fairway polygons (OpenStreetMap)
+            val drives = stat.driving.values.sum()
+            if (drives > 0) {
+                val fw = stat.driving.filterKeys {
+                    it == dev.jbiffis.caddie.data.Lie.Miss.FAIRWAY || it == dev.jbiffis.caddie.data.Lie.Miss.GREEN
+                }.values.sum()
+                val parts = stat.driving.entries
+                    .filter { it.key != dev.jbiffis.caddie.data.Lie.Miss.FAIRWAY && it.key != dev.jbiffis.caddie.data.Lie.Miss.GREEN }
+                    .sortedByDescending { it.value }
+                    .joinToString(" · ") { "${it.value}× ${it.key.label.lowercase()}" }
+                Text(
+                    "Off the tee: ${100 * fw / drives}% fairway ($fw/$drives)" +
+                        (if (parts.isNotEmpty()) " — $parts" else ""),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             val depthSamples = stat.samples.mapNotNull { it.depthM }
             if (depthSamples.isNotEmpty()) {
