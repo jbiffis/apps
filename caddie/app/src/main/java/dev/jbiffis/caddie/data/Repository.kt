@@ -79,11 +79,9 @@ class Repository(private val dao: CaddieDao) {
             dao.insertClubIfMissing(ClubEntity(clubId, defaultClubName(clubId)))
         }
         // An activity imported earlier may belong to this round.
-        pendingActivities.removeAll { activity ->
-            if (overlaps(score.startedAtS, activity)) {
-                attach(roundId, activity); true
-            } else false
-        }
+        val matched = pendingActivities.filter { overlaps(score.startedAtS, it) }
+        for (activity in matched) attach(roundId, activity)
+        pendingActivities.removeAll(matched)
         return ImportResult.NewRound(roundId, score.courseName, score.totalScore)
     }
 
