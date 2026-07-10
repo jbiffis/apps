@@ -34,6 +34,18 @@ Easter beer order form for Dépanneur Rapido specials.
 
 Beer IDs are array indexes in `beers.php`. **Always append new beers to the end of the array** to avoid breaking existing orders that reference IDs.
 
+## Caddie App (`caddie/`)
+
+Native **Android** app (not PHP/Docker — it is not served by Apache and is
+excluded from the web deployment). A Garmin Golf alternative: parses golf FIT
+files from a Garmin watch (scorecard, hole maps with shot locations, club
+stats) and has an experimental direct-BLE sync (GFDI protocol). Kotlin +
+Compose + Room + osmdroid. Build with Android Studio or `./gradlew` inside
+`caddie/`. The undocumented golf FIT message layout is documented in
+`caddie/README.md` and in `caddie/app/src/main/java/dev/jbiffis/caddie/fit/GolfFit.kt`
+— keep those in sync if the format mapping changes. Real sample FIT files live
+in `caddie/app/src/main/assets/samples/` and are used by the unit tests.
+
 ## Book-Log App workflow
 
 When making changes to the `book-log/` app on behalf of the owner's daughter, after committing and pushing to the feature branch, also merge the feature branch into `main` and push `main` so the auto-deploy is triggered. Sequence: commit on feature branch → push feature branch → checkout main → pull → merge feature branch (no-ff) → push main → checkout feature branch.
