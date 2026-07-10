@@ -84,7 +84,8 @@ class MainActivity : ComponentActivity() {
                             arguments = listOf(navArgument("roundId") { type = NavType.LongType }),
                         ) { entry ->
                             val roundId = entry.arguments!!.getLong("roundId")
-                            ScorecardScreen(app, roundId) { hole -> nav.navigate("hole/$roundId/$hole") }
+                            // Drawn shot-by-shot view is the default hole view
+                            ScorecardScreen(app, roundId) { hole -> nav.navigate("shotmap/$roundId/$hole") }
                         }
                         composable(
                             "hole/{roundId}/{hole}",
@@ -125,6 +126,7 @@ class MainActivity : ComponentActivity() {
                                         popUpTo("scorecard/{roundId}")
                                     }
                                 },
+                                onOpenSatellite = { h -> nav.navigate("hole/$roundId/$h") },
                             )
                         }
                         composable("stats") { StatsScreen(app) }

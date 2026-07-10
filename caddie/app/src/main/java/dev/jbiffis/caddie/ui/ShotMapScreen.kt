@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
@@ -79,6 +80,7 @@ fun ShotMapScreen(
     hole: Int,
     initialShot: Int,
     onNavigateHole: (Int) -> Unit,
+    onOpenSatellite: (Int) -> Unit,
 ) {
     val dao = app.db.dao()
     val round by dao.round(roundId).collectAsState(initial = null)
@@ -100,6 +102,29 @@ fun ShotMapScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var editClub by remember { mutableStateOf(false) }
     var fetchState by remember { mutableStateOf<String?>(null) }
+    var fetching by remember { mutableStateOf(false) }
+
+    fun fetchCourse() {
+        if (fetching) return
+        fetching = true
+        fetchState = "Downloading course map…"
+        scope.launch {
+            fetchState = try {
+                val n = withContext(Dispatchers.IO) { app.repository.downloadCourseFeatures(roundId) }
+                if (n == 0) "This course isn't mapped on OpenStreetMap yet" else null
+            } catch (e: Exception) {
+                "Course map download failed — tap to retry\n(${e.message?.take(90) ?: e.javaClass.simpleName})"
+            }
+            fetching = false
+        }
+    }
+
+    // Fetch the course polygons automatically the first time this round's
+    // shot view is opened (import may have failed offline / rate-limited).
+    LaunchedEffect(roundId) {
+        val stored = withContext(Dispatchers.IO) { dao.featureCount(roundId) }
+        if (stored == 0) fetchCourse()
+    }
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
@@ -113,19 +138,20 @@ fun ShotMapScreen(
             )
             if (features.isEmpty()) {
                 OutlinedButton(
-                    onClick = {
-                        fetchState = "Downloading course map…"
-                        scope.launch {
-                            fetchState = try {
-                                val n = withContext(Dispatchers.IO) { app.repository.downloadCourseFeatures(roundId) }
-                                if (n == 0) "This course isn't mapped on OpenStreetMap yet" else null
-                            } catch (e: Exception) {
-                                "Download failed: ${e.message?.take(60)}"
-                            }
-                        }
-                    },
+                    onClick = { fetchCourse() },
+                    enabled = !fetching,
                     modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
                 ) { Text(fetchState ?: "Download course map (OpenStreetMap)") }
+            }
+            IconButton(
+                onClick = { onOpenSatellite(hole) },
+                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Layers,
+                    contentDescription = "Satellite view",
+                    tint = Color.White,
+                )
             }
         }
 
