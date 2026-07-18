@@ -50,12 +50,28 @@ Two ways:
    Importing the SCORE file alone is enough for the scorecard, shots and club
    stats; the ACTIVITY file adds the walked track and heart rate.
 
-2. **Bluetooth sync (experimental).** *Watch* tab → scan → tap your watch →
-   *List golf files*. The GFDI transport layer (COBS, CRC, framing, ANT-FS
-   directory parsing, file download state machine) is implemented, but modern
-   Garmin firmware may demand an encrypted auth handshake that isn't
-   implemented yet. The screen logs every frame so the protocol can be
-   iterated against a real watch. File import is the reliable fallback.
+2. **Bluetooth sync (direct, no Garmin Connect).** For dropping Garmin
+   Connect entirely. A watch holds a single phone pairing, so this is
+   mutually exclusive with the Connect app:
+
+   1. In the Garmin Connect app, remove the watch (or uninstall Connect).
+   2. In Android *Settings → Bluetooth*, forget the watch.
+   3. On the watch, *Settings → Phone → Pair Phone* (pairing mode).
+   4. Caddie *Watch* tab → *Scan for watch* → tap it. Android and the watch
+      show their pairing prompts; confirm both.
+
+   Caddie then runs the GFDI handshake (device-info exchange, configuration,
+   pair events on first connect, sync-ready), downloads the ANT-FS file
+   directory, and pulls every golf SCORE/ACTIVITY file it hasn't seen before,
+   importing each automatically. After the one-time pairing, later syncs are
+   just *Scan → tap → Sync new golf files*; already-downloaded files are
+   skipped.
+
+   Every GFDI frame is logged on the Watch tab with a **share button** (top
+   right). If a sync stalls — most likely because your firmware demands
+   Garmin's encrypted auth handshake (`MSG_AUTH_NEGOTIATION`, not yet
+   implemented), which the log flags with a ⚠ — share that log so support for
+   it can be added. File import is always available as a fallback.
 
 ## Building
 
@@ -114,9 +130,10 @@ app/src/test/  parser + framing + lie-detection tests (real sample files)
 
 ## Known limitations / next steps
 
-- BLE auth: newer Garmin firmware negotiates an encrypted session (GFDI
-  message 5051). Until that's implemented, syncing may stop after the initial
-  handshake on some watches — use file import.
+- BLE auth: some Garmin firmware negotiates an encrypted session
+  (`MSG_AUTH_NEGOTIATION`). That handshake isn't implemented; on those watches
+  the sync stops right after the device-info exchange and the log shows a ⚠
+  auth line. Share the log and it can be added. File import always works.
 - Club IDs come from the watch; if you re-order your bag in Garmin Golf the
   IDs stay stable, but a new club gets a new ID you'll need to name.
 - Multi-player scorecards: only player 0 (you) is imported.

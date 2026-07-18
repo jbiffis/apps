@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -22,8 +23,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -102,7 +107,6 @@ fun SyncScreen(app: CaddieApp) {
         scanning = true
     }
 
-    // Stop scanning when leaving the screen
     DisposableEffect(Unit) { onDispose { stopScan() } }
     LaunchedEffect(scanning) {
         if (scanning) {
@@ -112,11 +116,27 @@ fun SyncScreen(app: CaddieApp) {
     }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Text("Watch sync (experimental)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Watch sync",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            IconButton(onClick = {
+                val share = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "Caddie sync log")
+                    putExtra(Intent.EXTRA_TEXT, client.exportLog())
+                }
+                context.startActivity(Intent.createChooser(share, "Share sync log"))
+            }) { Icon(Icons.Filled.Share, contentDescription = "Share log") }
+        }
         Text(
-            "Connects straight to your Garmin watch over Bluetooth — no Garmin Connect. " +
-                "Pair the watch in Android Bluetooth settings first. If your firmware requires " +
-                "Garmin's encrypted handshake the log below will show it; file import always works as a fallback.",
+            "One-time setup: the watch can hold ONE phone pairing. Remove it from the " +
+                "Garmin Connect app, forget it in Android Bluetooth settings, then put the " +
+                "watch in pairing mode (Settings → Phone) and scan here. After pairing once, " +
+                "connect + sync pulls new golf files automatically.",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(vertical = 8.dp),
         )
@@ -137,13 +157,20 @@ fun SyncScreen(app: CaddieApp) {
                 }
                 GarminBleClient.State.READY, GarminBleClient.State.SYNCING -> {
                     Button(onClick = { client.startSync() }, enabled = state == GarminBleClient.State.READY) {
-                        Text("List golf files")
+                        Text("Sync new golf files")
                     }
                     OutlinedButton(onClick = { client.disconnect() }) { Text("Disconnect") }
                 }
                 else -> OutlinedButton(onClick = { client.disconnect() }) { Text("Cancel") }
             }
-            Text(state.name.lowercase(), style = MaterialTheme.typography.labelMedium)
+            Text(
+                when (state) {
+                    GarminBleClient.State.BONDING -> "pairing…"
+                    GarminBleClient.State.HANDSHAKE -> "handshake…"
+                    else -> state.name.lowercase()
+                },
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
 
         if (state == GarminBleClient.State.DISCONNECTED && devices.isNotEmpty()) {
@@ -163,7 +190,11 @@ fun SyncScreen(app: CaddieApp) {
         }
 
         if (directory.isNotEmpty()) {
-            Text("Golf files on watch", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                "Golf files on watch (tap to re-download)",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp),
+            )
             LazyColumn(Modifier.heightIn(max = 160.dp)) {
                 items(directory, key = { it.index }) { entry ->
                     Card(
@@ -172,7 +203,8 @@ fun SyncScreen(app: CaddieApp) {
                     ) {
                         Row(Modifier.padding(12.dp)) {
                             Text(
-                                if (entry.subType == 38) "Scorecard #${entry.number}" else "Activity #${entry.number}",
+                                if (entry.subType == GarminBleClient.SUBTYPE_GOLF_SCORE)
+                                    "Scorecard #${entry.number}" else "Activity #${entry.number}",
                                 Modifier.weight(1f),
                             )
                             Text("${entry.size / 1024} KB", style = MaterialTheme.typography.labelSmall)
@@ -182,7 +214,7 @@ fun SyncScreen(app: CaddieApp) {
             }
         }
 
-        // Protocol log
+        // Protocol log — share it if a sync stalls so the handshake can be fixed
         val listState = rememberLazyListState()
         LaunchedEffect(log.size) { if (log.isNotEmpty()) listState.animateScrollToItem(log.size - 1) }
         Card(Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)) {

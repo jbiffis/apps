@@ -11,7 +11,9 @@ class CaddieApp : Application() {
     val db by lazy { CaddieDb.get(this) }
     val repository by lazy { Repository(db.dao()) }
     val bleClient by lazy {
-        GarminBleClient(this) { _, bytes -> repository.importFit(bytes) }
+        GarminBleClient(this, getSharedPreferences("ble_sync", MODE_PRIVATE)) { _, bytes ->
+            repository.importFit(bytes)
+        }
     }
 
     override fun onCreate() {
