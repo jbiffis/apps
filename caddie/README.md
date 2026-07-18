@@ -39,21 +39,9 @@ Connect account required).
 
 ## Getting data in
 
-Three ways:
+Two ways:
 
-1. **Garmin Connect cloud sync (recommended).** Keep the watch paired with the
-   Garmin Connect app as usual. In Caddie's *Watch* tab, sign in with your
-   Garmin account: Caddie talks to Garmin's cloud (same SSO → OAuth1 → OAuth2
-   flow as the `garth` library) and pulls golf scorecards + shot locations
-   from the golf-community API, plus the original ACTIVITY .fit (GPS track)
-   from the download service. No Bluetooth conflict, nothing to plug in.
-   Notes: two-factor Garmin accounts aren't supported yet; cloud scorecards
-   are JSON (Garmin consumes the SCORE .fit at upload), so course
-   rating/slope and per-hole pin positions come through only partially — pins
-   are approximated from where your final putt finished, and hole pars fall
-   back to "–" if Garmin's response omits them.
-
-2. **File import.** Plug the watch into a computer (or use the
+1. **File import (works today).** Plug the watch into a computer (or use the
    watch's USB mass storage via OTG) and grab:
    - `GARMIN/Scorecards/SCORE_*.fit` — scorecard, hole info, shots, clubs
    - `GARMIN/Activity/*.fit` — the matching golf activity (GPS track, HR)
@@ -62,9 +50,7 @@ Three ways:
    Importing the SCORE file alone is enough for the scorecard, shots and club
    stats; the ACTIVITY file adds the walked track and heart rate.
 
-3. **Bluetooth sync (experimental).** Only possible if the watch is NOT
-   paired with Garmin Connect (a watch holds one BLE host at a time — this is
-   the same constraint Gadgetbridge has). *Watch* tab → scan → tap your watch →
+2. **Bluetooth sync (experimental).** *Watch* tab → scan → tap your watch →
    *List golf files*. The GFDI transport layer (COBS, CRC, framing, ANT-FS
    directory parsing, file download state machine) is implemented, but modern
    Garmin firmware may demand an encrypted auth handshake that isn't
@@ -120,8 +106,6 @@ app/src/main/java/dev/jbiffis/caddie/
   data/   Db.kt (Room), Repository.kt (import + miss geometry),
           Lie.kt (point-in-polygon lie detection, fairway miss classifier),
           Overpass.kt (OpenStreetMap course geometry fetch)
-  data/garmin/  GarminAuth.kt (SSO/OAuth), GarminClient.kt (Connect API),
-          GarminGolfImport.kt (cloud scorecard JSON → Room)
   ble/    Cobs.kt, Crc16.kt, Gfdi.kt (protocol), GarminBleClient.kt (GATT)
   ui/     Rounds, Scorecard, Hole (satellite map), ShotMap (drawn hole view),
           Stats, Clubs, Sync screens (Compose)

@@ -16,7 +16,7 @@ fun formatTime(unixS: Long): String =
     SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(unixS * 1000))
 
 fun toParString(score: Int, par: Int): String = when {
-    score == 0 || par <= 0 -> "–"
+    score == 0 -> "–"
     score == par -> "E"
     score > par -> "+${score - par}"
     else -> "${score - par}"
