@@ -111,14 +111,26 @@ fun SyncScreen(app: CaddieApp) {
         }
     }
 
+    val gcLog = remember { mutableStateListOf<String>() }
+    val appendLog: (String) -> Unit = { line ->
+        gcLog.add(line)
+        if (gcLog.size > 300) gcLog.removeAt(0)
+    }
+
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Text("Watch sync (experimental)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        GarminConnectSection(app, appendLog)
+
         Text(
-            "Connects straight to your Garmin watch over Bluetooth — no Garmin Connect. " +
-                "Pair the watch in Android Bluetooth settings first. If your firmware requires " +
-                "Garmin's encrypted handshake the log below will show it; file import always works as a fallback.",
+            "Direct Bluetooth (experimental)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Text(
+            "Talks straight to the watch — only works if the watch is NOT paired with " +
+                "Garmin Connect. Prefer the cloud sync above.",
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(vertical = 6.dp),
         )
 
         if (!hasPermission) {
@@ -182,13 +194,14 @@ fun SyncScreen(app: CaddieApp) {
             }
         }
 
-        // Protocol log
+        // Combined sync + BLE protocol log
+        val combined = gcLog.toList() + log
         val listState = rememberLazyListState()
-        LaunchedEffect(log.size) { if (log.isNotEmpty()) listState.animateScrollToItem(log.size - 1) }
+        LaunchedEffect(combined.size) { if (combined.isNotEmpty()) listState.animateScrollToItem(combined.size - 1) }
         Card(Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)) {
             LazyColumn(state = listState, modifier = Modifier.padding(8.dp)) {
-                items(log.size) { i ->
-                    Text(log[i], fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                items(combined.size) { i ->
+                    Text(combined[i], fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
             }
         }
