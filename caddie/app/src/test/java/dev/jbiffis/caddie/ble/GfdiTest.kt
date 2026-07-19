@@ -109,6 +109,27 @@ class GfdiTest {
     }
 
     @Test
+    fun parsesAndAcksProtobufRequest() {
+        // Real 5043 payload captured from the vivoactive 5
+        val payload = byteArrayOf(
+            0xe6.toByte(), 0x02, 0, 0, 0, 0, 4, 0, 0, 0, 4, 0, 0, 0, 0x6a, 0x02, 0x72, 0,
+        )
+        val req = Gfdi.parseProtobufRequest(payload)!!
+        assertEquals(742, req.requestId)
+        assertEquals(0L, req.dataOffset)
+        assertEquals(4L, req.totalLength)
+
+        val ack = Gfdi.parse(Gfdi.protobufAck(req.requestId, req.dataOffset))!!
+        assertEquals(Gfdi.MSG_RESPONSE, ack.id)
+        val r = Gfdi.parseResponse(ack.payload)!!
+        assertEquals(Gfdi.MSG_PROTOBUF_REQUEST, r.requestId) // 5043
+        assertEquals(Gfdi.STATUS_ACK, r.status)
+        // extra = requestId(2) + dataOffset(4) + chunkStatus(1) + statusCode(1)
+        assertEquals(8, r.extra.size)
+        assertEquals(742, (r.extra[0].toInt() and 0xFF) or ((r.extra[1].toInt() and 0xFF) shl 8))
+    }
+
+    @Test
     fun systemEventFrames() {
         val msg = Gfdi.parse(Gfdi.systemEvent(Gfdi.EVENT_SYNC_READY))!!
         assertEquals(Gfdi.MSG_SYSTEM_EVENT, msg.id)

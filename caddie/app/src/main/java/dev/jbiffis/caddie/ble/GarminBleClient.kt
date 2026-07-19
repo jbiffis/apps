@@ -385,8 +385,15 @@ class GarminBleClient(
                 responses.trySend(r)
             }
             Gfdi.MSG_FILE_TRANSFER_DATA -> {
-                // downloadFile() sends the acknowledgement (it carries the next offset)
+                // downloadFile() sends the acknowledgement (it advances the sequence)
                 Gfdi.parseDataTransfer(msg.payload, msg.rawType)?.let { dataChunks.trySend(it) }
+            }
+            Gfdi.MSG_PROTOBUF_REQUEST -> {
+                val req = Gfdi.parseProtobufRequest(msg.payload)
+                log("RX protobuf request id=${req?.requestId} offset=${req?.dataOffset} " +
+                    "len=${req?.totalLength} seq=${msg.seq}")
+                if (req != null) scope.launch { send(Gfdi.protobufAck(req.requestId, req.dataOffset)) }
+                else scope.launch { send(Gfdi.ack(msg.rawType)) }
             }
             Gfdi.MSG_DEVICE_INFORMATION -> {
                 val info = Gfdi.parseDeviceInformation(msg.payload)
@@ -458,6 +465,12 @@ class GarminBleClient(
     /** Wrap a GFDI message in COBS and send it over the registered GFDI handle. */
     private suspend fun send(gfdiPacket: ByteArray): Boolean {
         if (gfdiHandle < 0) { log("TX before GFDI handle assigned"); return false }
+        if (verboseRx && gfdiPacket.size >= 4) {
+            val type = (gfdiPacket[2].toInt() and 0xFF) or ((gfdiPacket[3].toInt() and 0xFF) shl 8)
+            val ref = if (type == Gfdi.MSG_RESPONSE && gfdiPacket.size >= 7)
+                " ref=0x${((gfdiPacket[4].toInt() and 0xFF) or ((gfdiPacket[5].toInt() and 0xFF) shl 8)).toString(16)}" else ""
+            log("  TX→ type=$type$ref (${gfdiPacket.size}b)")
+        }
         val encoded = Cobs.encode(gfdiPacket)
         val framed = ByteArray(encoded.size + 2)
         System.arraycopy(encoded, 0, framed, 1, encoded.size) // 0x00 … 0x00 delimiters
@@ -590,12 +603,14 @@ class GarminBleClient(
                 return if (out.size() > 0 && fileSize <= 0) out.toByteArray() else null
             }
             if (chunk.offset != out.size().toLong()) {
-                log("Offset mismatch: got ${chunk.offset}, have ${out.size()} — requesting resend")
-                send(Gfdi.dataTransferAck(chunk.ackType, out.size().toLong()))
+                // Duplicate/old chunk (e.g. a retransmit) — re-ack and wait for the next
+                log("Skipping chunk at ${chunk.offset} (have ${out.size()})")
+                send(Gfdi.ack(chunk.ackType))
                 continue
             }
             out.write(chunk.data)
-            send(Gfdi.dataTransferAck(chunk.ackType, out.size().toLong()))
+            // Status-ack this chunk to advance the device's send sequence
+            send(Gfdi.ack(chunk.ackType))
             if (out.size() - lastProgressLog >= 8192) {
                 lastProgressLog = out.size()
                 log("  …${out.size()}b")

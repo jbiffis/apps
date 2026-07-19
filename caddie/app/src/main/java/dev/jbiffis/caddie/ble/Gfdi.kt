@@ -215,6 +215,32 @@ object Gfdi {
     /** Simple ACK echoing the exact type field the watch sent. */
     fun ack(rawType: Int): ByteArray = response(rawType, STATUS_ACK)
 
+    class ProtobufRequest(val requestId: Int, val dataOffset: Long, val totalLength: Long, val data: ByteArray)
+
+    /** PROTOBUF_REQUEST payload: requestId u16, dataOffset u32, totalLength u32, protobuf bytes. */
+    fun parseProtobufRequest(payload: ByteArray): ProtobufRequest? {
+        if (payload.size < 10) return null
+        val buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
+        val requestId = buf.short.toInt() and 0xFFFF
+        val dataOffset = buf.int.toLong() and 0xFFFFFFFFL
+        val totalLength = buf.int.toLong() and 0xFFFFFFFFL
+        return ProtobufRequest(requestId, dataOffset, totalLength, payload.copyOfRange(10, payload.size))
+    }
+
+    /**
+     * ACK a PROTOBUF_REQUEST. A bare status ack is not enough — the watch needs a
+     * RESPONSE(5000) carrying the request id, data offset, chunk status (0 = kept)
+     * and protobuf status (0 = no error). Ported from garmin-ble's build_protobuf_ack.
+     */
+    fun protobufAck(requestId: Int, dataOffset: Long): ByteArray {
+        val extra = ByteBuffer.allocate(2 + 4 + 1 + 1).order(ByteOrder.LITTLE_ENDIAN)
+        extra.putShort(requestId.toShort())
+        extra.putInt(dataOffset.toInt())
+        extra.put(0) // protobuf chunk status = KEPT
+        extra.put(0) // protobuf status code = NO_ERROR
+        return response(MSG_PROTOBUF_REQUEST, STATUS_ACK, extra.array())
+    }
+
     // ---- Incoming payload parsers ----------------------------------------------
 
     class DataTransfer(val flags: Int, val crc: Int, val offset: Long, val data: ByteArray, val ackType: Int)
