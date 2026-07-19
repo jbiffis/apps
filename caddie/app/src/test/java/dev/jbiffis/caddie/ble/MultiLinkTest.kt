@@ -2,6 +2,7 @@ package dev.jbiffis.caddie.ble
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -73,6 +74,43 @@ class MultiLinkTest {
         val (handle, payload) = MultiLink.stripHandle(byteArrayOf(3, 9, 8, 7))!!
         assertEquals(3, handle)
         assertArrayEquals(byteArrayOf(9, 8, 7), payload)
+    }
+
+    @Test
+    fun reliableHeaderRoundTrips() {
+        // handle=5, reqNum=42, seq=17, some payload
+        val payload = byteArrayOf(1, 2, 3)
+        val packet = MultiLink.buildReliable(handle = 5, reqNum = 42, seq = 17, payload = payload)
+        assertTrue("bit7 must be set for MLR", MultiLink.isReliable(packet))
+        val parsed = MultiLink.parseReliable(packet)!!
+        assertEquals(5, parsed.handle)
+        assertEquals(42, parsed.reqNum)
+        assertEquals(17, parsed.seq)
+        assertArrayEquals(payload, parsed.payload)
+    }
+
+    @Test
+    fun reliableFieldsCoverFullRange() {
+        // reqNum and seq are each 6 bits (0..63); handle 0..7
+        for (h in 0..7) for (req in intArrayOf(0, 1, 42, 63)) for (seq in intArrayOf(0, 1, 63)) {
+            val p = MultiLink.parseReliable(MultiLink.buildReliable(h, req, seq, byteArrayOf(0xAB.toByte())))!!
+            assertEquals(h, p.handle); assertEquals(req, p.reqNum); assertEquals(seq, p.seq)
+        }
+    }
+
+    @Test
+    fun ackHasNoPayloadAndCarriesNextSeq() {
+        val ack = MultiLink.reliableAck(handle = 2, nextExpectedSeq = 7)
+        val p = MultiLink.parseReliable(ack)!!
+        assertEquals(2, p.handle)
+        assertEquals(7, p.reqNum)
+        assertEquals(0, p.payload.size)
+    }
+
+    @Test
+    fun plainMlNotMistakenForReliable() {
+        // Handle 5 plain-ML packet starts with 0x05 (bit7 clear)
+        assertFalse(MultiLink.isReliable(byteArrayOf(5, 0, 1, 2)))
     }
 
     @Test

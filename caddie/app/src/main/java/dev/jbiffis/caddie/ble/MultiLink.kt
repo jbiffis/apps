@@ -104,4 +104,43 @@ object MultiLink {
         if (packet.isEmpty()) return null
         return (packet[0].toInt() and 0xFF) to packet.copyOfRange(1, packet.size)
     }
+
+    // ---- Multi-Link Reliable (MLR) --------------------------------------------
+    // Reliable framing used for file transfer. 2-byte big-endian header:
+    //   byte0 = 1 HHH RRRR   (bit7 always set, HHH = handle, high 4 bits of reqNum)
+    //   byte1 = RR SSSSSS    (low 2 bits of reqNum, SSSSSS = 6-bit sequence)
+    // Data payload follows. An ACK is a header with the receiver's next expected
+    // sequence in reqNum and no payload.
+
+    const val MLR_SEQ_MODULO = 0x40
+
+    fun isReliable(packet: ByteArray): Boolean =
+        packet.isNotEmpty() && (packet[0].toInt() and 0x80) != 0
+
+    class MlrPacket(val handle: Int, val reqNum: Int, val seq: Int, val payload: ByteArray)
+
+    fun parseReliable(packet: ByteArray): MlrPacket? {
+        if (packet.size < 2 || (packet[0].toInt() and 0x80) == 0) return null
+        val b0 = packet[0].toInt() and 0xFF
+        val b1 = packet[1].toInt() and 0xFF
+        val handle = (b0 shr 4) and 0x07
+        val reqNum = ((b0 and 0x0F) shl 2) or (b1 shr 6)
+        val seq = b1 and 0x3F
+        return MlrPacket(handle, reqNum, seq, packet.copyOfRange(2, packet.size))
+    }
+
+    /** Build an MLR header (+optional payload). reqNum piggybacks our receive ack. */
+    fun buildReliable(handle: Int, reqNum: Int, seq: Int, payload: ByteArray = ByteArray(0)): ByteArray {
+        val b0 = 0x80 or ((handle and 0x07) shl 4) or ((reqNum shr 2) and 0x0F)
+        val b1 = ((reqNum and 0x03) shl 6) or (seq and 0x3F)
+        val out = ByteArray(2 + payload.size)
+        out[0] = b0.toByte()
+        out[1] = b1.toByte()
+        System.arraycopy(payload, 0, out, 2, payload.size)
+        return out
+    }
+
+    /** ACK all reliable packets received so far: header with reqNum = next expected seq, no data. */
+    fun reliableAck(handle: Int, nextExpectedSeq: Int): ByteArray =
+        buildReliable(handle, nextExpectedSeq, 0)
 }

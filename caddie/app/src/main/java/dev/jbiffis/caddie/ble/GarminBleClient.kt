@@ -85,7 +85,11 @@ class GarminBleClient(
     private var gfdiHandle = -1
     private val controlResponses = Channel<MultiLink.RegisterResponse>(Channel.BUFFERED)
 
-    private val rxBuffer = ByteArrayOutputStream()
+    // COBS reassembly buffer per multi-link handle (streams must not interleave)
+    private val rxBuffers = HashMap<Int, ByteArrayOutputStream>()
+    // Next expected receive sequence per reliable (MLR) handle
+    private val mlrRcvSeq = HashMap<Int, Int>()
+    private var verboseRx = false
     private val writeDone = Channel<Boolean>(Channel.CONFLATED)
     private val writeMutex = Mutex()
     private val responses = Channel<Gfdi.ResponseMsg>(Channel.BUFFERED)
@@ -177,7 +181,8 @@ class GarminBleClient(
         writeChar = null
         notifyChar = null
         gfdiHandle = -1
-        rxBuffer.reset()
+        rxBuffers.clear()
+        mlrRcvSeq.clear()
         _state.value = State.DISCONNECTED
         _directory.value = emptyList()
     }
@@ -312,31 +317,61 @@ class GarminBleClient(
     // ---- Frame RX --------------------------------------------------------------
 
     private fun onBytes(raw: ByteArray) {
-        // Every ML packet starts with a handle byte
+        if (raw.isEmpty()) return
+        if (verboseRx) log("  raw← ${Gfdi.hex(raw, 40)}")
+
+        // Reliable (MLR) framing: 2-byte header with bit7 set (used for file transfer)
+        if (MultiLink.isReliable(raw)) {
+            val m = MultiLink.parseReliable(raw) ?: return
+            val expected = mlrRcvSeq.getOrPut(m.handle) { 0 }
+            if (m.payload.isEmpty()) {
+                // Pure ACK (no data) — nothing to reassemble
+                if (verboseRx) log("  MLR ack handle=${m.handle} req=${m.reqNum}")
+                return
+            }
+            if (m.seq != expected) {
+                log("MLR handle=${m.handle} out-of-seq: got ${m.seq}, expected $expected — re-acking")
+                scope.launch { sendRaw(MultiLink.reliableAck(m.handle, expected)) }
+                return
+            }
+            val next = (expected + 1) % MultiLink.MLR_SEQ_MODULO
+            mlrRcvSeq[m.handle] = next
+            scope.launch { sendRaw(MultiLink.reliableAck(m.handle, next)) }
+            feedCobs(m.handle, m.payload)
+            return
+        }
+
+        // Plain ML: first byte is the handle
         val (handle, payload) = MultiLink.stripHandle(raw) ?: return
         if (handle == MultiLink.CONTROL_HANDLE) {
-            // Control-channel packets are raw (not COBS). But a GFDI COBS frame
-            // also begins with 0x00, so only treat it as control if it parses.
             MultiLink.parseControl(raw)?.let {
                 log("RX ML register-resp: service=${it.service} status=${it.status} handle=${it.handle}")
                 controlResponses.trySend(it)
                 return
             }
+            // Other control-channel traffic — log, don't feed to COBS
+            if (verboseRx) log("  control handle=0: ${Gfdi.hex(payload, 24)}")
+            return
         }
-        // Otherwise it's service data (GFDI) — feed the COBS reassembler
+        feedCobs(handle, payload)
+    }
+
+    /** Feed reassembled service bytes for [handle] into its COBS/GFDI decoder. */
+    private fun feedCobs(handle: Int, payload: ByteArray) {
+        val buffer = rxBuffers.getOrPut(handle) { ByteArrayOutputStream() }
         for (b in payload) {
             if (b.toInt() == 0) {
-                val packet = rxBuffer.toByteArray()
-                rxBuffer.reset()
+                val packet = buffer.toByteArray()
+                buffer.reset()
                 if (packet.isNotEmpty()) {
                     val decoded = Cobs.decode(packet)
-                    if (decoded == null) { log("RX framing error: ${Gfdi.hex(packet)}"); continue }
+                    if (decoded == null) { log("RX framing error (h$handle): ${Gfdi.hex(packet)}"); continue }
                     val msg = Gfdi.parse(decoded)
-                    if (msg == null) { log("RX bad GFDI packet: ${Gfdi.hex(decoded)}"); continue }
+                    if (msg == null) { log("RX bad GFDI (h$handle): ${Gfdi.hex(decoded, 40)}"); continue }
                     handleMessage(msg)
                 }
             } else {
-                rxBuffer.write(b.toInt())
+                buffer.write(b.toInt())
             }
         }
     }
@@ -396,7 +431,7 @@ class GarminBleClient(
                 scope.launch { send(Gfdi.response(msg.id, Gfdi.STATUS_ACK)) }
             }
             else -> {
-                log("RX unknown id=${msg.id}: ${Gfdi.hex(msg.payload)} — ACK")
+                log("RX unknown id=${msg.id}: ${Gfdi.hex(msg.payload, 48)} — ACK")
                 scope.launch { send(Gfdi.response(msg.id, Gfdi.STATUS_ACK)) }
             }
         }
@@ -465,6 +500,7 @@ class GarminBleClient(
         scope.launch {
             if (_state.value == State.SYNCING) return@launch
             _state.value = State.SYNCING
+            verboseRx = true // capture the raw file-transfer framing for diagnosis
             try {
                 send(Gfdi.directoryFilter())
                 awaitResponse(Gfdi.MSG_DIRECTORY_FILE_FILTER, 3000)
