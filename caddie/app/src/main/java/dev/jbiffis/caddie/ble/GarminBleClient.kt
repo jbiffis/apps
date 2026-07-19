@@ -385,15 +385,20 @@ class GarminBleClient(
                 responses.trySend(r)
             }
             Gfdi.MSG_FILE_TRANSFER_DATA -> {
-                Gfdi.parseDataTransfer(msg.payload)?.let { dataChunks.trySend(it) }
+                // downloadFile() sends the acknowledgement (it carries the next offset)
+                Gfdi.parseDataTransfer(msg.payload, msg.rawType)?.let { dataChunks.trySend(it) }
             }
             Gfdi.MSG_DEVICE_INFORMATION -> {
                 val info = Gfdi.parseDeviceInformation(msg.payload)
-                log("RX device info: ${info?.name ?: "?"} sw=${info?.softwareVersion} " +
-                    "proto=${info?.protocolVersion} maxPacket=${info?.maxPacketSize}")
+                log("RX device info: ${info?.name ?: "?"} sw=${info?.softwareVersion} seq=${msg.seq}")
                 scope.launch {
-                    send(Gfdi.deviceInformationResponse(unitNumber))
-                    completeHandshake()
+                    if (msg.sequenced) {
+                        // Re-sent during sync; just acknowledge and keep the session moving
+                        send(Gfdi.ack(msg.rawType))
+                    } else {
+                        send(Gfdi.deviceInformationResponse(unitNumber))
+                        completeHandshake()
+                    }
                 }
             }
             Gfdi.MSG_CURRENT_TIME_REQUEST -> {
@@ -403,36 +408,32 @@ class GarminBleClient(
             }
             Gfdi.MSG_SYSTEM_EVENT -> {
                 log("RX system event: ${Gfdi.hex(msg.payload, 8)}")
-                scope.launch { send(Gfdi.response(Gfdi.MSG_SYSTEM_EVENT, Gfdi.STATUS_ACK)) }
+                scope.launch { send(Gfdi.ack(msg.rawType)) }
             }
             Gfdi.MSG_FILE_READY -> {
                 log("RX file ready — the watch has new files")
                 scope.launch {
-                    send(Gfdi.response(Gfdi.MSG_FILE_READY, Gfdi.STATUS_ACK))
+                    send(Gfdi.ack(msg.rawType))
                     if (_state.value == State.READY) startSync()
                 }
             }
             Gfdi.MSG_SYNC_REQUEST -> {
                 log("RX sync request from watch")
                 scope.launch {
-                    send(Gfdi.response(Gfdi.MSG_SYNC_REQUEST, Gfdi.STATUS_ACK))
+                    send(Gfdi.ack(msg.rawType))
                     if (_state.value == State.READY) startSync()
                 }
             }
             Gfdi.MSG_AUTH_NEGOTIATION -> {
                 log("RX ⚠ AUTH NEGOTIATION (${Gfdi.hex(msg.payload)}) — encrypted auth not " +
                     "implemented yet. Export this log so support for it can be added.")
-                scope.launch { send(Gfdi.response(Gfdi.MSG_AUTH_NEGOTIATION, Gfdi.STATUS_UNSUPPORTED)) }
-            }
-            Gfdi.MSG_BATTERY_STATUS, Gfdi.MSG_DEVICE_SETTINGS, Gfdi.MSG_NOTIFICATION_SOURCE,
-            Gfdi.MSG_PROTOBUF_REQUEST, Gfdi.MSG_FIT_DEFINITION, Gfdi.MSG_FIT_DATA,
-            Gfdi.MSG_WEATHER_REQUEST -> {
-                log("RX id=${msg.id} (${msg.payload.size}b) — ACK: ${Gfdi.hex(msg.payload)}")
-                scope.launch { send(Gfdi.response(msg.id, Gfdi.STATUS_ACK)) }
+                scope.launch { send(Gfdi.response(msg.rawType, Gfdi.STATUS_UNSUPPORTED)) }
             }
             else -> {
-                log("RX unknown id=${msg.id}: ${Gfdi.hex(msg.payload, 48)} — ACK")
-                scope.launch { send(Gfdi.response(msg.id, Gfdi.STATUS_ACK)) }
+                // Configuration, protobuf request, fit definition, etc. — acknowledge
+                // so the watch advances its send sequence and proceeds to file data.
+                log("RX id=${msg.id} seq=${msg.seq} (${msg.payload.size}b) — ACK: ${Gfdi.hex(msg.payload, 32)}")
+                scope.launch { send(Gfdi.ack(msg.rawType)) }
             }
         }
     }
@@ -590,11 +591,11 @@ class GarminBleClient(
             }
             if (chunk.offset != out.size().toLong()) {
                 log("Offset mismatch: got ${chunk.offset}, have ${out.size()} — requesting resend")
-                send(Gfdi.dataTransferAck(out.size().toLong()))
+                send(Gfdi.dataTransferAck(chunk.ackType, out.size().toLong()))
                 continue
             }
             out.write(chunk.data)
-            send(Gfdi.dataTransferAck(out.size().toLong()))
+            send(Gfdi.dataTransferAck(chunk.ackType, out.size().toLong()))
             if (out.size() - lastProgressLog >= 8192) {
                 lastProgressLog = out.size()
                 log("  …${out.size()}b")

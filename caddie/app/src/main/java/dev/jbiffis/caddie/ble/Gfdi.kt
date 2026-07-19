@@ -60,8 +60,15 @@ object Gfdi {
 
     const val FIT_EPOCH_OFFSET_S = 631065600L
 
-    class Message(val id: Int, val payload: ByteArray) {
-        override fun toString() = "GFDI(id=$id, ${payload.size}b)"
+    /**
+     * @param id       decoded message type (e.g. 5004)
+     * @param rawType  the on-wire type field; for device-initiated messages this
+     *                 carries a sequence number and must be echoed back in the ACK
+     * @param seq      device message sequence (0-127), or -1 if not sequenced
+     */
+    class Message(val id: Int, val payload: ByteArray, val rawType: Int = id, val seq: Int = -1) {
+        val sequenced: Boolean get() = seq >= 0
+        override fun toString() = "GFDI(id=$id, seq=$seq, ${payload.size}b)"
     }
 
     /** Frame a GFDI message: length + id + payload + crc. */
@@ -81,10 +88,19 @@ object Gfdi {
         val buf = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
         val length = buf.short.toInt() and 0xFFFF
         if (length != packet.size) return null
-        val id = buf.short.toInt() and 0xFFFF
+        val rawType = buf.short.toInt() and 0xFFFF
         val crc = ByteBuffer.wrap(packet, packet.size - 2, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xFFFF
         if (crc != Crc16.compute(packet, 0, packet.size - 2)) return null
-        return Message(id, packet.copyOfRange(4, packet.size - 2))
+        // Device-initiated messages set bit15 of the type field: the low byte is
+        // (type - 5000) and the high byte's low 7 bits are a message sequence
+        // number. The ACK must echo the exact rawType (sequence included).
+        val payload = packet.copyOfRange(4, packet.size - 2)
+        return if (rawType and 0x8000 != 0) {
+            val seq = (rawType shr 8) and 0x7F
+            Message(id = 5000 + (rawType and 0xFF), payload = payload, rawType = rawType, seq = seq)
+        } else {
+            Message(id = rawType, payload = payload, rawType = rawType, seq = -1)
+        }
     }
 
     // ---- Outgoing messages -----------------------------------------------------
@@ -186,36 +202,34 @@ object Gfdi {
         return frame(MSG_DOWNLOAD_REQUEST, payload.array())
     }
 
-    /** ACK a FILE_TRANSFER_DATA chunk, telling the watch the next offset we expect. */
-    fun dataTransferAck(nextOffset: Long): ByteArray {
+    /**
+     * ACK a FILE_TRANSFER_DATA chunk, telling the watch the next offset we expect.
+     * [ackType] must be the exact type field the watch sent (sequence included).
+     */
+    fun dataTransferAck(ackType: Int, nextOffset: Long): ByteArray {
         val extra = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
         extra.putInt(nextOffset.toInt())
-        return response(MSG_FILE_TRANSFER_DATA, STATUS_ACK, extra.array())
+        return response(ackType, STATUS_ACK, extra.array())
     }
+
+    /** Simple ACK echoing the exact type field the watch sent. */
+    fun ack(rawType: Int): ByteArray = response(rawType, STATUS_ACK)
 
     // ---- Incoming payload parsers ----------------------------------------------
 
-    class DataTransfer(val flags: Int, val crc: Int, val offset: Long, val data: ByteArray)
+    class DataTransfer(val flags: Int, val crc: Int, val offset: Long, val data: ByteArray, val ackType: Int)
 
     /**
      * FILE_TRANSFER_DATA payload: flags u8, crc16 u16 (running CRC), offset u32, data.
-     * Falls back to the older offset-first layout if the framing doesn't add up.
+     * [ackType] is the raw type field to echo when acknowledging this chunk.
      */
-    fun parseDataTransfer(payload: ByteArray): DataTransfer? {
-        if (payload.size < 4) return null
-        if (payload.size >= 7) {
-            val buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
-            val flags = buf.get().toInt() and 0xFF
-            val crc = buf.short.toInt() and 0xFFFF
-            val offset = buf.int.toLong() and 0xFFFFFFFFL
-            // Heuristic sanity: offsets are file positions, never astronomically large
-            if (offset < 0x0FFFFFFFL) {
-                return DataTransfer(flags, crc, offset, payload.copyOfRange(7, payload.size))
-            }
-        }
+    fun parseDataTransfer(payload: ByteArray, ackType: Int): DataTransfer? {
+        if (payload.size < 7) return null
         val buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
+        val flags = buf.get().toInt() and 0xFF
+        val crc = buf.short.toInt() and 0xFFFF
         val offset = buf.int.toLong() and 0xFFFFFFFFL
-        return DataTransfer(0, 0, offset, payload.copyOfRange(4, payload.size))
+        return DataTransfer(flags, crc, offset, payload.copyOfRange(7, payload.size), ackType)
     }
 
     class ResponseMsg(val requestId: Int, val status: Int, val extra: ByteArray)

@@ -2,8 +2,10 @@ package dev.jbiffis.caddie.ble
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -35,10 +37,39 @@ class GfdiTest {
         buf.putShort(0x1234)
         buf.putInt(4096)
         buf.put(byteArrayOf(9, 8, 7))
-        val d = Gfdi.parseDataTransfer(buf.array())!!
+        val d = Gfdi.parseDataTransfer(buf.array(), ackType = 0x8304)!!
         assertEquals(4096L, d.offset)
         assertEquals(0x1234, d.crc)
         assertArrayEquals(byteArrayOf(9, 8, 7), d.data)
+        assertEquals(0x8304, d.ackType)
+    }
+
+    @Test
+    fun decodesSequencedDeviceMessages() {
+        // Reproduces the real vivoactive 5 framing: device-initiated messages set
+        // bit15 of the type field; low byte = type-5000, high byte = 0x80|sequence.
+        // Verified against captured frames: 0x8304->5004 seq3, 0x8518->5024 seq5.
+        fun sequencedFrame(rawType: Int, payload: ByteArray): ByteArray {
+            val total = 2 + 2 + payload.size + 2
+            val b = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN)
+            b.putShort(total.toShort()); b.putShort(rawType.toShort()); b.put(payload)
+            b.putShort(dev.jbiffis.caddie.ble.Crc16.compute(b.array(), 0, total - 2).toShort())
+            return b.array()
+        }
+        val fileData = Gfdi.parse(sequencedFrame(0x8304, ByteArray(9)))!!
+        assertEquals(Gfdi.MSG_FILE_TRANSFER_DATA, fileData.id)  // 5004
+        assertEquals(3, fileData.seq)
+        assertEquals(0x8304, fileData.rawType)
+        assertTrue(fileData.sequenced)
+
+        val devInfo = Gfdi.parse(sequencedFrame(0x8518, ByteArray(4)))!!
+        assertEquals(Gfdi.MSG_DEVICE_INFORMATION, devInfo.id)   // 5024
+        assertEquals(5, devInfo.seq)
+
+        // A normal (host-directed) response is not treated as sequenced
+        val resp = Gfdi.parse(Gfdi.response(Gfdi.MSG_CONFIGURATION, Gfdi.STATUS_ACK))!!
+        assertEquals(Gfdi.MSG_RESPONSE, resp.id)
+        assertFalse(resp.sequenced)
     }
 
     @Test
