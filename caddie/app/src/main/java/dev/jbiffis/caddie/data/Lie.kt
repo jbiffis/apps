@@ -164,4 +164,13 @@ class LocalFrame(private val originLat: Double, private val originLon: Double, b
         val right = ex * cosB - ny * sinB
         return right to along
     }
+
+    /** Inverse of [project]: (right, along) metres back to (lat, lon). */
+    fun unproject(right: Double, along: Double): Pair<Double, Double> {
+        val ex = right * cosB + along * sinB
+        val ny = -right * sinB + along * cosB
+        val lat = originLat + ny / 111320.0
+        val lon = originLon + ex / (111320.0 * cosLat)
+        return lat to lon
+    }
 }

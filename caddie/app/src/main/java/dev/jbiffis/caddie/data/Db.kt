@@ -12,6 +12,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "rounds", indices = [Index(value = ["scoreFileTimeS"], unique = true)])
@@ -159,6 +160,12 @@ interface CaddieDao {
 
     @Insert
     suspend fun insertShots(shots: List<ShotEntity>)
+
+    @Insert
+    suspend fun insertShot(shot: ShotEntity): Long
+
+    @Update
+    suspend fun updateShot(shot: ShotEntity)
 
     @Query("SELECT * FROM shots WHERE roundId = :roundId ORDER BY hole, timeS")
     fun shots(roundId: Long): Flow<List<ShotEntity>>

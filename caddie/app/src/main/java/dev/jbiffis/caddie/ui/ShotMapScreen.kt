@@ -4,6 +4,7 @@ import android.graphics.RectF
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -101,8 +105,46 @@ fun ShotMapScreen(
 
     var confirmDelete by remember { mutableStateOf(false) }
     var editClub by remember { mutableStateOf(false) }
+    var editMode by remember { mutableStateOf(false) }
     var fetchState by remember { mutableStateOf<String?>(null) }
     var fetching by remember { mutableStateOf(false) }
+
+    fun recomputeDistance(s: ShotEntity) =
+        s.copy(distanceM = dev.jbiffis.caddie.fit.GolfFit.haversineM(s.startLat, s.startLon, s.endLat, s.endLon))
+
+    // Drag a chain node: node k is shots[k-1].end and/or shots[k].start.
+    fun moveNode(nodeIndex: Int, lat: Double, lon: Double) {
+        scope.launch {
+            val before = shots.getOrNull(nodeIndex - 1)
+            val after = shots.getOrNull(nodeIndex)
+            before?.let { dao.updateShot(recomputeDistance(it.copy(endLat = lat, endLon = lon))) }
+            after?.let { dao.updateShot(recomputeDistance(it.copy(startLat = lat, startLon = lon))) }
+        }
+    }
+
+    fun addShot() {
+        scope.launch {
+            val last = shots.lastOrNull()
+            // New shot starts where the last one finished (or the pin, or hole centre).
+            val startLat = last?.endLat ?: holeInfo?.pinLat ?: features.firstOrNull()?.points?.firstOrNull()?.first
+            val startLon = last?.endLon ?: holeInfo?.pinLon ?: features.firstOrNull()?.points?.firstOrNull()?.second
+            if (startLat == null || startLon == null) return@launch
+            // End a short way toward the pin so the new shot is visible and draggable.
+            val endLat = holeInfo?.pinLat?.takeIf { it != startLat } ?: (startLat + 0.0002)
+            val endLon = holeInfo?.pinLon?.takeIf { it != startLon } ?: startLon
+            val newShot = ShotEntity(
+                roundId = roundId,
+                hole = hole,
+                timeS = (last?.timeS ?: holeInfo?.finishedAtS ?: 0L) + 1,
+                startLat = startLat, startLon = startLon,
+                endLat = endLat, endLon = endLon,
+                clubId = 0L,
+                distanceM = dev.jbiffis.caddie.fit.GolfFit.haversineM(startLat, startLon, endLat, endLon),
+            )
+            dao.insertShot(newShot)
+            shotIdx = shots.size // select the newly added shot
+        }
+    }
 
     fun fetchCourse() {
         if (fetching) return
@@ -134,7 +176,9 @@ fun ShotMapScreen(
                 pinLat = holeInfo?.pinLat,
                 pinLon = holeInfo?.pinLon,
                 currentIdx = shotIdx,
+                editMode = editMode,
                 onSelectShot = { shotIdx = it },
+                onMoveNode = { node, lat, lon -> moveNode(node, lat, lon) },
             )
             if (features.isEmpty()) {
                 OutlinedButton(
@@ -143,14 +187,29 @@ fun ShotMapScreen(
                     modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
                 ) { Text(fetchState ?: "Download course map (OpenStreetMap)") }
             }
-            IconButton(
-                onClick = { onOpenSatellite(hole) },
-                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    Icons.Filled.Layers,
-                    contentDescription = "Satellite view",
-                    tint = Color.White,
+                IconButton(onClick = { editMode = !editMode }) {
+                    Icon(
+                        if (editMode) Icons.Filled.Check else Icons.Filled.Edit,
+                        contentDescription = if (editMode) "Done editing" else "Edit shots",
+                        tint = if (editMode) Color(0xFFFFD54F) else Color.White,
+                    )
+                }
+                IconButton(onClick = { onOpenSatellite(hole) }) {
+                    Icon(Icons.Filled.Layers, contentDescription = "Satellite view", tint = Color.White)
+                }
+            }
+            if (editMode) {
+                Text(
+                    "Edit mode: drag the balls to move shots. Add or delete below.",
+                    Modifier.align(Alignment.BottomCenter).padding(8.dp)
+                        .background(Color(0xAA000000), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
         }
@@ -158,11 +217,16 @@ fun ShotMapScreen(
         // Shot detail sheet
         Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
             if (current == null) {
-                Text(
-                    "No tracked shots on this hole.",
-                    Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "No tracked shots on this hole.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = { addShot() }) {
+                        Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 4.dp))
+                        Text("Add a shot")
+                    }
+                }
             } else {
                 val startLie = when {
                     shotIdx == 0 -> Lie.Type.TEE
@@ -204,8 +268,15 @@ fun ShotMapScreen(
                     )
                     DetailRow("Distance", "${current.distanceM.toYards()} yds")
                     DetailRow("Result", result)
-                    TextButton(onClick = { confirmDelete = true }) {
-                        Text("Delete shot", color = MaterialTheme.colorScheme.error)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { addShot() }) {
+                            Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 4.dp))
+                            Text("Add shot")
+                        }
+                        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { confirmDelete = true }) {
+                            Text("Delete shot", color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
@@ -319,7 +390,9 @@ private fun HoleCanvas(
     pinLat: Double?,
     pinLon: Double?,
     currentIdx: Int,
+    editMode: Boolean,
     onSelectShot: (Int) -> Unit,
+    onMoveNode: (nodeIndex: Int, lat: Double, lon: Double) -> Unit,
 ) {
     if (shots.isEmpty() && (pinLat == null || features.isEmpty())) {
         Box(Modifier.fillMaxSize().background(RoughColor))
@@ -350,7 +423,7 @@ private fun HoleCanvas(
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // Screen transform shared by drawing and tap handling
+    // Screen transform shared by drawing and gesture handling
     val transform: (Double, Double) -> Offset = remember(bounds, canvasSize) {
         { lat, lon ->
             val (r, a) = frame.project(lat, lon)
@@ -367,23 +440,84 @@ private fun HoleCanvas(
             )
         }
     }
+    // Inverse: screen point -> (lat, lon), for dragging shots
+    val screenToLatLon: (Offset) -> Pair<Double, Double> = remember(bounds, canvasSize) {
+        { p ->
+            val w = canvasSize.width.toFloat()
+            val h = canvasSize.height.toFloat()
+            val dR = (bounds[1] - bounds[0]).toFloat()
+            val dA = (bounds[3] - bounds[2]).toFloat()
+            val scale = if (dR > 0 && dA > 0) minOf(w / dR, h / dA) else 1f
+            val offX = (w - dR * scale) / 2f
+            val offY = (h - dA * scale) / 2f
+            val r = (p.x - offX) / scale + bounds[0]
+            val a = (h - offY - p.y) / scale + bounds[2]
+            frame.unproject(r.toDouble(), a.toDouble())
+        }
+    }
+
+    // Node k is shots[k].start (k < n) or the final resting point (k == n).
+    val nodeCount = if (shots.isEmpty()) 0 else shots.size + 1
+    fun nodeLatLon(k: Int): Pair<Double, Double> =
+        if (k < shots.size) shots[k].startLat to shots[k].startLon
+        else shots.last().endLat to shots.last().endLon
+
+    var dragNode by remember { mutableIntStateOf(-1) }
+    var dragPos by remember { mutableStateOf<Offset?>(null) }
 
     Canvas(
         Modifier.fillMaxSize()
             .onSizeChanged { canvasSize = it }
-            .pointerInput(shots, transform) {
-                detectTapGestures { tap ->
-                    var best = -1
-                    var bestDist = 48.dp.toPx()
-                    shots.forEachIndexed { i, s ->
-                        val p = transform(s.startLat, s.startLon)
-                        val d = hypot(p.x - tap.x, p.y - tap.y)
-                        if (d < bestDist) { best = i; bestDist = d }
+            .pointerInput(editMode, shots, transform) {
+                if (editMode) {
+                    detectDragGestures(
+                        onDragStart = { start ->
+                            var best = -1
+                            var bestDist = 52.dp.toPx()
+                            for (k in 0 until nodeCount) {
+                                val (la, lo) = nodeLatLon(k)
+                                val p = transform(la, lo)
+                                val d = hypot(p.x - start.x, p.y - start.y)
+                                if (d < bestDist) { best = k; bestDist = d }
+                            }
+                            dragNode = best
+                            dragPos = start
+                            if (best in 0 until shots.size) onSelectShot(best)
+                            else if (best == shots.size && shots.isNotEmpty()) onSelectShot(shots.size - 1)
+                        },
+                        onDrag = { change, delta ->
+                            change.consume()
+                            dragPos = dragPos?.plus(delta)
+                        },
+                        onDragEnd = {
+                            val node = dragNode
+                            val pos = dragPos
+                            if (node >= 0 && pos != null) {
+                                val (lat, lon) = screenToLatLon(pos)
+                                onMoveNode(node, lat, lon)
+                            }
+                            dragNode = -1; dragPos = null
+                        },
+                        onDragCancel = { dragNode = -1; dragPos = null },
+                    )
+                } else {
+                    detectTapGestures { tap ->
+                        var best = -1
+                        var bestDist = 48.dp.toPx()
+                        shots.forEachIndexed { i, s ->
+                            val p = transform(s.startLat, s.startLon)
+                            val d = hypot(p.x - tap.x, p.y - tap.y)
+                            if (d < bestDist) { best = i; bestDist = d }
+                        }
+                        if (best >= 0) onSelectShot(best)
                     }
-                    if (best >= 0) onSelectShot(best)
                 }
             }
     ) {
+        // Live screen position of a node, honouring an in-progress drag
+        fun nodeScreen(k: Int): Offset =
+            if (k == dragNode && dragPos != null) dragPos!!
+            else nodeLatLon(k).let { (la, lo) -> transform(la, lo) }
         drawRect(RoughColor)
         if (canvasSize == IntSize.Zero) return@Canvas
 
@@ -419,10 +553,11 @@ private fun HoleCanvas(
             }
         }
 
-        // Shot chain — dark outline under white line, like Garmin
-        shots.forEachIndexed { i, s ->
-            val a = transform(s.startLat, s.startLon)
-            val b = transform(s.endLat, s.endLon)
+        // Shot chain — dark outline under white line, like Garmin.
+        // Shot i runs from node i to node i+1, so drags preview live and connected.
+        shots.forEachIndexed { i, _ ->
+            val a = nodeScreen(i)
+            val b = nodeScreen(i + 1)
             val isCurrent = i == currentIdx
             drawLine(Color(0x66000000), a, b, strokeWidth = if (isCurrent) 14f else 9f)
             drawLine(
@@ -431,18 +566,19 @@ private fun HoleCanvas(
                 strokeWidth = if (isCurrent) 9f else 5f,
             )
         }
-        // Shot balls
-        shots.forEachIndexed { i, s ->
-            val p = transform(s.startLat, s.startLon)
+        // Shot start balls
+        shots.forEachIndexed { i, _ ->
+            val p = nodeScreen(i)
             val isCurrent = i == currentIdx
-            drawCircle(Color(0x66000000), radius = if (isCurrent) 15f else 10f, center = p)
-            drawCircle(if (isCurrent) Color(0xFFFFD54F) else Color.White, radius = if (isCurrent) 12f else 8f, center = p)
+            val enlarged = editMode || isCurrent
+            drawCircle(Color(0x66000000), radius = if (enlarged) 15f else 10f, center = p)
+            drawCircle(if (isCurrent) Color(0xFFFFD54F) else Color.White, radius = if (enlarged) 12f else 8f, center = p)
         }
         // Final resting point of the last shot
-        shots.lastOrNull()?.let { s ->
-            val p = transform(s.endLat, s.endLon)
-            drawCircle(Color(0x66000000), radius = 9f, center = p)
-            drawCircle(Color.White, radius = 6f, center = p)
+        if (shots.isNotEmpty()) {
+            val p = nodeScreen(shots.size)
+            drawCircle(Color(0x66000000), radius = if (editMode) 12f else 9f, center = p)
+            drawCircle(Color.White, radius = if (editMode) 9f else 6f, center = p)
         }
 
         // Pin flag
@@ -459,11 +595,17 @@ private fun HoleCanvas(
 
         // Distance bubbles on each segment (current shot emphasised)
         shots.forEachIndexed { i, s ->
-            val a = transform(s.startLat, s.startLon)
-            val b = transform(s.endLat, s.endLon)
+            val a = nodeScreen(i)
+            val b = nodeScreen(i + 1)
             if (hypot((b.x - a.x).toDouble(), (b.y - a.y).toDouble()) < 40) return@forEachIndexed
+            // While dragging, show the live distance instead of the stored one
+            val yards = if (dragNode == i || dragNode == i + 1) {
+                val (la1, lo1) = screenToLatLon(a)
+                val (la2, lo2) = screenToLatLon(b)
+                dev.jbiffis.caddie.fit.GolfFit.haversineM(la1, lo1, la2, lo2).toYards()
+            } else s.distanceM.toYards()
             bubble(
-                "${s.distanceM.toYards()} yds",
+                "$yards yds",
                 Offset((a.x + b.x) / 2 + 14f, (a.y + b.y) / 2),
                 emphasised = i == currentIdx,
             )
