@@ -150,15 +150,22 @@ object Gfdi {
         return frame(MSG_CONFIGURATION, payload.array())
     }
 
-    fun systemEvent(event: Int): ByteArray = frame(MSG_SYSTEM_EVENT, byteArrayOf(event.toByte()))
+    /** SYSTEM_EVENT payload is [eventType:u8][value:u8]. */
+    fun systemEvent(event: Int, value: Int = 0): ByteArray =
+        frame(MSG_SYSTEM_EVENT, byteArrayOf(event.toByte(), value.toByte()))
 
-    /** Answer the watch's current-time request (keeps the session from stalling). */
+    /**
+     * Answer the watch's current-time request. Layout (as a 5000 status message):
+     * ref(u16) status(u8) referenceId(u32) garminTs(u32) tzOffset(i32) dstEnd(i32) dstStart(i32).
+     */
     fun currentTimeResponse(nowMs: Long, tzOffsetS: Int): ByteArray {
         val garminTs = nowMs / 1000 - FIT_EPOCH_OFFSET_S
-        val extra = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
+        val extra = ByteBuffer.allocate(20).order(ByteOrder.LITTLE_ENDIAN)
+        extra.putInt(0)                   // referenceId
         extra.putInt(garminTs.toInt())    // current time, garmin epoch
         extra.putInt(tzOffsetS)           // timezone offset seconds
-        extra.putInt(0)                   // next DST transition (none)
+        extra.putInt(0)                   // next DST transition end
+        extra.putInt(0)                   // next DST transition start
         return response(MSG_CURRENT_TIME_REQUEST, STATUS_ACK, extra.array())
     }
 

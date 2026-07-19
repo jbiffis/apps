@@ -60,18 +60,18 @@ Two ways:
    4. Caddie *Watch* tab → *Scan for watch* → tap it. Android and the watch
       show their pairing prompts; confirm both.
 
-   Caddie then runs the GFDI handshake (device-info exchange, configuration,
-   pair events on first connect, sync-ready), downloads the ANT-FS file
-   directory, and pulls every golf SCORE/ACTIVITY file it hasn't seen before,
-   importing each automatically. After the one-time pairing, later syncs are
-   just *Scan → tap → Sync new golf files*; already-downloaded files are
-   skipped.
+   Caddie then registers GFDI over Garmin's **multi-link** transport, runs the
+   GFDI handshake (device-info exchange, configuration, pair events on first
+   connect, sync-ready), downloads the ANT-FS file directory, and pulls every
+   golf SCORE/ACTIVITY file it hasn't seen before, importing each
+   automatically. After the one-time pairing, later syncs are just *Scan → tap
+   → Sync new golf files*; already-downloaded files are skipped.
 
-   Every GFDI frame is logged on the Watch tab with a **share button** (top
-   right). If a sync stalls — most likely because your firmware demands
-   Garmin's encrypted auth handshake (`MSG_AUTH_NEGOTIATION`, not yet
-   implemented), which the log flags with a ⚠ — share that log so support for
-   it can be added. File import is always available as a fallback.
+   Every frame is logged on the Watch tab with a **share button** (top right).
+   If a sync stalls — e.g. the watch uses a different transport, or firmware
+   demands Garmin's encrypted auth handshake (`MSG_AUTH_NEGOTIATION`, not yet
+   implemented, flagged with a ⚠) — share that log so support can be added.
+   File import is always available as a fallback.
 
 ## Building
 
@@ -122,7 +122,8 @@ app/src/main/java/dev/jbiffis/caddie/
   data/   Db.kt (Room), Repository.kt (import + miss geometry),
           Lie.kt (point-in-polygon lie detection, fairway miss classifier),
           Overpass.kt (OpenStreetMap course geometry fetch)
-  ble/    Cobs.kt, Crc16.kt, Gfdi.kt (protocol), GarminBleClient.kt (GATT)
+  ble/    Cobs.kt, Crc16.kt, MultiLink.kt (ML transport), Gfdi.kt (messages),
+          GarminBleClient.kt (GATT + handshake + sync)
   ui/     Rounds, Scorecard, Hole (satellite map), ShotMap (drawn hole view),
           Stats, Clubs, Sync screens (Compose)
 app/src/test/  parser + framing + lie-detection tests (real sample files)
@@ -130,10 +131,15 @@ app/src/test/  parser + framing + lie-detection tests (real sample files)
 
 ## Known limitations / next steps
 
-- BLE auth: some Garmin firmware negotiates an encrypted session
+- BLE transport: newer Garmin watches (vívoactive 5, FR 2xx/9xx, Fenix 7+)
+  multiplex GFDI over the **multi-link** service (`6a4e2800`, channels
+  `282x`/`281x`), which Caddie implements: register GFDI → get a handle →
+  prefix every COBS/GFDI packet with it. Older single-characteristic devices
+  aren't handled by this path.
+- BLE auth: some firmware then negotiates an encrypted session
   (`MSG_AUTH_NEGOTIATION`). That handshake isn't implemented; on those watches
-  the sync stops right after the device-info exchange and the log shows a ⚠
-  auth line. Share the log and it can be added. File import always works.
+  the sync stops after device-info and the log shows a ⚠ auth line. Share the
+  log and it can be added. File import always works.
 - Club IDs come from the watch; if you re-order your bag in Garmin Golf the
   IDs stay stable, but a new club gets a new ID you'll need to name.
 - Multi-player scorecards: only player 0 (you) is imported.

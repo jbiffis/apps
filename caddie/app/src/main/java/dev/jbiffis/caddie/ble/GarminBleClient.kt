@@ -81,6 +81,10 @@ class GarminBleClient(
     private var mtu = 23
     private var connectRetried = false
 
+    // Multi-link state
+    private var gfdiHandle = -1
+    private val controlResponses = Channel<MultiLink.RegisterResponse>(Channel.BUFFERED)
+
     private val rxBuffer = ByteArrayOutputStream()
     private val writeDone = Channel<Boolean>(Channel.CONFLATED)
     private val writeMutex = Mutex()
@@ -172,6 +176,7 @@ class GarminBleClient(
         gatt = null
         writeChar = null
         notifyChar = null
+        gfdiHandle = -1
         rxBuffer.reset()
         _state.value = State.DISCONNECTED
         _directory.value = emptyList()
@@ -206,40 +211,39 @@ class GarminBleClient(
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-            // Prefer the dedicated GFDI service (6a4e2800…) when several Garmin
-            // services are advertised; otherwise take any Garmin-base service
-            // that has both a writable and a notifiable characteristic.
-            val garminServices = g.services
-                .filter { it.uuid.toString().lowercase().endsWith(GARMIN_BASE_UUID_SUFFIX) }
-                .sortedByDescending { it.uuid.toString().lowercase().startsWith("6a4e2800") }
+            val mlService = g.services.firstOrNull {
+                it.uuid == MultiLink.base(0x2800)
+            }
             g.services.forEach { s ->
-                val mark = if (s in garminServices) "  [Garmin]" else ""
+                val mark = if (s.uuid.toString().lowercase().endsWith(GARMIN_BASE_UUID_SUFFIX)) "  [Garmin]" else ""
                 log("Service ${s.uuid}$mark")
             }
-            for (service in garminServices) {
-                var w: BluetoothGattCharacteristic? = null
-                var n: BluetoothGattCharacteristic? = null
-                for (ch in service.characteristics) {
-                    val props = ch.properties
-                    val writable = props and (BluetoothGattCharacteristic.PROPERTY_WRITE or
-                        BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
-                    val notifiable = props and (BluetoothGattCharacteristic.PROPERTY_NOTIFY or
-                        BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
-                    log("  char …${ch.uuid.toString().takeLast(17)} props=0x${props.toString(16)}" +
-                        (if (writable) " W" else "") + (if (notifiable) " N" else ""))
-                    if (writable && w == null) w = ch
-                    if (notifiable && n == null && ch != w) n = ch
-                }
-                if (w != null && n != null) {
-                    writeChar = w; notifyChar = n; break
-                }
-            }
-            if (writeChar == null || notifyChar == null) {
-                log("No usable Garmin service. Is the watch still paired to Garmin Connect? " +
-                    "Remove it there and forget it in Android Bluetooth settings, then retry.")
+            if (mlService == null) {
+                log("No Garmin multi-link service (6a4e2800). Is the watch still paired to " +
+                    "Garmin Connect? Remove it there and forget it in Android Bluetooth settings.")
                 return
             }
-            log("Using write=…${writeChar!!.uuid.toString().takeLast(17)} notify=…${notifyChar!!.uuid.toString().takeLast(17)}")
+            // Log every characteristic with its FULL uuid so channels are identifiable
+            for (ch in mlService.characteristics) {
+                val p = ch.properties
+                val w = p and (BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
+                val n = p and (BluetoothGattCharacteristic.PROPERTY_NOTIFY or BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+                log("  char ${ch.uuid} props=0x${p.toString(16)}${if (w) " W" else ""}${if (n) " N" else ""}")
+            }
+            // Channel 1: write 6a4e2820, notify 6a4e2810 (fall back to first W / first N)
+            writeChar = mlService.getCharacteristic(MultiLink.WRITE_CHAR)
+                ?: mlService.characteristics.firstOrNull {
+                    it.properties and (BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
+                }
+            notifyChar = mlService.getCharacteristic(MultiLink.NOTIFY_CHAR)
+                ?: mlService.characteristics.firstOrNull {
+                    it.properties and (BluetoothGattCharacteristic.PROPERTY_NOTIFY or BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+                }
+            if (writeChar == null || notifyChar == null) {
+                log("Multi-link service has no usable write/notify characteristics")
+                return
+            }
+            log("Using write=${writeChar!!.uuid} notify=${notifyChar!!.uuid}")
             gatt?.setCharacteristicNotification(notifyChar, true)
             val cccd = notifyChar!!.getDescriptor(CCCD)
             if (cccd != null) {
@@ -272,17 +276,55 @@ class GarminBleClient(
 
     private fun onLinkReady() {
         _state.value = State.HANDSHAKE
-        val address = device?.address ?: return
-        log("Link up — waiting for the watch to start the GFDI handshake…")
-        if (!isPaired(address)) {
-            scope.launch { send(Gfdi.systemEvent(Gfdi.EVENT_PAIR_START)) }
+        log("Link up — registering GFDI over multi-link…")
+        scope.launch { registerGfdi() }
+    }
+
+    /** Multi-link handshake: reset handles, register GFDI, learn its handle. */
+    private suspend fun registerGfdi() {
+        // Clear stale handles from a previous session (best effort)
+        sendRaw(MultiLink.closeAllRequest())
+        kotlinx.coroutines.delay(150)
+
+        while (controlResponses.tryReceive().getOrNull() != null) { /* drain */ }
+        sendRaw(MultiLink.registerRequest(MultiLink.SERVICE_GFDI))
+        val resp = withTimeoutOrNull(5000) { controlResponses.receive() }
+        if (resp == null) {
+            log("No multi-link register response — the watch may use a different transport. " +
+                "Share this log so it can be added.")
+            return
+        }
+        if (resp.status != 0 || resp.handle == 0) {
+            log("GFDI registration refused (status=${resp.status}, handle=${resp.handle})")
+            return
+        }
+        gfdiHandle = resp.handle
+        log("GFDI registered on handle ${gfdiHandle} (reliability=${resp.reliability}). " +
+            "Waiting for the watch's device info…")
+
+        // First-connect pairing courtesy event; the watch then sends DEVICE_INFORMATION.
+        val address = device?.address
+        if (address != null && !isPaired(address)) {
+            send(Gfdi.systemEvent(Gfdi.EVENT_PAIR_START))
         }
     }
 
     // ---- Frame RX --------------------------------------------------------------
 
-    private fun onBytes(bytes: ByteArray) {
-        for (b in bytes) {
+    private fun onBytes(raw: ByteArray) {
+        // Every ML packet starts with a handle byte
+        val (handle, payload) = MultiLink.stripHandle(raw) ?: return
+        if (handle == MultiLink.CONTROL_HANDLE) {
+            // Control-channel packets are raw (not COBS). But a GFDI COBS frame
+            // also begins with 0x00, so only treat it as control if it parses.
+            MultiLink.parseControl(raw)?.let {
+                log("RX ML register-resp: service=${it.service} status=${it.status} handle=${it.handle}")
+                controlResponses.trySend(it)
+                return
+            }
+        }
+        // Otherwise it's service data (GFDI) — feed the COBS reassembler
+        for (b in payload) {
             if (b.toInt() == 0) {
                 val packet = rxBuffer.toByteArray()
                 rxBuffer.reset()
@@ -377,26 +419,33 @@ class GarminBleClient(
 
     // ---- TX --------------------------------------------------------------------
 
-    private suspend fun send(gfdiPacket: ByteArray): Boolean = writeMutex.withLock {
-        val g = gatt ?: return false
-        val ch = writeChar ?: return false
+    /** Wrap a GFDI message in COBS and send it over the registered GFDI handle. */
+    private suspend fun send(gfdiPacket: ByteArray): Boolean {
+        if (gfdiHandle < 0) { log("TX before GFDI handle assigned"); return false }
         val encoded = Cobs.encode(gfdiPacket)
         val framed = ByteArray(encoded.size + 2)
-        System.arraycopy(encoded, 0, framed, 1, encoded.size)
-        framed[framed.size - 1] = 0
-        val chunkSize = mtu - 3
-        var off = 0
-        while (off < framed.size) {
-            val len = minOf(chunkSize, framed.size - off)
-            @Suppress("DEPRECATION")
-            ch.value = framed.copyOfRange(off, off + len)
-            @Suppress("DEPRECATION")
-            if (!g.writeCharacteristic(ch)) { log("TX write failed"); return false }
-            val ok = withTimeoutOrNull(5000) { writeDone.receive() } ?: false
-            if (!ok) { log("TX write not confirmed"); return false }
-            off += len
+        System.arraycopy(encoded, 0, framed, 1, encoded.size) // 0x00 … 0x00 delimiters
+        val chunks = MultiLink.fragment(gfdiHandle, framed, mtu - 3)
+        return writeMutex.withLock {
+            chunks.all { writeChunkUnlocked(it) }
         }
-        true
+    }
+
+    /** Send a control-channel (handle 0) frame verbatim — no COBS, no fragmentation. */
+    private suspend fun sendRaw(packet: ByteArray): Boolean = writeMutex.withLock {
+        writeChunkUnlocked(packet)
+    }
+
+    private suspend fun writeChunkUnlocked(bytes: ByteArray): Boolean {
+        val g = gatt ?: return false
+        val ch = writeChar ?: return false
+        @Suppress("DEPRECATION")
+        ch.value = bytes
+        @Suppress("DEPRECATION")
+        if (!g.writeCharacteristic(ch)) { log("TX write failed"); return false }
+        val ok = withTimeoutOrNull(5000) { writeDone.receive() } ?: false
+        if (!ok) { log("TX write not confirmed"); return false }
+        return true
     }
 
     private suspend fun awaitResponse(requestId: Int, timeoutMs: Long): Gfdi.ResponseMsg? {

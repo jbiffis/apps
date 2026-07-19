@@ -81,6 +81,18 @@ class GfdiTest {
     fun systemEventFrames() {
         val msg = Gfdi.parse(Gfdi.systemEvent(Gfdi.EVENT_SYNC_READY))!!
         assertEquals(Gfdi.MSG_SYSTEM_EVENT, msg.id)
-        assertArrayEquals(byteArrayOf(8), msg.payload)
+        // [eventType, value]
+        assertArrayEquals(byteArrayOf(8, 0), msg.payload)
+    }
+
+    @Test
+    fun currentTimeResponseLayout() {
+        val msg = Gfdi.parse(Gfdi.currentTimeResponse(nowMs = 0L, tzOffsetS = 0))!!
+        assertEquals(Gfdi.MSG_RESPONSE, msg.id)
+        val r = Gfdi.parseResponse(msg.payload)!!
+        assertEquals(Gfdi.MSG_CURRENT_TIME_REQUEST, r.requestId)
+        assertEquals(Gfdi.STATUS_ACK, r.status)
+        // referenceId(4) + garminTs(4) + tz(4) + dstEnd(4) + dstStart(4)
+        assertEquals(20, r.extra.size)
     }
 }
