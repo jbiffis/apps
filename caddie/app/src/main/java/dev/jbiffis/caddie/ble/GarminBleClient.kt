@@ -56,7 +56,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-23 classify-by-content"
+        const val BLE_BUILD = "ble-24 scan-all-for-golf"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -545,25 +545,38 @@ class GarminBleClient(
             sendProtobuf(FileSync.buildFileListRequest(next))
             return
         }
-        // "code 9" = sports activities (golf rounds live here). Download them all
-        // every sync and let importFit's own duplicate check (against the database)
-        // decide — a deleted round then re-imports automatically, and there is no
-        // separate synced list to drift out of step with what's actually stored.
-        val candidates = remoteFiles.filter { it.typeCode == 9 }
-        log("File enumeration complete: ${remoteFiles.size} total, ${candidates.size} sport activities to check.")
+        // The golf round's file_id.type is unknown and NOT the "sports" code (code 9
+        // turned out to be monitoring). So scan every distinct file and let importFit
+        // decide by content. Cap each identical (typeCode,size) bucket at two files so
+        // the ~50 uniform settings/monitoring files don't dominate the transfer — real
+        // golf files have distinctive sizes and are always kept.
+        val bucket = HashMap<String, Int>()
+        val candidates = remoteFiles.filter { f ->
+            val k = "${f.typeCode}:${f.size}"
+            val n = bucket.getOrDefault(k, 0)
+            bucket[k] = n + 1
+            n < 2
+        }
+        log("Enumeration complete: ${remoteFiles.size} files (${candidates.size} distinct to scan).")
         var newRounds = 0
+        var golfFiles = 0
         for (file in candidates) {
             val bytes = downloadFileV2(file)
             if (bytes == null) { log("  download failed for ${file.id?.id1}"); continue }
             try {
                 val summary = onFileDownloaded("v2_${file.id?.id1}.fit", bytes)
-                if (summary.startsWith("NEW round")) newRounds++
-                log("  ${file.typeName ?: "file"} (${bytes.size}b) → $summary")
+                // Only surface files that actually carry golf/activity data; the rest
+                // (settings, monitoring, …) are skipped silently to keep the log usable.
+                if (!summary.startsWith("skipped")) {
+                    golfFiles++
+                    if (summary.startsWith("NEW round")) newRounds++
+                    log("  ★ code ${file.typeCode} ${file.typeName ?: "type?"} (${bytes.size}b) → $summary")
+                }
             } catch (e: Exception) {
                 log("  import error: ${e.message}")
             }
         }
-        log("V2 sync done: $newRounds new round(s) imported.")
+        log("Scan done: $golfFiles golf/activity file(s), $newRounds new round(s) imported.")
         send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE))
     }
 
