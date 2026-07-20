@@ -213,8 +213,11 @@ object Gfdi {
         return response(MSG_FILE_TRANSFER_DATA, STATUS_ACK, extra.array())
     }
 
-    /** Simple ACK echoing the exact type field the watch sent. */
-    fun ack(rawType: Int): ByteArray = response(rawType, STATUS_ACK)
+    /**
+     * Simple ACK. [logicalType] must be the message's decoded type (e.g. 5050),
+     * NOT the raw sequenced type field — the watch matches acks by logical type.
+     */
+    fun ack(logicalType: Int): ByteArray = response(logicalType, STATUS_ACK)
 
     class ProtobufRequest(val requestId: Int, val dataOffset: Long, val totalLength: Long, val data: ByteArray)
 

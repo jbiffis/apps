@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-8 filedata-ack"
+        const val BLE_BUILD = "ble-9 logical-acks"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -396,7 +396,7 @@ class GarminBleClient(
                 log("RX protobuf request id=${req?.requestId} offset=${req?.dataOffset} " +
                     "len=${req?.totalLength} seq=${msg.seq}")
                 if (req != null) scope.launch { send(Gfdi.protobufAck(req.requestId, req.dataOffset)) }
-                else scope.launch { send(Gfdi.ack(msg.rawType)) }
+                else scope.launch { send(Gfdi.ack(msg.id)) }
             }
             Gfdi.MSG_DEVICE_INFORMATION -> {
                 val info = Gfdi.parseDeviceInformation(msg.payload)
@@ -404,7 +404,7 @@ class GarminBleClient(
                 scope.launch {
                     if (msg.sequenced) {
                         // Re-sent during sync; just acknowledge and keep the session moving
-                        send(Gfdi.ack(msg.rawType))
+                        send(Gfdi.ack(msg.id))
                     } else {
                         send(Gfdi.deviceInformationResponse(unitNumber))
                         completeHandshake()
@@ -418,32 +418,32 @@ class GarminBleClient(
             }
             Gfdi.MSG_SYSTEM_EVENT -> {
                 log("RX system event: ${Gfdi.hex(msg.payload, 8)}")
-                scope.launch { send(Gfdi.ack(msg.rawType)) }
+                scope.launch { send(Gfdi.ack(msg.id)) }
             }
             Gfdi.MSG_FILE_READY -> {
                 log("RX file ready — the watch has new files")
                 scope.launch {
-                    send(Gfdi.ack(msg.rawType))
+                    send(Gfdi.ack(msg.id))
                     if (_state.value == State.READY) startSync()
                 }
             }
             Gfdi.MSG_SYNC_REQUEST -> {
                 log("RX sync request from watch")
                 scope.launch {
-                    send(Gfdi.ack(msg.rawType))
+                    send(Gfdi.ack(msg.id))
                     if (_state.value == State.READY) startSync()
                 }
             }
             Gfdi.MSG_AUTH_NEGOTIATION -> {
                 log("RX ⚠ AUTH NEGOTIATION (${Gfdi.hex(msg.payload)}) — encrypted auth not " +
                     "implemented yet. Export this log so support for it can be added.")
-                scope.launch { send(Gfdi.response(msg.rawType, Gfdi.STATUS_UNSUPPORTED)) }
+                scope.launch { send(Gfdi.response(msg.id, Gfdi.STATUS_UNSUPPORTED)) }
             }
             else -> {
                 // Configuration, protobuf request, fit definition, etc. — acknowledge
                 // so the watch advances its send sequence and proceeds to file data.
                 log("RX id=${msg.id} seq=${msg.seq} (${msg.payload.size}b) — ACK: ${Gfdi.hex(msg.payload, 32)}")
-                scope.launch { send(Gfdi.ack(msg.rawType)) }
+                scope.launch { send(Gfdi.ack(msg.id)) }
             }
         }
     }
@@ -601,7 +601,9 @@ class GarminBleClient(
         val out = ByteArrayOutputStream()
         var lastProgressLog = 0
         while (true) {
-            val chunk = withTimeoutOrNull(15_000) { dataChunks.receive() } ?: run {
+            // Generous: the watch interleaves other sequenced messages (which we
+            // ack elsewhere) between file chunks, retransmitting every ~5s.
+            val chunk = withTimeoutOrNull(30_000) { dataChunks.receive() } ?: run {
                 log("Timed out at ${out.size()}b")
                 return if (out.size() > 0 && fileSize <= 0) out.toByteArray() else null
             }
