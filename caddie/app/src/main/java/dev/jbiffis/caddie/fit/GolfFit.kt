@@ -89,11 +89,28 @@ object GolfFit {
     fun fileType(messages: List<FitMessage>): Int? =
         messages.firstOrNull { it.globalNum == 0 }?.int(0)
 
+    /** Distinct global message numbers present, sorted — for diagnostics. */
+    fun messageInventory(messages: List<FitMessage>): List<Int> =
+        messages.map { it.globalNum }.distinct().sorted()
+
+    /**
+     * True if this file carries a golf scorecard — the round summary (190).
+     * Detected by content, not file_id.type: the vívoactive 5's native BLE files
+     * report file_id.type=32, not the 38 seen in USB/Connect exports.
+     */
+    fun hasGolfScore(messages: List<FitMessage>): Boolean =
+        messages.any { it.globalNum == 190 }
+
+    /** True if this file carries standard activity records (session/lap/record). */
+    fun hasActivityData(messages: List<FitMessage>): Boolean =
+        messages.any { it.globalNum == 18 || it.globalNum == 19 || it.globalNum == 20 }
+
     fun fitToUnixS(fitTs: Long): Long = fitTs + FitReader.FIT_EPOCH_OFFSET_S
 
     fun parseScore(messages: List<FitMessage>): ScoreFile {
         val fileId = messages.first { it.globalNum == 0 }
-        require(fileId.int(0) == FILE_TYPE_GOLF_SCORE) { "Not a golf SCORE file" }
+        // Classified by content (message 190), not file_id.type — native BLE golf
+        // files report type 32, USB/Connect exports report 38.
 
         val round = messages.firstOrNull { it.globalNum == 190 }
             ?: throw IllegalArgumentException("No round summary (mesg 190) in score file")
@@ -166,7 +183,7 @@ object GolfFit {
 
     fun parseActivity(messages: List<FitMessage>, trackEveryS: Int = 5): ActivityFile {
         val fileId = messages.first { it.globalNum == 0 }
-        require(fileId.int(0) == FILE_TYPE_ACTIVITY) { "Not an ACTIVITY file" }
+        // Classified by content (session/record messages), not file_id.type.
         val session = messages.firstOrNull { it.globalNum == 18 }
 
         val track = ArrayList<TrackPoint>()

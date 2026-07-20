@@ -30,10 +30,17 @@ class Repository(private val dao: CaddieDao) {
         } catch (e: Exception) {
             return ImportResult.Failed("Could not decode FIT file: ${e.message}")
         }
-        return when (GolfFit.fileType(messages)) {
-            GolfFit.FILE_TYPE_GOLF_SCORE -> importScore(GolfFit.parseScore(messages))
-            GolfFit.FILE_TYPE_ACTIVITY -> importActivity(GolfFit.parseActivity(messages))
-            else -> ImportResult.Failed("Not a golf SCORE or ACTIVITY file (file_id.type=${GolfFit.fileType(messages)})")
+        val type = GolfFit.fileType(messages)
+        // Route by content, not file_id.type: the vívoactive 5's native BLE files
+        // report file_id.type=32, unlike the 38/4 seen in USB/Connect exports. A
+        // golf scorecard is identified by its round-summary message (190).
+        return when {
+            GolfFit.hasGolfScore(messages) -> importScore(GolfFit.parseScore(messages))
+            type == GolfFit.FILE_TYPE_ACTIVITY || GolfFit.hasActivityData(messages) ->
+                importActivity(GolfFit.parseActivity(messages))
+            else -> ImportResult.Failed(
+                "no golf/activity data (file_id.type=$type, messages=${GolfFit.messageInventory(messages)})"
+            )
         }
     }
 
