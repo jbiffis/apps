@@ -56,7 +56,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-25 explain-no-golf"
+        const val BLE_BUILD = "ble-26 page-all-files"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -103,6 +103,11 @@ class GarminBleClient(
     private val protobufBuffers = HashMap<Int, ByteArrayOutputStream>()
     private var protobufRequestId = 1000
     private val remoteFiles = ArrayList<FileSync.RemoteFile>()
+    // File-list paging state. The watch caps each page (~100 files) and some firmware
+    // reports nextPageId=0 even when more pages exist, so we fall back to the max pageId
+    // seen (Gadgetbridge #5461) and keep going until a page adds nothing new.
+    private var lastFileListCursor = -1
+    private var prevRemoteCount = 0
 
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
     private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
@@ -516,11 +521,12 @@ class GarminBleClient(
             return
         }
         FileSync.parseFileListResponse(fss)?.let { list ->
-            log("File list: ${list.files.size} file(s), nextPage=${list.nextPageId}")
+            var added = 0
             list.files.forEach {
-                log("  • ${it.typeName ?: "?"} (code ${it.typeCode}) ${it.size}b id=${it.id?.id1}/${it.id?.id2}")
-                if (remoteFiles.none { r -> r.id == it.id }) remoteFiles.add(it)
+                if (remoteFiles.none { r -> r.id == it.id }) { remoteFiles.add(it); added++ }
             }
+            log("File-list page: ${list.files.size} file(s) (+$added new, ${remoteFiles.size} total), " +
+                "nextPage=${list.nextPageId}")
             scope.launch { onFileListPage(list) }
             return
         }
@@ -540,8 +546,17 @@ class GarminBleClient(
 
     /** Page through the file list; when the last page arrives, download golf files. */
     private suspend fun onFileListPage(list: FileSync.FileList) {
-        val next = list.nextPageId
-        if (next != null && next != 0 && list.files.isNotEmpty()) {
+        // Keep paging until a page adds no new files. Prefer the explicit nextPageId,
+        // but fall back to the max pageId seen when the watch reports 0 (Gadgetbridge
+        // #5461) — otherwise we'd stop after the first ~100 files and never see the
+        // later pages where activities/golf rounds live.
+        val explicitNext = list.nextPageId?.takeIf { it != 0 }
+        val maxPageId = list.files.mapNotNull { it.pageId }.maxOrNull()
+        val next = explicitNext ?: maxPageId
+        val addedNew = remoteFiles.size > prevRemoteCount
+        prevRemoteCount = remoteFiles.size
+        if (next != null && next != 0 && next != lastFileListCursor && addedNew) {
+            lastFileListCursor = next
             sendProtobuf(FileSync.buildFileListRequest(next))
             return
         }
@@ -807,6 +822,8 @@ class GarminBleClient(
                 if (entries.isEmpty()) {
                     log("Empty directory — requesting file list via FileSyncService (V2)…")
                     remoteFiles.clear()
+                    lastFileListCursor = -1
+                    prevRemoteCount = 0
                     sendProtobuf(FileSync.buildFileListRequest(null))
                     // Responses arrive asynchronously; leave the session open to receive them.
                     return@launch
