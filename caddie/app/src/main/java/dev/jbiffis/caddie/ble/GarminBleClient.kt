@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-14 protobuf-reassembly"
+        const val BLE_BUILD = "ble-15 v2-download"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -102,6 +102,11 @@ class GarminBleClient(
     private val protobufBuffers = HashMap<Int, ByteArrayOutputStream>()
     private var protobufRequestId = 1000
     private val remoteFiles = ArrayList<FileSync.RemoteFile>()
+
+    // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
+    private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
+    private var fileXferHandle = -1
+    private val fileXferChunks = Channel<ByteArray>(Channel.BUFFERED)
 
     private fun log(msg: String) {
         val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(System.currentTimeMillis())
@@ -361,6 +366,11 @@ class GarminBleClient(
             if (verboseRx) log("  control handle=0: ${Gfdi.hex(payload, 24)}")
             return
         }
+        // A registered V2 file-transfer handle delivers RAW (deflate) data, not COBS
+        if (handle == fileXferHandle) {
+            fileXferChunks.trySend(payload)
+            return
+        }
         feedCobs(handle, payload)
     }
 
@@ -504,28 +514,44 @@ class GarminBleClient(
             files.forEach { log("  • ${it.typeName ?: "?"} ${it.size}b") }
             return
         }
-        FileSync.parseFileResponseHandle(fss)?.let { handle ->
-            log("File response: transfer handle=$handle (V2 download not yet implemented)")
+        if (Protobuf.firstBytes(Protobuf.decode(fss), FileSync.FS_FILE_RESPONSE) != null) {
+            val handle = FileSync.parseFileResponseHandle(fss)
+            log("File response: transfer handle=$handle")
+            fileResponseHandles.trySend(handle ?: -1)
             return
         }
         log("FileSyncService msg (unhandled): ${Gfdi.hex(fss, 32)}")
     }
 
-    /** Page through the file list; when done, report what golf files are available. */
+    /** Page through the file list; when the last page arrives, download golf files. */
     private suspend fun onFileListPage(list: FileSync.FileList) {
         val next = list.nextPageId
         if (next != null && next != 0 && list.files.isNotEmpty()) {
             sendProtobuf(FileSync.buildFileListRequest(next))
-        } else {
-            val golf = remoteFiles.filter {
-                (it.typeName ?: "").contains("golf", ignoreCase = true) ||
-                    (it.typeName ?: "").contains("scorecard", ignoreCase = true) ||
-                    it.typeName == "activity"
-            }
-            log("File enumeration complete: ${remoteFiles.size} total, ${golf.size} golf-related.")
-            golf.forEach { log("  golf: ${it.typeName} ${it.size}b") }
-            log("(V2 file download is the next piece to implement.)")
+            return
         }
+        // "code 9" = sports activities (golf rounds live here). Download those and
+        // let the importer keep whichever parse as golf; skip anything already synced.
+        val candidates = remoteFiles.filter { it.typeCode == 9 }
+        log("File enumeration complete: ${remoteFiles.size} total, ${candidates.size} sport activities.")
+        var imported = 0
+        for (file in candidates) {
+            val key = "v2|${file.id?.id1}|${file.id?.id2}"
+            val synced = prefs.getStringSet("synced_files", emptySet())!!
+            if (synced.contains(key)) { log("  already synced: ${file.id?.id1}"); continue }
+            val bytes = downloadFileV2(file)
+            if (bytes == null) { log("  download failed for ${file.id?.id1}"); continue }
+            try {
+                onFileDownloaded("v2_${file.id?.id1}.fit", bytes)
+                imported++
+                prefs.edit().putStringSet("synced_files", HashSet(synced).apply { add(key) }).apply()
+                log("  imported ✓ (${bytes.size}b)")
+            } catch (e: Exception) {
+                log("  import error: ${e.message}")
+            }
+        }
+        log("V2 sync done: $imported file(s) imported.")
+        send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE))
     }
 
     private suspend fun completeHandshake() {
@@ -589,6 +615,88 @@ class GarminBleClient(
             if (r.requestId == requestId) return r
             log("(out-of-band ack[${r.requestId}] while waiting for $requestId)")
         }
+    }
+
+    /**
+     * V2 file download: request the file over FileSyncService, register a
+     * FILE_TRANSFER multi-link service, pull the raw deflate stream on its
+     * handle, and inflate to the FIT file.
+     */
+    private suspend fun downloadFileV2(file: FileSync.RemoteFile): ByteArray? {
+        log("Requesting ${file.typeName ?: "file"} ${file.size}b (id=${file.id?.id1})…")
+        // Drain stale state
+        while (fileResponseHandles.tryReceive().getOrNull() != null) {}
+        while (fileXferChunks.tryReceive().getOrNull() != null) {}
+
+        // 1. FileRequest → FileResponse(handle)
+        sendProtobuf(FileSync.buildFileRequest(file))
+        val fileHandle = withTimeoutOrNull(10_000) { fileResponseHandles.receive() }
+        if (fileHandle == null || fileHandle < 0) { log("  no/failed FileResponse"); return null }
+
+        // 2. Register a FILE_TRANSFER multi-link service
+        val serviceCode = MultiLink.FILE_TRANSFER_SERVICES[0]
+        while (controlResponses.tryReceive().getOrNull() != null) {}
+        sendRaw(MultiLink.registerRequest(serviceCode))
+        val reg = withTimeoutOrNull(5000) { controlResponses.receive() }
+        if (reg == null || reg.handle == 0) { log("  file-transfer service registration failed"); return null }
+        fileXferHandle = reg.handle
+        log("  transfer service handle=${fileXferHandle}")
+
+        try {
+            // 3. Ask for the file on that handle: [00 00][fileHandle:2 LE][00 00]
+            val req = java.nio.ByteBuffer.allocate(6).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            req.put(0); req.put(0); req.putShort(fileHandle.toShort()); req.put(0); req.put(0)
+            sendRaw(MultiLink.fragment(fileXferHandle, req.array(), mtu - 3).first())
+
+            // 4. Accumulate raw chunks until the deflate stream ends (or it goes idle)
+            val out = ByteArrayOutputStream()
+            while (true) {
+                val chunk = withTimeoutOrNull(8000) { fileXferChunks.receive() }
+                if (chunk == null) { log("  transfer idle at ${out.size()}b"); break }
+                out.write(chunk)
+                if (looksComplete(out.toByteArray())) { log("  stream complete at ${out.size()}b"); break }
+            }
+            val raw = out.toByteArray()
+            if (raw.isEmpty()) return null
+            val inflated = inflate(raw)
+            if (inflated == null) { log("  inflate failed (${raw.size}b raw)"); return null }
+            log("  inflated ${raw.size}b → ${inflated.size}b")
+            return inflated
+        } finally {
+            // Close the transfer service
+            runCatching { sendRaw(MultiLink.closeHandle(serviceCode, fileXferHandle)) }
+            fileXferHandle = -1
+        }
+    }
+
+    /** True once the accumulated bytes form a complete zlib/deflate stream. */
+    private fun looksComplete(data: ByteArray): Boolean {
+        val inf = java.util.zip.Inflater()
+        inf.setInput(data)
+        val buf = ByteArray(4096)
+        return try {
+            while (!inf.finished() && !inf.needsInput()) inf.inflate(buf)
+            inf.finished()
+        } catch (e: Exception) { false } finally { inf.end() }
+    }
+
+    private fun inflate(data: ByteArray): ByteArray? {
+        for (nowrap in listOf(false, true)) {
+            try {
+                val inf = java.util.zip.Inflater(nowrap)
+                inf.setInput(data)
+                val out = ByteArrayOutputStream()
+                val buf = ByteArray(8192)
+                while (!inf.finished()) {
+                    val n = inf.inflate(buf)
+                    if (n == 0 && inf.needsInput()) break
+                    out.write(buf, 0, n)
+                }
+                inf.end()
+                if (out.size() > 0) return out.toByteArray()
+            } catch (_: Exception) {}
+        }
+        return null
     }
 
     // ---- Sync ------------------------------------------------------------------

@@ -39,7 +39,11 @@ object MultiLink {
 
     // Service codes
     const val SERVICE_GFDI = 0x0001
+    // File-transfer (V2) services — the first free one is registered per transfer.
+    val FILE_TRANSFER_SERVICES = intArrayOf(0x2018, 0x4018, 0x6018, 0xa018, 0xc018, 0xe018)
     const val CLIENT_ID = 2L
+
+    const val CLOSE_ALL_REQ_TYPE = 0x05
 
     private fun uuid(short: Int): java.util.UUID =
         java.util.UUID.fromString(String.format("6a4e%04x-667b-11e3-949a-0800200c9a66", short))
@@ -48,6 +52,17 @@ object MultiLink {
 
     /** Control-channel frame to reset any handles left over from a prior session. */
     fun closeAllRequest(): ByteArray = byteArrayOf(CONTROL_HANDLE.toByte(), CLOSE_ALL_REQ.toByte())
+
+    /** Control-channel frame to close one registered service handle. */
+    fun closeHandle(service: Int, handle: Int): ByteArray {
+        val buf = java.nio.ByteBuffer.allocate(1 + 1 + 8 + 2 + 1).order(ByteOrder.LITTLE_ENDIAN)
+        buf.put(CONTROL_HANDLE.toByte())
+        buf.put(CLOSE_HANDLE_REQ.toByte())
+        buf.putLong(CLIENT_ID)
+        buf.putShort(service.toShort())
+        buf.put(handle.toByte())
+        return buf.array()
+    }
 
     /** Control-channel frame registering a service, e.g. GFDI. */
     fun registerRequest(service: Int, reliability: Int = 0, clientId: Long = CLIENT_ID): ByteArray {
