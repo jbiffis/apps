@@ -56,7 +56,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-24 scan-all-for-golf"
+        const val BLE_BUILD = "ble-25 explain-no-golf"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -576,7 +576,15 @@ class GarminBleClient(
                 log("  import error: ${e.message}")
             }
         }
-        log("Scan done: $golfFiles golf/activity file(s), $newRounds new round(s) imported.")
+        if (golfFiles == 0) {
+            log("Scan done: the watch is not currently offering any golf rounds over " +
+                "Bluetooth — its ${remoteFiles.size} files are all monitoring/wellness/settings. " +
+                "Garmin only advertises UNSYNCED activities here, so a round already pulled by " +
+                "Garmin Connect/Gadgetbridge is hidden. Play & save a new round, then sync again " +
+                "and it will appear.")
+        } else {
+            log("Scan done: $golfFiles golf/activity file(s), $newRounds new round(s) imported.")
+        }
         send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE))
     }
 
