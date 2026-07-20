@@ -121,10 +121,15 @@ class UsbMtpImporter(private val context: Context) {
                 folderNames[handle] = name
                 allFolders.add(name)
                 enqueueChildren(handle)
-            } else if (name.lowercase().let { it.endsWith(".fit") || it.endsWith(".dat") }) {
-                // .fit = scorecards / activities / clubs; .dat = CourseView course geometry.
+            } else {
+                val lower = name.lowercase()
                 val folder = folderNames[info.parent] ?: ""
-                fits.add(FitItem(handle, name, info.compressedSize, folder))
+                // .fit = scorecards / activities / clubs (anywhere); .dat = CourseView
+                // course geometry, only from the golf course folders — other .DAT files
+                // (Hydration, Leaderboard, …) live under DATA and aren't course maps.
+                val take = lower.endsWith(".fit") ||
+                    (lower.endsWith(".dat") && COURSE_DAT_FOLDERS.contains(folder))
+                if (take) fits.add(FitItem(handle, name, info.compressedSize, folder))
             }
         }
         val byFolder = fits.groupingBy { it.folder.ifEmpty { "(root)" } }.eachCount()
@@ -166,6 +171,8 @@ class UsbMtpImporter(private val context: Context) {
         private const val MAX_OBJECTS = 8000
         private const val MAX_FILES = 600
         private const val MAX_FILE_BYTES = 64 * 1024 * 1024
-        private val GOLF_FOLDERS = setOf("Activity", "Scorecards", "Golf", "GolfCourse", "GolfCourses", "NewFiles")
+        private val GOLF_FOLDERS = setOf("Activity", "Scorecards", "Score", "Golf", "GolfCourse", "GolfCourses", "NewFiles")
+        // Folders that hold Garmin CourseView .DAT course geometry (not generic DATA files).
+        private val COURSE_DAT_FOLDERS = setOf("Golf", "GolfCourse", "GolfCourses", "CourseView", "Course")
     }
 }
