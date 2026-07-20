@@ -178,13 +178,18 @@ fun ShotMapScreen(
         }
     }
 
-    fun fetchCourse() {
+    fun loadCourse(force: Boolean) {
         if (fetching) return
         fetching = true
         fetchState = "Downloading course map…"
         scope.launch {
             fetchState = try {
-                val n = withContext(Dispatchers.IO) { app.repository.downloadCourseFeatures(roundId) }
+                val n = withContext(Dispatchers.IO) {
+                    // Manual retry forces a fresh fetch; auto-load re-fetches once per
+                    // app session so OSM edits show up on the next restart.
+                    if (force) app.repository.downloadCourseFeatures(roundId)
+                    else app.repository.refreshCourseFeaturesForSession(roundId)
+                }
                 if (n == 0) "This course isn't mapped on OpenStreetMap yet" else null
             } catch (e: Exception) {
                 "Course map download failed — tap to retry\n(${e.message?.take(90) ?: e.javaClass.simpleName})"
@@ -193,12 +198,10 @@ fun ShotMapScreen(
         }
     }
 
-    // Fetch the course polygons automatically the first time this round's
-    // shot view is opened (import may have failed offline / rate-limited).
-    LaunchedEffect(roundId) {
-        val stored = withContext(Dispatchers.IO) { dao.featureCount(roundId) }
-        if (stored == 0) fetchCourse()
-    }
+    // Re-check OpenStreetMap for this course once per app session (restart the app
+    // after editing OSM to pull the new geometry). Within a session, repeated hole
+    // views reuse the cached map instead of re-hitting Overpass.
+    LaunchedEffect(roundId) { loadCourse(force = false) }
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
@@ -230,7 +233,7 @@ fun ShotMapScreen(
             }
             if (features.isEmpty()) {
                 OutlinedButton(
-                    onClick = { fetchCourse() },
+                    onClick = { loadCourse(force = true) },
                     enabled = !fetching,
                     modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
                 ) {

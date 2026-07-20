@@ -23,6 +23,9 @@ class Repository(private val dao: CaddieDao) {
     /** Pending activities that arrived before their score file, keyed by start time. */
     private val pendingActivities = ArrayList<GolfFit.ActivityFile>()
 
+    /** Rounds whose OSM course map we've already re-fetched this app session. */
+    private val courseRefreshedThisSession = java.util.Collections.synchronizedSet(HashSet<Long>())
+
     /**
      * Import any file pulled off the watch, routing by content: Garmin FIT files
      * (scorecards, activities, clubs) start with a ".FIT" tag at byte 8; everything
@@ -161,6 +164,18 @@ class Repository(private val dao: CaddieDao) {
     }
 
     /**
+     * Re-fetch a round's OSM course map at most once per app session. This picks
+     * up edits made to OpenStreetMap when the app is restarted, without re-hitting
+     * Overpass every time a hole view is opened during the same session. Returns
+     * the number of features now stored.
+     */
+    suspend fun refreshCourseFeaturesForSession(roundId: Long): Int {
+        val firstThisSession = courseRefreshedThisSession.add(roundId)
+        if (!firstThisSession) return dao.featureCount(roundId) // already tried this session
+        return downloadCourseFeatures(roundId)
+    }
+
+    /**
      * Fetch golf course polygons from OpenStreetMap covering everywhere this
      * round was played. Returns the number of features stored.
      */
@@ -178,6 +193,9 @@ class Repository(private val dao: CaddieDao) {
             north = lats.max() + padLat,
             east = lons.max() + padLon,
         )
+        // Don't wipe a previously-good map on a transient empty response — only
+        // replace when we actually got features (or there was nothing cached).
+        if (features.isEmpty()) return dao.featureCount(roundId)
         dao.replaceFeatures(roundId, features.map { CourseFeatureEntity.encode(roundId, it) })
         return features.size
     }
