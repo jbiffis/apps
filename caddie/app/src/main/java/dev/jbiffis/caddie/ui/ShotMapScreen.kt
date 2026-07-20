@@ -106,6 +106,8 @@ fun ShotMapScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var editClub by remember { mutableStateOf(false) }
     var editMode by remember { mutableStateOf(false) }
+    // null = auto (drawn if mapped, satellite if not); true/false = user override.
+    var satelliteOverride by remember { mutableStateOf<Boolean?>(null) }
     var fetchState by remember { mutableStateOf<String?>(null) }
     var fetching by remember { mutableStateOf(false) }
     var greens by remember { mutableStateOf<List<List<Pair<Double, Double>>>>(emptyList()) }
@@ -135,27 +137,44 @@ fun ShotMapScreen(
         }
     }
 
-    fun addShot() {
+    // Insert a shot at position [index] (0 = before the first shot, shots.size = append).
+    // The new shot bridges the previous resting point and the next shot's start.
+    fun insertShotAt(index: Int) {
         scope.launch {
-            val last = shots.lastOrNull()
-            // New shot starts where the last one finished (or the pin, or hole centre).
-            val startLat = last?.endLat ?: holeInfo?.pinLat ?: features.firstOrNull()?.points?.firstOrNull()?.first
-            val startLon = last?.endLon ?: holeInfo?.pinLon ?: features.firstOrNull()?.points?.firstOrNull()?.second
-            if (startLat == null || startLon == null) return@launch
-            // End a short way toward the pin so the new shot is visible and draggable.
-            val endLat = holeInfo?.pinLat?.takeIf { it != startLat } ?: (startLat + 0.0002)
-            val endLon = holeInfo?.pinLon?.takeIf { it != startLon } ?: startLon
-            val newShot = ShotEntity(
-                roundId = roundId,
-                hole = hole,
-                timeS = (last?.timeS ?: holeInfo?.finishedAtS ?: 0L) + 1,
-                startLat = startLat, startLon = startLon,
-                endLat = endLat, endLon = endLon,
-                clubId = 0L,
-                distanceM = dev.jbiffis.caddie.fit.GolfFit.haversineM(startLat, startLon, endLat, endLon),
+            val idx = index.coerceIn(0, shots.size)
+            val prev = shots.getOrNull(idx - 1)
+            val next = shots.getOrNull(idx)
+            val startLat = prev?.endLat ?: next?.startLat?.let { it + 0.0002 }
+                ?: holeInfo?.pinLat ?: features.firstOrNull()?.points?.firstOrNull()?.first ?: return@launch
+            val startLon = prev?.endLon ?: next?.startLon
+                ?: holeInfo?.pinLon ?: features.firstOrNull()?.points?.firstOrNull()?.second ?: return@launch
+            // End a short way toward the pin (or the next shot) so it's visible and draggable.
+            val endLat = next?.startLat ?: holeInfo?.pinLat?.takeIf { it != startLat } ?: (startLat + 0.0002)
+            val endLon = next?.startLon ?: holeInfo?.pinLon?.takeIf { it != startLon } ?: startLon
+            // Pick a timeS strictly between neighbours so the list orders correctly;
+            // if the gap is too small, nudge the later shots to make room.
+            val prevT = prev?.timeS
+            val nextT = next?.timeS
+            val newT: Long = when {
+                nextT == null -> (prevT ?: holeInfo?.finishedAtS ?: 0L) + 1
+                prevT == null -> nextT - 1
+                nextT - prevT > 1 -> (prevT + nextT) / 2
+                else -> {
+                    var t = prevT + 2
+                    for (j in idx until shots.size) { dao.updateShot(shots[j].copy(timeS = t)); t++ }
+                    prevT + 1
+                }
+            }
+            dao.insertShot(
+                ShotEntity(
+                    roundId = roundId, hole = hole, timeS = newT,
+                    startLat = startLat, startLon = startLon,
+                    endLat = endLat, endLon = endLon,
+                    clubId = 0L,
+                    distanceM = dev.jbiffis.caddie.fit.GolfFit.haversineM(startLat, startLon, endLat, endLon),
+                )
             )
-            dao.insertShot(newShot)
-            shotIdx = shots.size // select the newly added shot
+            shotIdx = idx // select the newly inserted shot
         }
     }
 
@@ -183,10 +202,11 @@ fun ShotMapScreen(
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
-            // No OpenStreetMap golf geometry (unmapped course, or the Overpass fetch
-            // failed) → fall back to satellite imagery so every course still shows a
-            // real map with the shots overlaid, instead of a blank drawn canvas.
-            val useSatellite = features.isEmpty() && fetchState != null && !fetching
+            // Satellite when the user toggles it on, or (in auto mode) as a fallback
+            // when there's no OpenStreetMap golf geometry (unmapped course / failed
+            // Overpass fetch) so every course still shows a real map with the shots.
+            val autoSatellite = features.isEmpty() && fetchState != null && !fetching
+            val useSatellite = satelliteOverride ?: autoSatellite
             if (useSatellite) {
                 SatelliteHoleMap(
                     shots = shots,
@@ -234,8 +254,12 @@ fun ShotMapScreen(
                         tint = if (editMode) Color(0xFFFFD54F) else Color.White,
                     )
                 }
-                IconButton(onClick = { onOpenSatellite(hole) }) {
-                    Icon(Icons.Filled.Layers, contentDescription = "Satellite view", tint = Color.White)
+                IconButton(onClick = { satelliteOverride = !useSatellite }) {
+                    Icon(
+                        Icons.Filled.Layers,
+                        contentDescription = if (useSatellite) "Show drawn view" else "Show satellite view",
+                        tint = if (useSatellite) Color(0xFFFFD54F) else Color.White,
+                    )
                 }
             }
             if (editMode && !useSatellite) {
@@ -258,11 +282,11 @@ fun ShotMapScreen(
                         "No tracked shots on this hole.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    TextButton(onClick = { addShot() }) {
+                    TextButton(onClick = { insertShotAt(0) }) {
                         Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 4.dp))
                         Text("Add a shot")
                     }
-                }
+}
             } else {
                 val startLie = when {
                     shotIdx == 0 -> Lie.Type.TEE
@@ -305,13 +329,17 @@ fun ShotMapScreen(
                     DetailRow("Distance", "${current.distanceM.toYards()} yds")
                     DetailRow("Result", result)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { addShot() }) {
-                            Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 4.dp))
-                            Text("Add shot")
+                        TextButton(onClick = { insertShotAt(shotIdx) }) {
+                            Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 2.dp))
+                            Text("Before")
+                        }
+                        TextButton(onClick = { insertShotAt(shotIdx + 1) }) {
+                            Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 2.dp))
+                            Text("After")
                         }
                         androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                         TextButton(onClick = { confirmDelete = true }) {
-                            Text("Delete shot", color = MaterialTheme.colorScheme.error)
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
