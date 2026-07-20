@@ -56,7 +56,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-27 paging-diagnostic"
+        const val BLE_BUILD = "ble-28 follow-page-cursor"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -108,6 +108,8 @@ class GarminBleClient(
     // seen (Gadgetbridge #5461) and keep going until a page adds nothing new.
     private var lastFileListCursor = -1
     private var prevRemoteCount = 0
+    private var emptyPageStreak = 0
+    private var filePagesFetched = 0
 
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
     private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
@@ -546,24 +548,30 @@ class GarminBleClient(
 
     /** Page through the file list; when the last page arrives, download golf files. */
     private suspend fun onFileListPage(list: FileSync.FileList) {
-        // Keep paging until a page adds no new files. Prefer the explicit nextPageId,
-        // but fall back to the max pageId seen when the watch reports 0 (Gadgetbridge
-        // #5461) — otherwise we'd stop after the first ~100 files and never see the
-        // later pages where activities/golf rounds live.
+        // Page through the whole list. The watch caps each page (~100 files) and on the
+        // first page reports nextPageId=0 (Gadgetbridge #5461), so we bootstrap the cursor
+        // from the max pageId seen. After that, FOLLOW the watch's explicit nextPageId even
+        // across empty boundary pages — the watch returned an empty page but a real
+        // nextPage=1468, meaning more files exist beyond our initial guess. Only fall back
+        // to "added new files" when there's no explicit cursor, and guard against runaway.
         val explicitNext = list.nextPageId?.takeIf { it != 0 }
         val maxPageId = list.files.mapNotNull { it.pageId }.maxOrNull()
         val next = explicitNext ?: maxPageId
         val addedNew = remoteFiles.size > prevRemoteCount
         prevRemoteCount = remoteFiles.size
+        emptyPageStreak = if (list.files.isEmpty()) emptyPageStreak + 1 else 0
         log("  paging: explicitNext=$explicitNext maxPageId=$maxPageId addedNew=$addedNew " +
-            "(${remoteFiles.size} files so far)")
-        if (next != null && next != 0 && next != lastFileListCursor && addedNew) {
+            "empty=$emptyPageStreak (${remoteFiles.size} files so far)")
+        val worthContinuing = explicitNext != null || addedNew
+        if (next != null && next != 0 && next != lastFileListCursor && worthContinuing &&
+            emptyPageStreak < 20 && filePagesFetched < 100) {
             lastFileListCursor = next
+            filePagesFetched++
             log("  → requesting next page at cursor $next")
             sendProtobuf(FileSync.buildFileListRequest(next))
             return
         }
-        log("  → no more pages (${remoteFiles.size} files total)")
+        log("  → paging done (${remoteFiles.size} files total)")
         // The golf round's file_id.type is unknown and NOT the "sports" code (code 9
         // turned out to be monitoring). So scan every distinct file and let importFit
         // decide by content. Cap each identical (typeCode,size) bucket at two files so
@@ -828,6 +836,8 @@ class GarminBleClient(
                     remoteFiles.clear()
                     lastFileListCursor = -1
                     prevRemoteCount = 0
+                    emptyPageStreak = 0
+                    filePagesFetched = 0
                     sendProtobuf(FileSync.buildFileListRequest(null))
                     // Responses arrive asynchronously; leave the session open to receive them.
                     return@launch
