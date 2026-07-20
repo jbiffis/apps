@@ -170,22 +170,44 @@ fun ShotMapScreen(
 
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
-            HoleCanvas(
-                shots = shots,
-                features = features,
-                pinLat = holeInfo?.pinLat,
-                pinLon = holeInfo?.pinLon,
-                currentIdx = shotIdx,
-                editMode = editMode,
-                onSelectShot = { shotIdx = it },
-                onMoveNode = { node, lat, lon -> moveNode(node, lat, lon) },
-            )
+            // No OpenStreetMap golf geometry (unmapped course, or the Overpass fetch
+            // failed) → fall back to satellite imagery so every course still shows a
+            // real map with the shots overlaid, instead of a blank drawn canvas.
+            val useSatellite = features.isEmpty() && fetchState != null && !fetching
+            if (useSatellite) {
+                SatelliteHoleMap(
+                    shots = shots,
+                    holeInfo = holeInfo,
+                    clubNames = clubNames,
+                    modifier = Modifier.matchParentSize(),
+                    onSelectShot = { shotIdx = it },
+                )
+            } else {
+                HoleCanvas(
+                    shots = shots,
+                    features = features,
+                    pinLat = holeInfo?.pinLat,
+                    pinLon = holeInfo?.pinLon,
+                    currentIdx = shotIdx,
+                    editMode = editMode,
+                    onSelectShot = { shotIdx = it },
+                    onMoveNode = { node, lat, lon -> moveNode(node, lat, lon) },
+                )
+            }
             if (features.isEmpty()) {
                 OutlinedButton(
                     onClick = { fetchCourse() },
                     enabled = !fetching,
                     modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
-                ) { Text(fetchState ?: "Download course map (OpenStreetMap)") }
+                ) {
+                    Text(
+                        when {
+                            fetching -> "Downloading course map…"
+                            useSatellite -> "Satellite view — tap to retry OSM outline"
+                            else -> fetchState ?: "Download course map (OpenStreetMap)"
+                        }
+                    )
+                }
             }
             Row(
                 Modifier.align(Alignment.TopEnd).padding(4.dp),
@@ -202,7 +224,7 @@ fun ShotMapScreen(
                     Icon(Icons.Filled.Layers, contentDescription = "Satellite view", tint = Color.White)
                 }
             }
-            if (editMode) {
+            if (editMode && !useSatellite) {
                 Text(
                     "Edit mode: drag the balls to move shots. Add or delete below.",
                     Modifier.align(Alignment.BottomCenter).padding(8.dp)
