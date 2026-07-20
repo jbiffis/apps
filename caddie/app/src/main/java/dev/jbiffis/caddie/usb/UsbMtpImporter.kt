@@ -121,15 +121,16 @@ class UsbMtpImporter(private val context: Context) {
                 folderNames[handle] = name
                 allFolders.add(name)
                 enqueueChildren(handle)
-            } else if (name.lowercase().endsWith(".fit")) {
+            } else if (name.lowercase().let { it.endsWith(".fit") || it.endsWith(".dat") }) {
+                // .fit = scorecards / activities / clubs; .dat = CourseView course geometry.
                 val folder = folderNames[info.parent] ?: ""
                 fits.add(FitItem(handle, name, info.compressedSize, folder))
             }
         }
         val byFolder = fits.groupingBy { it.folder.ifEmpty { "(root)" } }.eachCount()
-        report.add("Storage $storageId: scanned ${seen.size} objects, ${fits.size} .fit files")
+        report.add("Storage $storageId: scanned ${seen.size} objects, ${fits.size} fit/dat files")
         report.add("  folders: ${allFolders.sorted().joinToString(", ")}")
-        report.add("  .fit by folder: ${byFolder.entries.joinToString(", ") { "${it.key}=${it.value}" }}")
+        report.add("  files by folder: ${byFolder.entries.joinToString(", ") { "${it.key}=${it.value}" }}")
         // Golf folders first; within a group, newest-looking names last (stable sort keeps order).
         return fits.sortedByDescending { GOLF_FOLDERS.contains(it.folder) }
     }
@@ -165,6 +166,6 @@ class UsbMtpImporter(private val context: Context) {
         private const val MAX_OBJECTS = 8000
         private const val MAX_FILES = 600
         private const val MAX_FILE_BYTES = 64 * 1024 * 1024
-        private val GOLF_FOLDERS = setOf("Activity", "Scorecards", "GolfCourse", "GolfCourses", "NewFiles")
+        private val GOLF_FOLDERS = setOf("Activity", "Scorecards", "Golf", "GolfCourse", "GolfCourses", "NewFiles")
     }
 }

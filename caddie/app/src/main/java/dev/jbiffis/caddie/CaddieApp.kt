@@ -13,11 +13,13 @@ class CaddieApp : Application() {
     val repository by lazy { Repository(db.dao()) }
     val bleClient by lazy {
         GarminBleClient(this, getSharedPreferences("ble_sync", MODE_PRIVATE)) { _, bytes ->
-            when (val r = repository.importFit(bytes)) {
+            when (val r = repository.importFile(bytes)) {
                 is ImportResult.NewRound -> "NEW round: ${r.courseName} (${r.totalScore})"
                 is ImportResult.ActivityAttached -> "activity attached to existing round"
                 is ImportResult.ActivityStored -> "activity held: ${r.reason}"
                 is ImportResult.Duplicate -> "already have round: ${r.what}"
+                is ImportResult.ClubsImported -> "clubs: ${r.count} imported"
+                is ImportResult.CourseDatImported -> "course ${r.courseId}: ${r.greens} outlines"
                 is ImportResult.Failed -> "skipped: ${r.reason}"
             }
         }

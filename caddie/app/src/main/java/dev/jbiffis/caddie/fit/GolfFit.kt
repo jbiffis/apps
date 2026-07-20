@@ -105,6 +105,67 @@ object GolfFit {
     fun hasActivityData(messages: List<FitMessage>): Boolean =
         messages.any { it.globalNum == 18 || it.globalNum == 19 || it.globalNum == 20 }
 
+    // ---- Golf clubs (Clubs.fit, file_id.type = 37) ----------------------------
+    // Message 173 = one row per club: field 1 = clubId (the value shots reference),
+    // field 2 = Garmin's club-type enum, field 8 = loft in centidegrees (1050 = 10.5°).
+    // We name clubs from the type enum (verified against Garmin Connect), falling back
+    // to loft when a type is unknown. Field 3 (custom nickname) wins when set.
+
+    data class ClubInfo(val clubId: Long, val loftDeg: Double, val name: String)
+
+    fun hasClubs(messages: List<FitMessage>): Boolean = messages.any { it.globalNum == 173 }
+
+    fun parseClubs(messages: List<FitMessage>): List<ClubInfo> =
+        messages.filter { it.globalNum == 173 }.mapNotNull { m ->
+            val id = m.long(1) ?: return@mapNotNull null
+            if (id == 0L) return@mapNotNull null
+            val loft = (m.int(8) ?: 0) / 100.0
+            val type = m.int(2) ?: -1
+            val custom = m.string(3)?.trim()?.takeIf { it.isNotEmpty() }
+            ClubInfo(id, loft, custom ?: withLoft(clubNameForType(type, loft), loft))
+        }
+
+    private fun withLoft(name: String, loft: Double): String =
+        if (loft in 6.0..64.0) "$name (${"%.1f".format(loft).removeSuffix(".0")}°)" else name
+
+    /**
+     * Club name from Garmin's club-type enum (Clubs.fit message 173 field 2),
+     * verified against Garmin Connect: 1=Driver, 4..9=hybrids (5=2H,7=4H),
+     * 10..18=irons (12=3i…18=9i), 19..22=PW/GW/SW/LW, 23=Putter, 2..3=woods.
+     * Falls back to loft-based naming for any unknown type.
+     */
+    fun clubNameForType(type: Int, loft: Double): String = when (type) {
+        1 -> "Driver"
+        23 -> "Putter"
+        in 10..18 -> "${type - 9} Iron"
+        19 -> "Pitching Wedge"
+        20 -> "Gap Wedge"
+        21 -> "Sand Wedge"
+        22 -> "Lob Wedge"
+        in 4..9 -> "${type - 3} Hybrid"
+        in 2..3 -> "$type Wood"
+        else -> clubNameForLoft(loft)
+    }
+
+    /** Best-effort club name from loft alone (fallback when the type is unknown). */
+    fun clubNameForLoft(loft: Double): String = when {
+        loft <= 0 -> "Club"
+        loft < 7 -> "Putter"
+        loft < 14 -> "Driver"
+        loft < 19 -> "Wood"
+        loft < 23 -> "Hybrid"
+        loft < 25.5 -> "4 Iron"
+        loft < 28.5 -> "5 Iron"
+        loft < 32 -> "6 Iron"
+        loft < 36 -> "7 Iron"
+        loft < 40 -> "8 Iron"
+        loft < 44 -> "9 Iron"
+        loft < 48 -> "Pitching Wedge"
+        loft < 52 -> "Gap Wedge"
+        loft < 56 -> "Sand Wedge"
+        else -> "Lob Wedge"
+    }
+
     fun fitToUnixS(fitTs: Long): Long = fitTs + FitReader.FIT_EPOCH_OFFSET_S
 
     fun parseScore(messages: List<FitMessage>): ScoreFile {

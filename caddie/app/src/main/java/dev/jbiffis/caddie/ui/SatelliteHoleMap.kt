@@ -16,6 +16,7 @@ import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 
 /** Esri World Imagery — free satellite tiles, no API key. */
@@ -41,6 +42,7 @@ fun SatelliteHoleMap(
     holeInfo: HoleEntity?,
     clubNames: Map<Long, String>,
     modifier: Modifier = Modifier,
+    greens: List<List<Pair<Double, Double>>> = emptyList(),
     onSelectShot: (Int) -> Unit = {},
 ) {
     AndroidView(
@@ -54,6 +56,16 @@ fun SatelliteHoleMap(
         },
         update = { map ->
             map.overlays.removeAll { it !is CopyrightOverlay }
+
+            // Garmin CourseView green/hole outlines (from .DAT), drawn under the shots.
+            greens.forEach { poly ->
+                if (poly.size >= 3) map.overlays.add(Polygon(map).apply {
+                    points = poly.map { GeoPoint(it.first, it.second) }
+                    fillPaint.color = 0x55A9D468
+                    outlinePaint.color = 0xFF66BB6A.toInt()
+                    outlinePaint.strokeWidth = 3f
+                })
+            }
 
             shots.forEachIndexed { i, shot ->
                 val isPutt = shot.clubId == 0L
@@ -87,6 +99,7 @@ fun SatelliteHoleMap(
                     add(GeoPoint(it.startLat, it.startLon)); add(GeoPoint(it.endLat, it.endLon))
                 }
                 holeInfo?.let { h -> if (h.pinLat != null && h.pinLon != null) add(GeoPoint(h.pinLat, h.pinLon)) }
+                greens.forEach { poly -> poly.forEach { add(GeoPoint(it.first, it.second)) } }
             }
             if (points.isNotEmpty()) {
                 val box = BoundingBox.fromGeoPointsSafe(points)

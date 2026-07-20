@@ -105,6 +105,28 @@ SCORE files (`file_id.type = 38`):
 | 193 | hole info | 0=hole, 1=length (cm), 2=par, 3=stroke index, 4/5=pin lat/lon (semicircles) |
 | 194 | shot | 253=ts, 1=hole, 2/3=start lat/lon, 4/5=end lat/lon, 7=club ID (0 = putt/no club) |
 
+The golf-club list lives in a separate `Clubs.fit` file (`file_id.type = 37`),
+one message-173 row per club:
+
+| mesg | meaning | fields |
+|------|---------|--------|
+| 173 | golf club | 1=club ID (the value shots reference in msg 194 f7), 2=club-type enum, 8=loft (centidegrees, 1050 = 10.5°), 3=custom nickname (blank on this watch) |
+
+The club-type enum (field 2), verified against Garmin Connect: `1`=Driver,
+`2..3`=woods, `4..9`=hybrids (`5`=2 Hybrid … `9`=6 Hybrid), `10..18`=irons
+(`12`=3 iron … `18`=9 iron), `19`=Pitching, `20`=Gap, `21`=Sand, `22`=Lob
+wedge, `23`=Putter. `GolfFit.clubNameForType` maps these, falling back to
+loft-based naming for any unknown type.
+
+Course geometry comes from Garmin CourseView `.DAT` files (GARMIN/Golf on the
+watch), parsed by `fit/GarminCourseDat.kt`. These are protobuf, not FIT:
+field 2 = numeric course id, field 3 = a course message with repeated feature
+messages (field 4); each feature holds repeated point sub-messages (field 6)
+carrying lat (field 2) and lon (field 3) as semicircles — lon is a signed
+64-bit varint (negative in the western hemisphere). On the vivoactive 5 these
+files are sparse (a handful of green/hole outlines), so they enrich the
+satellite map where present rather than replacing it.
+
 Cross-checks that validate this mapping on the sample round: hole pars sum to
 36/36, strokes sum to the 52/51 player totals, `Σ(f2−f3) = 42` matches the
 round-summary putts field, and per-club average distances are plausible

@@ -108,6 +108,19 @@ fun ShotMapScreen(
     var editMode by remember { mutableStateOf(false) }
     var fetchState by remember { mutableStateOf<String?>(null) }
     var fetching by remember { mutableStateOf(false) }
+    var greens by remember { mutableStateOf<List<List<Pair<Double, Double>>>>(emptyList()) }
+
+    // Pull any Garmin CourseView green outlines (.DAT) that fall inside this hole's
+    // view. Matched by location, since rounds don't record Garmin's course id.
+    LaunchedEffect(shots, holeInfo) {
+        val lats = shots.flatMap { listOf(it.startLat, it.endLat) } + listOfNotNull(holeInfo?.pinLat)
+        val lons = shots.flatMap { listOf(it.startLon, it.endLon) } + listOfNotNull(holeInfo?.pinLon)
+        greens = if (lats.isEmpty()) emptyList() else withContext(Dispatchers.IO) {
+            val pad = 0.0025 // ~275 m, enough to catch the green serving this hole
+            dao.greensInBounds(lats.min() - pad, lons.min() - pad, lats.max() + pad, lons.max() + pad)
+                .map { it.polygon() }
+        }
+    }
 
     fun recomputeDistance(s: ShotEntity) =
         s.copy(distanceM = dev.jbiffis.caddie.fit.GolfFit.haversineM(s.startLat, s.startLon, s.endLat, s.endLon))
@@ -180,6 +193,7 @@ fun ShotMapScreen(
                     holeInfo = holeInfo,
                     clubNames = clubNames,
                     modifier = Modifier.matchParentSize(),
+                    greens = greens,
                     onSelectShot = { shotIdx = it },
                 )
             } else {

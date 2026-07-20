@@ -116,6 +116,44 @@ data class CourseFeatureEntity(
     }
 }
 
+/**
+ * A single polygon (green / hole outline) pulled from a Garmin CourseView `.DAT`
+ * file (GARMIN/Golf on the watch). Stored with its bounding box so the shot map
+ * can query the shapes that fall inside a hole's view without a per-round link —
+ * rounds don't record Garmin's numeric course id, so we match on geography.
+ */
+@Entity(tableName = "course_greens", indices = [Index("courseId")])
+data class CourseGreenEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val courseId: Long,
+    val minLat: Double,
+    val minLon: Double,
+    val maxLat: Double,
+    val maxLon: Double,
+    val points: String, // "lat,lon;lat,lon;..."
+) {
+    fun polygon(): List<Pair<Double, Double>> = points.split(';').mapNotNull { pair ->
+        val comma = pair.indexOf(',')
+        if (comma <= 0) return@mapNotNull null
+        val lat = pair.substring(0, comma).toDoubleOrNull() ?: return@mapNotNull null
+        val lon = pair.substring(comma + 1).toDoubleOrNull() ?: return@mapNotNull null
+        lat to lon
+    }
+
+    companion object {
+        fun of(courseId: Long, poly: List<Pair<Double, Double>>): CourseGreenEntity {
+            val lats = poly.map { it.first }
+            val lons = poly.map { it.second }
+            return CourseGreenEntity(
+                courseId = courseId,
+                minLat = lats.min(), minLon = lons.min(),
+                maxLat = lats.max(), maxLon = lons.max(),
+                points = poly.joinToString(";") { "${it.first},${it.second}" },
+            )
+        }
+    }
+}
+
 data class ClubDistanceRow(
     val clubId: Long,
     val shots: Int,
@@ -242,6 +280,28 @@ interface CaddieDao {
         insertFeatures(features)
     }
 
+    // Course greens (Garmin CourseView .DAT geometry, matched to holes by location)
+    @Insert
+    suspend fun insertGreens(greens: List<CourseGreenEntity>)
+
+    @Query("DELETE FROM course_greens WHERE courseId = :courseId")
+    suspend fun deleteGreensForCourse(courseId: Long)
+
+    @Query("SELECT COUNT(*) FROM course_greens")
+    suspend fun greensCount(): Int
+
+    @Query(
+        "SELECT * FROM course_greens WHERE maxLat >= :south AND minLat <= :north " +
+            "AND maxLon >= :west AND minLon <= :east"
+    )
+    suspend fun greensInBounds(south: Double, west: Double, north: Double, east: Double): List<CourseGreenEntity>
+
+    @Transaction
+    suspend fun replaceGreens(courseId: Long, greens: List<CourseGreenEntity>) {
+        deleteGreensForCourse(courseId)
+        insertGreens(greens)
+    }
+
     @Transaction
     suspend fun deleteRoundCascade(roundId: Long) {
         deleteHoles(roundId)
@@ -256,8 +316,9 @@ interface CaddieDao {
     entities = [
         RoundEntity::class, HoleEntity::class, ShotEntity::class,
         ClubEntity::class, TrackPointEntity::class, CourseFeatureEntity::class,
+        CourseGreenEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class CaddieDb : RoomDatabase() {

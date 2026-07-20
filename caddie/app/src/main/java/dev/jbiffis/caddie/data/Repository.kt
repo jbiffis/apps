@@ -1,6 +1,7 @@
 package dev.jbiffis.caddie.data
 
 import dev.jbiffis.caddie.fit.FitReader
+import dev.jbiffis.caddie.fit.GarminCourseDat
 import dev.jbiffis.caddie.fit.GolfFit
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -12,6 +13,8 @@ sealed class ImportResult {
     data class ActivityAttached(val roundId: Long) : ImportResult()
     data class ActivityStored(val reason: String) : ImportResult()
     data class Duplicate(val what: String) : ImportResult()
+    data class ClubsImported(val count: Int) : ImportResult()
+    data class CourseDatImported(val courseId: Long, val greens: Int) : ImportResult()
     data class Failed(val reason: String) : ImportResult()
 }
 
@@ -19,6 +22,31 @@ class Repository(private val dao: CaddieDao) {
 
     /** Pending activities that arrived before their score file, keyed by start time. */
     private val pendingActivities = ArrayList<GolfFit.ActivityFile>()
+
+    /**
+     * Import any file pulled off the watch, routing by content: Garmin FIT files
+     * (scorecards, activities, clubs) start with a ".FIT" tag at byte 8; everything
+     * else off the golf folders is a CourseView `.DAT` (protobuf course geometry).
+     * Content sniffing means callers don't need the file name.
+     */
+    suspend fun importFile(bytes: ByteArray): ImportResult =
+        if (isFit(bytes)) importFit(bytes) else importCourseDat(bytes)
+
+    private fun isFit(b: ByteArray): Boolean =
+        b.size > 12 && b[8] == '.'.code.toByte() && b[9] == 'F'.code.toByte() &&
+            b[10] == 'I'.code.toByte() && b[11] == 'T'.code.toByte()
+
+    /** Store the green/hole outlines from a Garmin CourseView `.DAT` file. */
+    private suspend fun importCourseDat(bytes: ByteArray): ImportResult {
+        val course = try {
+            GarminCourseDat.parse(bytes)
+        } catch (e: Exception) {
+            return ImportResult.Failed("not a course .DAT file: ${e.message}")
+        } ?: return ImportResult.Failed("not a course .DAT file")
+        if (course.polygons.isEmpty()) return ImportResult.Failed("course ${course.courseId}: no geometry")
+        dao.replaceGreens(course.courseId, course.polygons.map { CourseGreenEntity.of(course.courseId, it) })
+        return ImportResult.CourseDatImported(course.courseId, course.polygons.size)
+    }
 
     /**
      * Import any Garmin FIT file. SCORE files create a round; ACTIVITY files attach a
@@ -37,6 +65,7 @@ class Repository(private val dao: CaddieDao) {
         // parse so one malformed file can never abort a bulk import.
         return try {
             when {
+                GolfFit.hasClubs(messages) -> importClubs(GolfFit.parseClubs(messages))
                 GolfFit.hasGolfScore(messages) -> importScore(GolfFit.parseScore(messages))
                 type == GolfFit.FILE_TYPE_ACTIVITY || GolfFit.hasActivityData(messages) ->
                     importActivity(GolfFit.parseActivity(messages))
@@ -124,6 +153,12 @@ class Repository(private val dao: CaddieDao) {
     }
 
     private fun defaultClubName(clubId: Long) = "Club ${clubId % 1000}"
+
+    /** Import the golf-club list (Clubs.fit) so shots show real club names. */
+    private suspend fun importClubs(clubs: List<GolfFit.ClubInfo>): ImportResult {
+        for (c in clubs) dao.upsertClub(ClubEntity(c.clubId, c.name))
+        return ImportResult.ClubsImported(clubs.size)
+    }
 
     /**
      * Fetch golf course polygons from OpenStreetMap covering everywhere this

@@ -65,13 +65,15 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
             val result = withContext(Dispatchers.IO) {
                 val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 if (bytes == null) ImportResult.Failed("Could not read file")
-                else app.repository.importFit(bytes)
+                else app.repository.importFile(bytes)
             }
             when (result) {
                 is ImportResult.NewRound -> { imported++; snackbar.showSnackbar("Imported ${result.courseName} (${result.totalScore})") }
                 is ImportResult.ActivityAttached -> snackbar.showSnackbar("GPS track attached to round")
                 is ImportResult.ActivityStored -> snackbar.showSnackbar(result.reason)
                 is ImportResult.Duplicate -> snackbar.showSnackbar("Already imported: ${result.what}")
+                is ImportResult.ClubsImported -> snackbar.showSnackbar("Imported ${result.count} clubs")
+                is ImportResult.CourseDatImported -> snackbar.showSnackbar("Course map: ${result.greens} green outlines")
                 is ImportResult.Failed -> snackbar.showSnackbar(result.reason)
             }
         }
@@ -93,11 +95,13 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
                 snackbar.showSnackbar("Reading FIT files off the watch over USB…")
                 val result = withContext(Dispatchers.IO) {
                     usbImporter.importWatchFitFiles(onFit = { _, bytes ->
-                        when (val r = app.repository.importFit(bytes)) {
+                        when (val r = app.repository.importFile(bytes)) {
                             is ImportResult.NewRound -> "NEW round: ${r.courseName} (${r.totalScore})"
                             is ImportResult.ActivityAttached -> "activity attached"
                             is ImportResult.ActivityStored -> "activity held: ${r.reason}"
                             is ImportResult.Duplicate -> "already have: ${r.what}"
+                            is ImportResult.ClubsImported -> "clubs: ${r.count} imported"
+                            is ImportResult.CourseDatImported -> "course ${r.courseId}: ${r.greens} outlines"
                             is ImportResult.Failed -> "skipped: ${r.reason}"
                         }
                     })
