@@ -164,6 +164,10 @@ fun SyncScreen(app: CaddieApp) {
                     Button(onClick = { client.startSync() }, enabled = state == GarminBleClient.State.READY) {
                         Text("Sync new golf files")
                     }
+                    OutlinedButton(
+                        onClick = { client.resyncAll() },
+                        enabled = state == GarminBleClient.State.READY,
+                    ) { Text("Re-sync all") }
                     OutlinedButton(onClick = { client.disconnect() }) { Text("Disconnect") }
                 }
                 else -> OutlinedButton(onClick = { client.disconnect() }) { Text("Cancel") }

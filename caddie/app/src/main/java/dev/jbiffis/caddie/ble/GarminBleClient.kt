@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-18 select-close"
+        const val BLE_BUILD = "ble-19 resync-button"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -740,6 +740,23 @@ class GarminBleClient(
     }
 
     // ---- Sync ------------------------------------------------------------------
+
+    /**
+     * Forget which files were already imported so the next sync re-downloads and
+     * re-imports every golf file on the watch. Useful to repair a bad import or
+     * just to confirm the transfer end-to-end.
+     */
+    fun clearSyncHistory() {
+        prefs.edit().remove("synced_files").apply()
+        log("Sync history cleared — next sync re-downloads all golf files.")
+    }
+
+    /** Clear the sync history and immediately re-sync (when connected). */
+    fun resyncAll() {
+        clearSyncHistory()
+        if (_state.value == State.READY) startSync()
+        else log("Connect first, then Sync to re-download.")
+    }
 
     fun startSync() {
         scope.launch {
