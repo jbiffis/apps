@@ -51,11 +51,12 @@ import java.util.TimeZone
 class GarminBleClient(
     private val context: Context,
     private val prefs: SharedPreferences,
-    private val onFileDownloaded: suspend (name: String, bytes: ByteArray) -> Unit,
+    /** Import the downloaded FIT and return a short human summary for the sync log. */
+    private val onFileDownloaded: suspend (name: String, bytes: ByteArray) -> String,
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-19 resync-button"
+        const val BLE_BUILD = "ble-20 import-results"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -556,15 +557,15 @@ class GarminBleClient(
             val bytes = downloadFileV2(file)
             if (bytes == null) { log("  download failed for ${file.id?.id1}"); continue }
             try {
-                onFileDownloaded("v2_${file.id?.id1}.fit", bytes)
+                val summary = onFileDownloaded("v2_${file.id?.id1}.fit", bytes)
                 imported++
                 prefs.edit().putStringSet("synced_files", HashSet(synced).apply { add(key) }).apply()
-                log("  imported ✓ (${bytes.size}b)")
+                log("  ${file.typeName ?: "file"} (${bytes.size}b) → $summary")
             } catch (e: Exception) {
                 log("  import error: ${e.message}")
             }
         }
-        log("V2 sync done: $imported file(s) imported.")
+        log("V2 sync done: $imported file(s) processed.")
         send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE))
     }
 
