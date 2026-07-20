@@ -72,7 +72,11 @@ class UsbMtpImporter(private val context: Context) {
                     val bytes = runCatching { mtp.getObject(item.handle, size) }.getOrNull()
                     if (bytes == null) { report.add("  $where — read failed"); continue }
                     read++
-                    val outcome = onFit(item.name, bytes)
+                    val outcome = try {
+                        onFit(item.name, bytes)
+                    } catch (e: Exception) {
+                        "error: ${e.message}" // never let one file abort the whole import
+                    }
                     if (outcome.startsWith("NEW")) newRounds++
                     report.add("  $where (${bytes.size}b) → $outcome")
                     if (read >= MAX_FILES) { report.add("  reached file cap ($MAX_FILES)"); break }

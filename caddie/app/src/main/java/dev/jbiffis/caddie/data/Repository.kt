@@ -33,14 +33,19 @@ class Repository(private val dao: CaddieDao) {
         val type = GolfFit.fileType(messages)
         // Route by content, not file_id.type: the vívoactive 5's native BLE files
         // report file_id.type=32, unlike the 38/4 seen in USB/Connect exports. A
-        // golf scorecard is identified by its round-summary message (190).
-        return when {
-            GolfFit.hasGolfScore(messages) -> importScore(GolfFit.parseScore(messages))
-            type == GolfFit.FILE_TYPE_ACTIVITY || GolfFit.hasActivityData(messages) ->
-                importActivity(GolfFit.parseActivity(messages))
-            else -> ImportResult.Failed(
-                "no golf/activity data (file_id.type=$type, messages=${GolfFit.messageInventory(messages)})"
-            )
+        // golf scorecard is identified by its round-summary message (190). Wrap the
+        // parse so one malformed file can never abort a bulk import.
+        return try {
+            when {
+                GolfFit.hasGolfScore(messages) -> importScore(GolfFit.parseScore(messages))
+                type == GolfFit.FILE_TYPE_ACTIVITY || GolfFit.hasActivityData(messages) ->
+                    importActivity(GolfFit.parseActivity(messages))
+                else -> ImportResult.Failed(
+                    "no golf/activity data (file_id.type=$type, messages=${GolfFit.messageInventory(messages)})"
+                )
+            }
+        } catch (e: Exception) {
+            ImportResult.Failed("parse error (file_id.type=$type): ${e.message}")
         }
     }
 
@@ -89,10 +94,10 @@ class Repository(private val dao: CaddieDao) {
         val matched = pendingActivities.filter { overlaps(score.startedAtS, it) }
         for (activity in matched) attach(roundId, activity)
         pendingActivities.removeAll(matched)
-        // Best-effort: grab the course polygons from OpenStreetMap for lie
-        // detection and the drawn hole map. Failure is fine — there is a
-        // manual retry button on the shot view.
-        runCatching { downloadCourseFeatures(roundId) }
+        // NB: course polygons are fetched lazily by the shot view the first time a
+        // round is opened (it auto-retries and has a manual button). We deliberately
+        // do NOT download them here — that network call can block for minutes when
+        // Overpass is slow, which would stall a bulk import (USB/BLE) after one round.
         return ImportResult.NewRound(roundId, score.courseName, score.totalScore)
     }
 
