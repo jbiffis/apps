@@ -153,33 +153,43 @@ fun SyncScreen(app: CaddieApp) {
             return@Column
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Controls stack vertically so no button is ever pushed off-screen on a
+        // narrow phone (the READY row has three actions).
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val statusText = when (state) {
+                GarminBleClient.State.BONDING -> "pairing…"
+                GarminBleClient.State.HANDSHAKE -> "handshake…"
+                else -> state.name.lowercase()
+            }
             when (state) {
                 GarminBleClient.State.DISCONNECTED -> {
-                    Button(onClick = { if (scanning) stopScan() else startScan() }) {
-                        Text(if (scanning) "Stop scan" else "Scan for watch")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = { if (scanning) stopScan() else startScan() }) {
+                            Text(if (scanning) "Stop scan" else "Scan for watch")
+                        }
+                        Text(statusText, style = MaterialTheme.typography.labelMedium)
                     }
                 }
                 GarminBleClient.State.READY, GarminBleClient.State.SYNCING -> {
-                    Button(onClick = { client.startSync() }, enabled = state == GarminBleClient.State.READY) {
-                        Text("Sync new golf files")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = { client.startSync() }, enabled = state == GarminBleClient.State.READY) {
+                            Text("Sync new files")
+                        }
+                        OutlinedButton(
+                            onClick = { client.resyncAll() },
+                            enabled = state == GarminBleClient.State.READY,
+                        ) { Text("Re-sync all") }
+                        Text(statusText, style = MaterialTheme.typography.labelMedium)
                     }
-                    OutlinedButton(
-                        onClick = { client.resyncAll() },
-                        enabled = state == GarminBleClient.State.READY,
-                    ) { Text("Re-sync all") }
                     OutlinedButton(onClick = { client.disconnect() }) { Text("Disconnect") }
                 }
-                else -> OutlinedButton(onClick = { client.disconnect() }) { Text("Cancel") }
+                else -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(onClick = { client.disconnect() }) { Text("Cancel") }
+                        Text(statusText, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
-            Text(
-                when (state) {
-                    GarminBleClient.State.BONDING -> "pairing…"
-                    GarminBleClient.State.HANDSHAKE -> "handshake…"
-                    else -> state.name.lowercase()
-                },
-                style = MaterialTheme.typography.labelMedium,
-            )
         }
 
         if (state == GarminBleClient.State.DISCONNECTED && devices.isNotEmpty()) {
