@@ -202,13 +202,20 @@ object Gfdi {
         return frame(MSG_DOWNLOAD_REQUEST, payload.array())
     }
 
+    // FileTransferData transfer-status codes (Gadgetbridge FileTransferDataStatusMessage)
+    const val TRANSFER_OK = 0
+    const val TRANSFER_RESEND = 1
+    const val TRANSFER_ABORT = 2
+
     /**
-     * ACK a FILE_TRANSFER_DATA chunk. The payload references the LOGICAL type
-     * (5004) — like the protobuf ack references 5043 — followed by the next
-     * offset we expect, which drives the watch's flow control.
+     * ACK a FILE_TRANSFER_DATA chunk. Exact layout from Gadgetbridge's
+     * FileTransferDataStatusMessage: RESPONSE(5000) → [refType=5004][status][
+     * transferStatus][nextOffset]. The transferStatus byte (OK) is what makes
+     * the watch send the next chunk.
      */
-    fun dataTransferAck(nextOffset: Long): ByteArray {
-        val extra = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+    fun dataTransferAck(nextOffset: Long, transferStatus: Int = TRANSFER_OK): ByteArray {
+        val extra = ByteBuffer.allocate(1 + 4).order(ByteOrder.LITTLE_ENDIAN)
+        extra.put(transferStatus.toByte())
         extra.putInt(nextOffset.toInt())
         return response(MSG_FILE_TRANSFER_DATA, STATUS_ACK, extra.array())
     }
