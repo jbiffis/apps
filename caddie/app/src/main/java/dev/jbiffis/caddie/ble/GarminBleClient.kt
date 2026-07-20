@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-17 close-completes-transfer"
+        const val BLE_BUILD = "ble-18 select-close"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -672,27 +672,37 @@ class GarminBleClient(
             //      • a 3-byte [00 00 00] status marker (the response to our request) — dropped
             //      • the raw deflate file bytes, one BLE packet at a time
             //      • (out of band) a control-channel CLOSE for this service = end of file
-            //    Completion is the watch's close, NOT a zlib/idle heuristic.
+            //    Completion is the watch's close, NOT a zlib/idle heuristic. Wait on
+            //    BOTH the data channel and the close signal at once via select() so the
+            //    close ends the transfer immediately (data and close arrive on separate
+            //    channels — polling one blocks on the other).
             val out = ByteArrayOutputStream()
             var started = false
-            var idleStreak = 0
-            loop@ while (true) {
-                val chunk = withTimeoutOrNull(8000) { fileXferChunks.receive() }
-                if (chunk != null) {
-                    idleStreak = 0
-                    if (!started) {
-                        started = true // drop the [00 00 00] status marker packet
-                        if (chunk.size != 3) log("  unexpected transfer header ${Gfdi.hex(chunk, 8)}")
-                    } else {
-                        out.write(chunk)
-                    }
-                    // A close may already be queued; only stop once no data trails it.
-                    if (fileXferDone.tryReceive().isSuccess) { closedByWatch = true; break@loop }
-                    continue@loop
+            fun consume(chunk: ByteArray) {
+                if (!started) {
+                    started = true // drop the [00 00 00] status marker packet
+                    if (chunk.size != 3) log("  unexpected transfer header ${Gfdi.hex(chunk, 8)}")
+                } else {
+                    out.write(chunk)
                 }
-                // No data this window — has the watch closed the handle?
-                if (fileXferDone.tryReceive().isSuccess) { closedByWatch = true; break@loop }
-                if (++idleStreak >= 2) { log("  transfer idle at ${out.size()}b"); break@loop }
+            }
+            loop@ while (true) {
+                val closed = withTimeoutOrNull(8000) {
+                    kotlinx.coroutines.selects.select<Boolean> {
+                        fileXferChunks.onReceive { consume(it); false }
+                        fileXferDone.onReceive { true }
+                    }
+                }
+                when (closed) {
+                    null -> { log("  transfer idle at ${out.size()}b"); break@loop } // fallback only
+                    true -> {
+                        // Watch closed the handle: drain any data still buffered, then finish.
+                        while (true) { consume(fileXferChunks.tryReceive().getOrNull() ?: break) }
+                        closedByWatch = true
+                        break@loop
+                    }
+                    false -> { /* consumed a data chunk; keep going */ }
+                }
             }
             if (closedByWatch) log("  transfer complete (${out.size()}b, watch closed handle)")
 
