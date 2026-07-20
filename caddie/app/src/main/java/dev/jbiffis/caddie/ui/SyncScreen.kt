@@ -123,6 +123,11 @@ fun SyncScreen(app: CaddieApp) {
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
+            Text(
+                "build ${GarminBleClient.BLE_BUILD}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
             IconButton(onClick = {
                 val share = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
