@@ -34,6 +34,8 @@ object FileSync {
         val typeCode: Int?,
         val size: Long,
         val pageId: Int?,
+        /** The exact File sub-message bytes as received — echoed back in a FileRequest. */
+        val raw: ByteArray = ByteArray(0),
     )
     data class FileList(val nextPageId: Int?, val files: List<RemoteFile>)
 
@@ -52,18 +54,25 @@ object FileSync {
         return Protobuf.Writer().message(SMART_FILE_SYNC, fss).toByteArray()
     }
 
-    /** Smart{ FileSyncService{ FileRequest{ file, unk2=24, unk5=15 } } }. */
+    /**
+     * Smart{ FileSyncService{ FileRequest{ file, unk2=24, unk3=0, unk4=0, unk5=15 } } }.
+     * The File must be echoed back exactly as received (Gadgetbridge sets
+     * file = fileToRequest), so we embed the raw File bytes verbatim.
+     */
     fun buildFileRequest(file: RemoteFile): ByteArray {
-        val fileMsg = Protobuf.Writer()
-        file.id?.let { fileMsg.message(1, fileIdWriter(it)) }
-        val typeW = Protobuf.Writer()
-        file.typeName?.let { typeW.bytes(2, it.toByteArray(Charsets.UTF_8)) }
-        file.typeCode?.let { typeW.uint32(3, it) }
-        fileMsg.message(2, typeW)
-        if (file.size > 0) fileMsg.uint32(3, file.size.toInt())
-        file.pageId?.let { fileMsg.uint32(5, it) }
-
-        val req = Protobuf.Writer().message(1, fileMsg).uint32(2, 24).uint32(5, 15)
+        val fileBytes = if (file.raw.isNotEmpty()) file.raw else run {
+            // Fallback reconstruction (used only in tests)
+            val m = Protobuf.Writer()
+            file.id?.let { m.message(1, fileIdWriter(it)) }
+            val t = Protobuf.Writer()
+            file.typeName?.let { t.bytes(2, it.toByteArray(Charsets.UTF_8)) }
+            file.typeCode?.let { t.uint32(3, it) }
+            m.message(2, t)
+            m.toByteArray()
+        }
+        val req = Protobuf.Writer()
+            .bytes(1, fileBytes)
+            .uint32(2, 24).uint32(3, 0).uint32(4, 0).uint32(5, 15)
         val fss = Protobuf.Writer().message(FS_FILE_REQUEST, req)
         return Protobuf.Writer().message(SMART_FILE_SYNC, fss).toByteArray()
     }
@@ -95,6 +104,7 @@ object FileSync {
             typeCode = code,
             size = Protobuf.firstVarint(f, 3) ?: 0,
             pageId = Protobuf.firstVarint(f, 5)?.toInt(),
+            raw = bytes,
         )
     }
 
