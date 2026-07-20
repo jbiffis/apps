@@ -56,7 +56,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-21 reachable-resync"
+        const val BLE_BUILD = "ble-22 dedup-on-import"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -545,27 +545,25 @@ class GarminBleClient(
             sendProtobuf(FileSync.buildFileListRequest(next))
             return
         }
-        // "code 9" = sports activities (golf rounds live here). Download those and
-        // let the importer keep whichever parse as golf; skip anything already synced.
+        // "code 9" = sports activities (golf rounds live here). Download them all
+        // every sync and let importFit's own duplicate check (against the database)
+        // decide — a deleted round then re-imports automatically, and there is no
+        // separate synced list to drift out of step with what's actually stored.
         val candidates = remoteFiles.filter { it.typeCode == 9 }
-        log("File enumeration complete: ${remoteFiles.size} total, ${candidates.size} sport activities.")
-        var imported = 0
+        log("File enumeration complete: ${remoteFiles.size} total, ${candidates.size} sport activities to check.")
+        var newRounds = 0
         for (file in candidates) {
-            val key = "v2|${file.id?.id1}|${file.id?.id2}"
-            val synced = prefs.getStringSet("synced_files", emptySet())!!
-            if (synced.contains(key)) { log("  already synced: ${file.id?.id1}"); continue }
             val bytes = downloadFileV2(file)
             if (bytes == null) { log("  download failed for ${file.id?.id1}"); continue }
             try {
                 val summary = onFileDownloaded("v2_${file.id?.id1}.fit", bytes)
-                imported++
-                prefs.edit().putStringSet("synced_files", HashSet(synced).apply { add(key) }).apply()
+                if (summary.startsWith("NEW round")) newRounds++
                 log("  ${file.typeName ?: "file"} (${bytes.size}b) → $summary")
             } catch (e: Exception) {
                 log("  import error: ${e.message}")
             }
         }
-        log("V2 sync done: $imported file(s) processed.")
+        log("V2 sync done: $newRounds new round(s) imported.")
         send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE))
     }
 
