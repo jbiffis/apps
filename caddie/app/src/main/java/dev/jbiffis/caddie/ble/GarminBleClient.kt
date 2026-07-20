@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-12 dir-size"
+        const val BLE_BUILD = "ble-13 filesync-list"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -97,6 +97,11 @@ class GarminBleClient(
     private val responses = Channel<Gfdi.ResponseMsg>(Channel.BUFFERED)
     private val dataChunks = Channel<Gfdi.DataTransfer>(Channel.BUFFERED)
     private var bondReceiver: BroadcastReceiver? = null
+
+    // Protobuf (Smart / FileSyncService) reassembly by requestId
+    private val protobufBuffers = HashMap<Int, ByteArrayOutputStream>()
+    private var protobufRequestId = 1000
+    private val remoteFiles = ArrayList<FileSync.RemoteFile>()
 
     private fun log(msg: String) {
         val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(System.currentTimeMillis())
@@ -391,12 +396,10 @@ class GarminBleClient(
                 // downloadFile() sends the acknowledgement (it advances the sequence)
                 Gfdi.parseDataTransfer(msg.payload, msg.rawType)?.let { dataChunks.trySend(it) }
             }
-            Gfdi.MSG_PROTOBUF_REQUEST -> {
+            Gfdi.MSG_PROTOBUF_REQUEST, Gfdi.MSG_PROTOBUF_RESPONSE -> {
                 val req = Gfdi.parseProtobufRequest(msg.payload)
-                log("RX protobuf request id=${req?.requestId} offset=${req?.dataOffset} " +
-                    "len=${req?.totalLength} seq=${msg.seq}")
-                if (req != null) scope.launch { send(Gfdi.protobufAck(req.requestId, req.dataOffset)) }
-                else scope.launch { send(Gfdi.ack(msg.id)) }
+                if (req == null) { scope.launch { send(Gfdi.ack(msg.id)) }; return }
+                scope.launch { handleProtobuf(req) }
             }
             Gfdi.MSG_DEVICE_INFORMATION -> {
                 val info = Gfdi.parseDeviceInformation(msg.payload)
@@ -440,11 +443,83 @@ class GarminBleClient(
                 scope.launch { send(Gfdi.response(msg.id, Gfdi.STATUS_UNSUPPORTED)) }
             }
             else -> {
-                // Configuration, protobuf request, fit definition, etc. — acknowledge
-                // so the watch advances its send sequence and proceeds to file data.
+                // Configuration, fit definition, etc. — acknowledge so the watch
+                // advances its send sequence and proceeds to file data.
                 log("RX id=${msg.id} seq=${msg.seq} (${msg.payload.size}b) — ACK: ${Gfdi.hex(msg.payload, 32)}")
                 scope.launch { send(Gfdi.ack(msg.id)) }
             }
+        }
+    }
+
+    // ---- Protobuf / FileSyncService (V2 file enumeration) ----------------------
+
+    private fun nextProtobufRequestId(): Int {
+        protobufRequestId = (protobufRequestId + 1) and 0xFFFF
+        return protobufRequestId
+    }
+
+    /** Send a Smart-message protobuf as a PROTOBUF_REQUEST and return its requestId. */
+    private suspend fun sendProtobuf(smart: ByteArray): Int {
+        val id = nextProtobufRequestId()
+        send(Gfdi.protobufRequest(id, smart))
+        return id
+    }
+
+    /** Reassemble protobuf chunks by requestId, ack each, and handle complete Smart messages. */
+    private suspend fun handleProtobuf(req: Gfdi.ProtobufRequest) {
+        val buf = protobufBuffers.getOrPut(req.requestId) { ByteArrayOutputStream() }
+        if (req.dataOffset.toInt() == buf.size()) buf.write(req.data)
+        else log("protobuf offset gap: got ${req.dataOffset}, have ${buf.size()}")
+        // Ack the chunk (garmin-ble style: requestId + next offset)
+        send(Gfdi.protobufAck(req.requestId, buf.size().toLong()))
+        if (buf.size().toLong() >= req.totalLength && req.totalLength > 0) {
+            val smart = buf.toByteArray()
+            protobufBuffers.remove(req.requestId)
+            onSmartMessage(smart)
+        }
+    }
+
+    private fun onSmartMessage(smart: ByteArray) {
+        val fss = FileSync.fileSyncServiceOf(smart)
+        if (fss == null) {
+            log("Smart msg (non-filesync): ${Gfdi.hex(smart, 32)}")
+            return
+        }
+        FileSync.parseFileListResponse(fss)?.let { list ->
+            log("File list: ${list.files.size} file(s), nextPage=${list.nextPageId}")
+            list.files.forEach {
+                log("  • ${it.typeName ?: "?"} (code ${it.typeCode}) ${it.size}b id=${it.id?.id1}/${it.id?.id2}")
+                if (remoteFiles.none { r -> r.id == it.id }) remoteFiles.add(it)
+            }
+            scope.launch { onFileListPage(list) }
+            return
+        }
+        FileSync.parseNewFileNotification(fss)?.let { files ->
+            log("New-file notification: ${files.size} file(s)")
+            files.forEach { log("  • ${it.typeName ?: "?"} ${it.size}b") }
+            return
+        }
+        FileSync.parseFileResponseHandle(fss)?.let { handle ->
+            log("File response: transfer handle=$handle (V2 download not yet implemented)")
+            return
+        }
+        log("FileSyncService msg (unhandled): ${Gfdi.hex(fss, 32)}")
+    }
+
+    /** Page through the file list; when done, report what golf files are available. */
+    private suspend fun onFileListPage(list: FileSync.FileList) {
+        val next = list.nextPageId
+        if (next != null && next != 0 && list.files.isNotEmpty()) {
+            sendProtobuf(FileSync.buildFileListRequest(next))
+        } else {
+            val golf = remoteFiles.filter {
+                (it.typeName ?: "").contains("golf", ignoreCase = true) ||
+                    (it.typeName ?: "").contains("scorecard", ignoreCase = true) ||
+                    it.typeName == "activity"
+            }
+            log("File enumeration complete: ${remoteFiles.size} total, ${golf.size} golf-related.")
+            golf.forEach { log("  golf: ${it.typeName} ${it.size}b") }
+            log("(V2 file download is the next piece to implement.)")
         }
     }
 
@@ -536,6 +611,16 @@ class GarminBleClient(
                 }
                 _directory.value = golf
                 log("Directory: ${entries.size} files, ${golf.size} golf-related")
+
+                // Newer watches (vívoactive 5) leave the ANT-FS directory empty and
+                // enumerate files over the protobuf FileSyncService instead.
+                if (entries.isEmpty()) {
+                    log("Empty directory — requesting file list via FileSyncService (V2)…")
+                    remoteFiles.clear()
+                    sendProtobuf(FileSync.buildFileListRequest(null))
+                    // Responses arrive asynchronously; leave the session open to receive them.
+                    return@launch
+                }
 
                 // SCORE files first so activities can attach to their rounds
                 val fresh = golf.filter { !isSynced(it) }

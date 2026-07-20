@@ -231,16 +231,38 @@ object Gfdi {
      */
     fun ack(logicalType: Int): ByteArray = response(logicalType, STATUS_ACK)
 
-    class ProtobufRequest(val requestId: Int, val dataOffset: Long, val totalLength: Long, val data: ByteArray)
+    class ProtobufRequest(
+        val requestId: Int,
+        val dataOffset: Long,
+        val totalLength: Long,
+        val chunkLength: Long,
+        val data: ByteArray,
+    )
 
-    /** PROTOBUF_REQUEST payload: requestId u16, dataOffset u32, totalLength u32, protobuf bytes. */
+    /**
+     * PROTOBUF_REQUEST/RESPONSE payload (Gadgetbridge ProtobufMessage):
+     * requestId u16, dataOffset u32, totalProtobufLength u32, chunkLength u32, bytes.
+     */
     fun parseProtobufRequest(payload: ByteArray): ProtobufRequest? {
-        if (payload.size < 10) return null
+        if (payload.size < 14) return null
         val buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
         val requestId = buf.short.toInt() and 0xFFFF
         val dataOffset = buf.int.toLong() and 0xFFFFFFFFL
         val totalLength = buf.int.toLong() and 0xFFFFFFFFL
-        return ProtobufRequest(requestId, dataOffset, totalLength, payload.copyOfRange(10, payload.size))
+        val chunkLength = buf.int.toLong() and 0xFFFFFFFFL
+        val end = minOf(14 + chunkLength.toInt(), payload.size)
+        return ProtobufRequest(requestId, dataOffset, totalLength, chunkLength, payload.copyOfRange(14, end))
+    }
+
+    /** Build a PROTOBUF_REQUEST (single chunk) carrying a Smart-message [protobuf]. */
+    fun protobufRequest(requestId: Int, protobuf: ByteArray): ByteArray {
+        val payload = ByteBuffer.allocate(2 + 4 + 4 + 4 + protobuf.size).order(ByteOrder.LITTLE_ENDIAN)
+        payload.putShort(requestId.toShort())
+        payload.putInt(0)                    // dataOffset
+        payload.putInt(protobuf.size)        // total protobuf length
+        payload.putInt(protobuf.size)        // this chunk length
+        payload.put(protobuf)
+        return frame(MSG_PROTOBUF_REQUEST, payload.array())
     }
 
     /**
