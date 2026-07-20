@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-11 download-new"
+        const val BLE_BUILD = "ble-12 dir-size"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -524,7 +524,12 @@ class GarminBleClient(
 
                 log("Downloading file directory…")
                 val dir = downloadFile(0) ?: run { log("Directory download failed"); return@launch }
+                log("Directory downloaded (${dir.size}b): ${Gfdi.hex(dir, 48)}")
                 val entries = Gfdi.parseDirectory(dir)
+                entries.forEach {
+                    log("  file #${it.index} dataType=${it.dataType} subType=${it.subType} " +
+                        "num=${it.number} ${it.size}b")
+                }
                 val golf = entries.filter {
                     it.dataType == FILE_TYPE_FIT &&
                         (it.subType == SUBTYPE_GOLF_SCORE || it.subType == SUBTYPE_ACTIVITY)
@@ -593,8 +598,11 @@ class GarminBleClient(
             log("No response to download request"); return null
         }
         if (ack.status != Gfdi.STATUS_ACK) { log("Download refused, status=${ack.status}"); return null }
-        val fileSize = if (ack.extra.size >= 4)
-            java.nio.ByteBuffer.wrap(ack.extra, 0, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xFFFFFFFFL
+        // DownloadRequestStatusMessage extra = [downloadStatus:1][maxFileSize:4]
+        val downloadStatus = ack.extra.getOrNull(0)?.toInt() ?: 0
+        if (downloadStatus != 0) { log("Download refused, downloadStatus=$downloadStatus"); return null }
+        val fileSize = if (ack.extra.size >= 5)
+            java.nio.ByteBuffer.wrap(ack.extra, 1, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xFFFFFFFFL
         else -1L
         if (fileSize >= 0) log("Transfer accepted, size=$fileSize")
 
