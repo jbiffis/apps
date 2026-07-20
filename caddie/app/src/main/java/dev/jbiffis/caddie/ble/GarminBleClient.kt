@@ -56,7 +56,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-26 page-all-files"
+        const val BLE_BUILD = "ble-27 paging-diagnostic"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -555,11 +555,15 @@ class GarminBleClient(
         val next = explicitNext ?: maxPageId
         val addedNew = remoteFiles.size > prevRemoteCount
         prevRemoteCount = remoteFiles.size
+        log("  paging: explicitNext=$explicitNext maxPageId=$maxPageId addedNew=$addedNew " +
+            "(${remoteFiles.size} files so far)")
         if (next != null && next != 0 && next != lastFileListCursor && addedNew) {
             lastFileListCursor = next
+            log("  → requesting next page at cursor $next")
             sendProtobuf(FileSync.buildFileListRequest(next))
             return
         }
+        log("  → no more pages (${remoteFiles.size} files total)")
         // The golf round's file_id.type is unknown and NOT the "sports" code (code 9
         // turned out to be monitoring). So scan every distinct file and let importFit
         // decide by content. Cap each identical (typeCode,size) bucket at two files so
@@ -797,7 +801,7 @@ class GarminBleClient(
         scope.launch {
             if (_state.value == State.SYNCING) return@launch
             _state.value = State.SYNCING
-            verboseRx = true // capture the raw file-transfer framing for diagnosis
+            verboseRx = false // transport is proven; keep the log readable (no raw byte spam)
             try {
                 send(Gfdi.directoryFilter())
                 awaitResponse(Gfdi.MSG_DIRECTORY_FILE_FILTER, 3000)
