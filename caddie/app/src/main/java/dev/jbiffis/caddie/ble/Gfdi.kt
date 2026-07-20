@@ -203,13 +203,14 @@ object Gfdi {
     }
 
     /**
-     * ACK a FILE_TRANSFER_DATA chunk, telling the watch the next offset we expect.
-     * [ackType] must be the exact type field the watch sent (sequence included).
+     * ACK a FILE_TRANSFER_DATA chunk. The payload references the LOGICAL type
+     * (5004) — like the protobuf ack references 5043 — followed by the next
+     * offset we expect, which drives the watch's flow control.
      */
-    fun dataTransferAck(ackType: Int, nextOffset: Long): ByteArray {
+    fun dataTransferAck(nextOffset: Long): ByteArray {
         val extra = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
         extra.putInt(nextOffset.toInt())
-        return response(ackType, STATUS_ACK, extra.array())
+        return response(MSG_FILE_TRANSFER_DATA, STATUS_ACK, extra.array())
     }
 
     /** Simple ACK echoing the exact type field the watch sent. */

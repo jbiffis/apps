@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-7 protobuf-ack"
+        const val BLE_BUILD = "ble-8 filedata-ack"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -606,14 +606,14 @@ class GarminBleClient(
                 return if (out.size() > 0 && fileSize <= 0) out.toByteArray() else null
             }
             if (chunk.offset != out.size().toLong()) {
-                // Duplicate/old chunk (e.g. a retransmit) — re-ack and wait for the next
+                // Duplicate/old chunk (e.g. a retransmit) — re-ack our real position
                 log("Skipping chunk at ${chunk.offset} (have ${out.size()})")
-                send(Gfdi.ack(chunk.ackType))
+                send(Gfdi.dataTransferAck(out.size().toLong()))
                 continue
             }
             out.write(chunk.data)
-            // Status-ack this chunk to advance the device's send sequence
-            send(Gfdi.ack(chunk.ackType))
+            // Ack with the logical type + next offset to advance the transfer
+            send(Gfdi.dataTransferAck(out.size().toLong()))
             if (out.size() - lastProgressLog >= 8192) {
                 lastProgressLog = out.size()
                 log("  …${out.size()}b")
