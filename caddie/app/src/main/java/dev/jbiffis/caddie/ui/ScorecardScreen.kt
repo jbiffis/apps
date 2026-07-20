@@ -55,20 +55,32 @@ fun ScorecardScreen(app: CaddieApp, roundId: Long, onOpenHole: (Int) -> Unit) {
                     ) {
                         Stat("Score", "${r.totalScore}")
                         Stat("To par", toParString(r.totalScore, r.totalPar))
-                        Stat("Front", "${r.frontScore}")
-                        Stat("Back", "${r.backScore}")
+                        // Front/Back only when both nines were played.
+                        if (r.frontScore > 0 && r.backScore > 0) {
+                            Stat("Front", "${r.frontScore}")
+                            Stat("Back", "${r.backScore}")
+                        }
                         r.totalPutts?.let { Stat("Putts", "$it") }
                     }
                 }
             }
         }
 
+        val front = holes.filter { it.hole <= 9 }
+        val back = holes.filter { it.hole > 9 }
         item { HeaderRow() }
-        items(holes.filter { it.hole <= 9 }, key = { it.hole }) { HoleRow(it, onOpenHole) }
-        item { TotalRow("OUT", r.frontPar, r.frontScore, holes.filter { it.hole <= 9 }) }
-        items(holes.filter { it.hole > 9 }, key = { it.hole }) { HoleRow(it, onOpenHole) }
-        item { TotalRow("IN", r.backPar, r.backScore, holes.filter { it.hole > 9 }) }
-        item { TotalRow("TOTAL", r.totalPar, r.totalScore, holes) }
+        if (front.isNotEmpty()) {
+            items(front, key = { it.hole }) { HoleRow(it, onOpenHole) }
+            item { TotalRow("OUT", r.frontPar, r.frontScore, front) }
+        }
+        if (back.isNotEmpty()) {
+            items(back, key = { it.hole }) { HoleRow(it, onOpenHole) }
+            item { TotalRow("IN", r.backPar, r.backScore, back) }
+        }
+        // Only show a combined total when both nines were played (otherwise OUT/IN is the total).
+        if (front.isNotEmpty() && back.isNotEmpty()) {
+            item { TotalRow("TOTAL", r.totalPar, r.totalScore, holes) }
+        }
         item {
             Text(
                 "Tap a hole to see the map and your shots.",

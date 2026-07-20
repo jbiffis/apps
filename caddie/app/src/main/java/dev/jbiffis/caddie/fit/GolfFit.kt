@@ -159,23 +159,37 @@ object GolfFit {
                 )
             }
 
+        // Par and to-par must be computed over the holes ACTUALLY PLAYED, not the
+        // course's full 18-hole par carried in the round summary — otherwise a
+        // 9-hole round (score 49) shows against an 18-hole par (71). Summing the
+        // played holes gives the right par for 9- or 18-hole rounds alike.
+        val played = holes.filter { it.strokes > 0 }
+        val frontPlayed = played.filter { it.hole <= 9 }
+        val backPlayed = played.filter { it.hole > 9 }
+        val haveHolePars = played.any { it.par > 0 }
+        val computedFrontPar = frontPlayed.sumOf { it.par }
+        val computedBackPar = backPlayed.sumOf { it.par }
+        val frontPar = if (haveHolePars) computedFrontPar else (round.int(8) ?: 0)
+        val backPar = if (haveHolePars) computedBackPar else (round.int(9) ?: 0)
+
         return ScoreFile(
             serialNumber = fileId.long(3) ?: 0L,
             createdAtS = fileId.long(4)?.let { fitToUnixS(it) } ?: 0L,
             courseName = round.string(1) ?: "Unknown course",
             teeName = round.string(11),
-            frontPar = round.int(8) ?: 0,
-            backPar = round.int(9) ?: 0,
-            totalPar = round.int(10) ?: ((round.int(8) ?: 0) + (round.int(9) ?: 0)),
+            frontPar = frontPar,
+            backPar = backPar,
+            totalPar = if (haveHolePars) frontPar + backPar
+                else (round.int(10) ?: (frontPar + backPar)),
             slope = round.int(12),
             rating = round.double(21),
             distanceWalkedM = round.long(13)?.let { it / 10.0 },
             totalPutts = round.int(20),
             startedAtS = round.long(3)?.let { fitToUnixS(it) } ?: 0L,
             playerName = player?.string(0),
-            frontScore = player?.int(2) ?: holes.filter { it.hole <= 9 }.sumOf { it.strokes },
-            backScore = player?.int(3) ?: holes.filter { it.hole > 9 }.sumOf { it.strokes },
-            totalScore = player?.int(4) ?: holes.sumOf { it.strokes },
+            frontScore = if (played.isNotEmpty()) frontPlayed.sumOf { it.strokes } else (player?.int(2) ?: 0),
+            backScore = if (played.isNotEmpty()) backPlayed.sumOf { it.strokes } else (player?.int(3) ?: 0),
+            totalScore = if (played.isNotEmpty()) played.sumOf { it.strokes } else (player?.int(4) ?: 0),
             holes = holes,
             shots = shots,
         )
