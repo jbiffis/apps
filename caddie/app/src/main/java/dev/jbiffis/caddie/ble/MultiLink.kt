@@ -35,6 +35,7 @@ object MultiLink {
     const val REGISTER_REQ = 0x00
     const val REGISTER_RESP = 0x01
     const val CLOSE_HANDLE_REQ = 0x02
+    const val CLOSE_HANDLE_RESP = 0x03
     const val CLOSE_ALL_REQ = 0x05
 
     // Service codes
@@ -90,6 +91,25 @@ object MultiLink {
         val handle = buf.get().toInt() and 0xFF
         val reliability = buf.get().toInt() and 0xFF
         return RegisterResponse(service, status, handle, reliability)
+    }
+
+    class CloseResponse(val service: Int, val handle: Int, val status: Int)
+
+    /**
+     * Parse a control-channel CLOSE_HANDLE_RESP. The watch sends this (unsolicited)
+     * once a file-transfer service has delivered a whole file — it is the reliable
+     * end-of-transfer signal. Layout: [handle=0][type=3][clientId:8][service:2][handle:1][status:1].
+     */
+    fun parseCloseResponse(packet: ByteArray): CloseResponse? {
+        if (packet.size < 2 || packet[0].toInt() != CONTROL_HANDLE) return null
+        if ((packet[1].toInt() and 0xFF) != CLOSE_HANDLE_RESP) return null
+        if (packet.size < 2 + 8 + 2 + 1 + 1) return null
+        val buf = java.nio.ByteBuffer.wrap(packet, 2, packet.size - 2).order(ByteOrder.LITTLE_ENDIAN)
+        buf.long // clientId (echoed)
+        val service = buf.short.toInt() and 0xFFFF
+        val handle = buf.get().toInt() and 0xFF
+        val status = buf.get().toInt() and 0xFF
+        return CloseResponse(service, handle, status)
     }
 
     fun isControl(packet: ByteArray): Boolean = packet.isNotEmpty() && packet[0].toInt() == CONTROL_HANDLE

@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-16 exact-filerequest"
+        const val BLE_BUILD = "ble-17 close-completes-transfer"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -106,7 +106,12 @@ class GarminBleClient(
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
     private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
     private var fileXferHandle = -1
+    private var fileXferService = -1
     private val fileXferChunks = Channel<ByteArray>(Channel.BUFFERED)
+    // Signalled when the watch closes the transfer handle — the true end-of-file marker.
+    private val fileXferDone = Channel<Unit>(Channel.CONFLATED)
+    // Cycle through the FILE_TRANSFER services so a just-closed handle is never reused immediately.
+    private var fileXferServiceIdx = 0
 
     private fun log(msg: String) {
         val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(System.currentTimeMillis())
@@ -194,6 +199,9 @@ class GarminBleClient(
         writeChar = null
         notifyChar = null
         gfdiHandle = -1
+        fileXferHandle = -1
+        fileXferService = -1
+        fileXferServiceIdx = 0
         rxBuffers.clear()
         mlrRcvSeq.clear()
         _state.value = State.DISCONNECTED
@@ -360,6 +368,12 @@ class GarminBleClient(
             MultiLink.parseControl(raw)?.let {
                 log("RX ML register-resp: service=${it.service} status=${it.status} handle=${it.handle}")
                 controlResponses.trySend(it)
+                return
+            }
+            MultiLink.parseCloseResponse(raw)?.let {
+                if (verboseRx) log("  control close: service=${it.service} handle=${it.handle} status=${it.status}")
+                // The watch closes the transfer handle to mark end-of-file.
+                if (it.handle == fileXferHandle || it.service == fileXferService) fileXferDone.trySend(Unit)
                 return
             }
             // Other control-channel traffic — log, don't feed to COBS
@@ -627,35 +641,61 @@ class GarminBleClient(
         // Drain stale state
         while (fileResponseHandles.tryReceive().getOrNull() != null) {}
         while (fileXferChunks.tryReceive().getOrNull() != null) {}
+        while (fileXferDone.tryReceive().getOrNull() != null) {}
 
         // 1. FileRequest → FileResponse(handle)
         sendProtobuf(FileSync.buildFileRequest(file))
         val fileHandle = withTimeoutOrNull(10_000) { fileResponseHandles.receive() }
         if (fileHandle == null || fileHandle < 0) { log("  no/failed FileResponse"); return null }
 
-        // 2. Register a FILE_TRANSFER multi-link service
-        val serviceCode = MultiLink.FILE_TRANSFER_SERVICES[0]
+        // 2. Register a FILE_TRANSFER multi-link service. Cycle through the pool so a
+        //    just-closed service handle is never immediately re-registered.
+        val serviceCode = MultiLink.FILE_TRANSFER_SERVICES[
+            fileXferServiceIdx % MultiLink.FILE_TRANSFER_SERVICES.size]
+        fileXferServiceIdx++
         while (controlResponses.tryReceive().getOrNull() != null) {}
         sendRaw(MultiLink.registerRequest(serviceCode))
         val reg = withTimeoutOrNull(5000) { controlResponses.receive() }
         if (reg == null || reg.handle == 0) { log("  file-transfer service registration failed"); return null }
         fileXferHandle = reg.handle
-        log("  transfer service handle=${fileXferHandle}")
+        fileXferService = serviceCode
+        log("  transfer service=0x${serviceCode.toString(16)} handle=${fileXferHandle}")
 
+        var closedByWatch = false
         try {
             // 3. Ask for the file on that handle: [00 00][fileHandle:2 LE][00 00]
             val req = java.nio.ByteBuffer.allocate(6).order(java.nio.ByteOrder.LITTLE_ENDIAN)
             req.put(0); req.put(0); req.putShort(fileHandle.toShort()); req.put(0); req.put(0)
             sendRaw(MultiLink.fragment(fileXferHandle, req.array(), mtu - 3).first())
 
-            // 4. Accumulate raw chunks until the deflate stream ends (or it goes idle)
+            // 4. The transfer handle delivers, in order:
+            //      • a 3-byte [00 00 00] status marker (the response to our request) — dropped
+            //      • the raw deflate file bytes, one BLE packet at a time
+            //      • (out of band) a control-channel CLOSE for this service = end of file
+            //    Completion is the watch's close, NOT a zlib/idle heuristic.
             val out = ByteArrayOutputStream()
-            while (true) {
+            var started = false
+            var idleStreak = 0
+            loop@ while (true) {
                 val chunk = withTimeoutOrNull(8000) { fileXferChunks.receive() }
-                if (chunk == null) { log("  transfer idle at ${out.size()}b"); break }
-                out.write(chunk)
-                if (looksComplete(out.toByteArray())) { log("  stream complete at ${out.size()}b"); break }
+                if (chunk != null) {
+                    idleStreak = 0
+                    if (!started) {
+                        started = true // drop the [00 00 00] status marker packet
+                        if (chunk.size != 3) log("  unexpected transfer header ${Gfdi.hex(chunk, 8)}")
+                    } else {
+                        out.write(chunk)
+                    }
+                    // A close may already be queued; only stop once no data trails it.
+                    if (fileXferDone.tryReceive().isSuccess) { closedByWatch = true; break@loop }
+                    continue@loop
+                }
+                // No data this window — has the watch closed the handle?
+                if (fileXferDone.tryReceive().isSuccess) { closedByWatch = true; break@loop }
+                if (++idleStreak >= 2) { log("  transfer idle at ${out.size()}b"); break@loop }
             }
+            if (closedByWatch) log("  transfer complete (${out.size()}b, watch closed handle)")
+
             val raw = out.toByteArray()
             if (raw.isEmpty()) return null
             val inflated = inflate(raw)
@@ -663,21 +703,11 @@ class GarminBleClient(
             log("  inflated ${raw.size}b → ${inflated.size}b")
             return inflated
         } finally {
-            // Close the transfer service
-            runCatching { sendRaw(MultiLink.closeHandle(serviceCode, fileXferHandle)) }
+            // Only send our own close if the watch didn't already close the handle.
+            if (!closedByWatch) runCatching { sendRaw(MultiLink.closeHandle(serviceCode, fileXferHandle)) }
             fileXferHandle = -1
+            fileXferService = -1
         }
-    }
-
-    /** True once the accumulated bytes form a complete zlib/deflate stream. */
-    private fun looksComplete(data: ByteArray): Boolean {
-        val inf = java.util.zip.Inflater()
-        inf.setInput(data)
-        val buf = ByteArray(4096)
-        return try {
-            while (!inf.finished() && !inf.needsInput()) inf.inflate(buf)
-            inf.finished()
-        } catch (e: Exception) { false } finally { inf.end() }
     }
 
     private fun inflate(data: ByteArray): ByteArray? {

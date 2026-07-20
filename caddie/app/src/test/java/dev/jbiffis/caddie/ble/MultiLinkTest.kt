@@ -53,6 +53,24 @@ class MultiLinkTest {
     }
 
     @Test
+    fun parsesCloseHandleResponse() {
+        // The watch closes a file-transfer service to mark end-of-file.
+        // handle=0, type=3, clientId(8), service=0x2018, handle=13, status=0
+        val buf = ByteBuffer.allocate(2 + 8 + 2 + 1 + 1).order(ByteOrder.LITTLE_ENDIAN)
+        buf.put(0); buf.put(3)
+        buf.putLong(MultiLink.CLIENT_ID)
+        buf.putShort(0x2018.toShort())
+        buf.put(13)  // handle being closed
+        buf.put(0)   // status ok
+        val resp = MultiLink.parseCloseResponse(buf.array())!!
+        assertEquals(0x2018, resp.service)
+        assertEquals(13, resp.handle)
+        assertEquals(0, resp.status)
+        // A register response (type 1) must not parse as a close
+        assertNull(MultiLink.parseCloseResponse(byteArrayOf(0, 1, 0, 0)))
+    }
+
+    @Test
     fun nonControlPacketNotParsedAsControl() {
         // A GFDI packet on handle 3 must not be mistaken for a control frame
         assertNull(MultiLink.parseControl(byteArrayOf(3, 0, 0, 0)))
