@@ -55,7 +55,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-13 filesync-list"
+        const val BLE_BUILD = "ble-14 protobuf-reassembly"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -399,7 +399,7 @@ class GarminBleClient(
             Gfdi.MSG_PROTOBUF_REQUEST, Gfdi.MSG_PROTOBUF_RESPONSE -> {
                 val req = Gfdi.parseProtobufRequest(msg.payload)
                 if (req == null) { scope.launch { send(Gfdi.ack(msg.id)) }; return }
-                scope.launch { handleProtobuf(req) }
+                scope.launch { handleProtobuf(req, msg.id) }
             }
             Gfdi.MSG_DEVICE_INFORMATION -> {
                 val info = Gfdi.parseDeviceInformation(msg.payload)
@@ -466,15 +466,20 @@ class GarminBleClient(
     }
 
     /** Reassemble protobuf chunks by requestId, ack each, and handle complete Smart messages. */
-    private suspend fun handleProtobuf(req: Gfdi.ProtobufRequest) {
+    private suspend fun handleProtobuf(req: Gfdi.ProtobufRequest, logicalType: Int) {
         val buf = protobufBuffers.getOrPut(req.requestId) { ByteArrayOutputStream() }
-        if (req.dataOffset.toInt() == buf.size()) buf.write(req.data)
-        else log("protobuf offset gap: got ${req.dataOffset}, have ${buf.size()}")
-        // Ack the chunk (garmin-ble style: requestId + next offset)
-        send(Gfdi.protobufAck(req.requestId, buf.size().toLong()))
+        // Ack echoes the RECEIVED offset + logical type; only then does the watch
+        // send the next chunk.
+        if (req.dataOffset.toInt() == buf.size()) {
+            buf.write(req.data)
+        } else if (req.dataOffset.toInt() > buf.size()) {
+            log("protobuf offset gap: got ${req.dataOffset}, have ${buf.size()} — re-acking")
+        }
+        send(Gfdi.protobufAck(logicalType, req.requestId, req.dataOffset))
         if (buf.size().toLong() >= req.totalLength && req.totalLength > 0) {
             val smart = buf.toByteArray()
             protobufBuffers.remove(req.requestId)
+            log("protobuf #${req.requestId} complete (${smart.size}b)")
             onSmartMessage(smart)
         }
     }

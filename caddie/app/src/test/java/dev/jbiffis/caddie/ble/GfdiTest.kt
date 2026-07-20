@@ -119,7 +119,7 @@ class GfdiTest {
         assertEquals(0L, req.dataOffset)
         assertEquals(4L, req.totalLength)
 
-        val ack = Gfdi.parse(Gfdi.protobufAck(req.requestId, req.dataOffset))!!
+        val ack = Gfdi.parse(Gfdi.protobufAck(Gfdi.MSG_PROTOBUF_REQUEST, req.requestId, req.dataOffset))!!
         assertEquals(Gfdi.MSG_RESPONSE, ack.id)
         val r = Gfdi.parseResponse(ack.payload)!!
         assertEquals(Gfdi.MSG_PROTOBUF_REQUEST, r.requestId) // 5043

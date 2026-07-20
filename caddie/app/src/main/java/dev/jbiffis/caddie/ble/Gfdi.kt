@@ -266,17 +266,18 @@ object Gfdi {
     }
 
     /**
-     * ACK a PROTOBUF_REQUEST. A bare status ack is not enough — the watch needs a
-     * RESPONSE(5000) carrying the request id, data offset, chunk status (0 = kept)
-     * and protobuf status (0 = no error). Ported from garmin-ble's build_protobuf_ack.
+     * ACK a protobuf chunk (Gadgetbridge ProtobufStatusMessage): RESPONSE(5000) →
+     * [refType][status][requestId:2][dataOffset:4][chunkStatus=KEPT][statusCode=NO_ERROR].
+     * [logicalType] is the received message's type (5043 request or 5044 response);
+     * [dataOffset] is the RECEIVED chunk's offset (not the next one).
      */
-    fun protobufAck(requestId: Int, dataOffset: Long): ByteArray {
+    fun protobufAck(logicalType: Int, requestId: Int, dataOffset: Long): ByteArray {
         val extra = ByteBuffer.allocate(2 + 4 + 1 + 1).order(ByteOrder.LITTLE_ENDIAN)
         extra.putShort(requestId.toShort())
         extra.putInt(dataOffset.toInt())
         extra.put(0) // protobuf chunk status = KEPT
         extra.put(0) // protobuf status code = NO_ERROR
-        return response(MSG_PROTOBUF_REQUEST, STATUS_ACK, extra.array())
+        return response(logicalType, STATUS_ACK, extra.array())
     }
 
     // ---- Incoming payload parsers ----------------------------------------------

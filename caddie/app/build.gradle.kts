@@ -13,8 +13,8 @@ android {
         applicationId = "dev.jbiffis.caddie"
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.13-ble13"
+        versionCode = 14
+        versionName = "0.14-ble14"
     }
 
     buildTypes {
