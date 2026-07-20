@@ -188,11 +188,16 @@ object Gfdi {
     /** Ask the watch to include every file kind in the directory. */
     fun directoryFilter(): ByteArray = frame(MSG_DIRECTORY_FILE_FILTER, byteArrayOf(0x00))
 
+    // DownloadRequest REQUEST_TYPE (Gadgetbridge): CONTINUE = 0, NEW = 1.
+    const val DOWNLOAD_CONTINUE = 0
+    const val DOWNLOAD_NEW = 1
+
     /**
      * Request a download of file [index] (index 0 = ANT-FS style directory).
-     * requestType 0 opens a new transfer; 1 continues from [offset] with [crcSeed].
+     * A fresh download uses NEW (1); CONTINUE (0) resumes an existing one. The
+     * watch streams FileTransferData chunks and only starts on NEW.
      */
-    fun downloadRequest(index: Int, offset: Long, requestType: Int = 0, crcSeed: Int = 0): ByteArray {
+    fun downloadRequest(index: Int, offset: Long, requestType: Int = DOWNLOAD_NEW, crcSeed: Int = 0): ByteArray {
         val payload = ByteBuffer.allocate(2 + 4 + 1 + 2 + 4).order(ByteOrder.LITTLE_ENDIAN)
         payload.putShort(index.toShort())
         payload.putInt(offset.toInt())
