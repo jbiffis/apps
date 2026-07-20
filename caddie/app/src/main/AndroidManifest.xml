@@ -28,6 +28,11 @@
         android:name="android.hardware.bluetooth_le"
         android:required="false" />
 
+    <!-- USB host: import FIT files directly off the watch over USB/OTG (MTP) -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+
     <application
         android:name=".CaddieApp"
         android:allowBackup="true"

@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -24,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -37,12 +40,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.jbiffis.caddie.CaddieApp
 import dev.jbiffis.caddie.data.ImportResult
 import dev.jbiffis.caddie.data.RoundEntity
+import dev.jbiffis.caddie.usb.UsbMtpImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,14 +81,54 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
         if (uris.isNotEmpty()) scope.launch { importUris(uris) }
     }
 
+    val context = LocalContext.current
+    val usbImporter = remember { UsbMtpImporter(context) }
+    var usbBusy by remember { mutableStateOf(false) }
+    fun importFromWatch() {
+        if (usbBusy) return
+        usbBusy = true
+        scope.launch {
+            try {
+                snackbar.showSnackbar("Reading FIT files off the watch over USB…")
+                val result = withContext(Dispatchers.IO) {
+                    usbImporter.importWatchFitFiles(
+                        onFit = { _, bytes -> app.repository.importFit(bytes) is ImportResult.NewRound },
+                        log = {},
+                    )
+                }
+                when (result) {
+                    is UsbMtpImporter.Result.NoDevice -> snackbar.showSnackbar(
+                        "No watch found. Plug it into the phone with the USB-C/OTG cable and unlock it.")
+                    is UsbMtpImporter.Result.PermissionDenied -> snackbar.showSnackbar(
+                        "USB permission denied — tap Allow when the prompt appears.")
+                    is UsbMtpImporter.Result.OpenFailed -> snackbar.showSnackbar(
+                        "Couldn't open the watch. On the watch, set USB mode to file transfer (MTP).")
+                    is UsbMtpImporter.Result.Error -> snackbar.showSnackbar("USB import error: ${result.message}")
+                    is UsbMtpImporter.Result.Ok -> snackbar.showSnackbar(
+                        "Watch USB: read ${result.filesRead} FIT file(s), ${result.newRounds} new round(s).")
+                }
+            } finally {
+                usbBusy = false
+            }
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { picker.launch(arrayOf("application/octet-stream", "application/vnd.ant.fit", "*/*")) },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Import FIT") },
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SmallFloatingActionButton(onClick = { importFromWatch() }) {
+                    Icon(Icons.Filled.Usb, contentDescription = "Import from watch over USB")
+                }
+                ExtendedFloatingActionButton(
+                    onClick = { picker.launch(arrayOf("application/octet-stream", "application/vnd.ant.fit", "*/*")) },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Import FIT") },
+                )
+            }
         },
     ) { padding ->
         if (rounds.isEmpty()) {
