@@ -11,9 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -84,6 +84,7 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
     val context = LocalContext.current
     val usbImporter = remember { UsbMtpImporter(context) }
     var usbBusy by remember { mutableStateOf(false) }
+    var usbReport by remember { mutableStateOf<List<String>?>(null) }
     fun importFromWatch() {
         if (usbBusy) return
         usbBusy = true
@@ -91,10 +92,15 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
             try {
                 snackbar.showSnackbar("Reading FIT files off the watch over USB…")
                 val result = withContext(Dispatchers.IO) {
-                    usbImporter.importWatchFitFiles(
-                        onFit = { _, bytes -> app.repository.importFit(bytes) is ImportResult.NewRound },
-                        log = {},
-                    )
+                    usbImporter.importWatchFitFiles(onFit = { _, bytes ->
+                        when (val r = app.repository.importFit(bytes)) {
+                            is ImportResult.NewRound -> "NEW round: ${r.courseName} (${r.totalScore})"
+                            is ImportResult.ActivityAttached -> "activity attached"
+                            is ImportResult.ActivityStored -> "activity held: ${r.reason}"
+                            is ImportResult.Duplicate -> "already have: ${r.what}"
+                            is ImportResult.Failed -> "skipped: ${r.reason}"
+                        }
+                    })
                 }
                 when (result) {
                     is UsbMtpImporter.Result.NoDevice -> snackbar.showSnackbar(
@@ -103,9 +109,15 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
                         "USB permission denied — tap Allow when the prompt appears.")
                     is UsbMtpImporter.Result.OpenFailed -> snackbar.showSnackbar(
                         "Couldn't open the watch. On the watch, set USB mode to file transfer (MTP).")
-                    is UsbMtpImporter.Result.Error -> snackbar.showSnackbar("USB import error: ${result.message}")
-                    is UsbMtpImporter.Result.Ok -> snackbar.showSnackbar(
-                        "Watch USB: read ${result.filesRead} FIT file(s), ${result.newRounds} new round(s).")
+                    is UsbMtpImporter.Result.Error -> {
+                        usbReport = listOf("USB import error: ${result.message}")
+                        snackbar.showSnackbar("USB import error: ${result.message}")
+                    }
+                    is UsbMtpImporter.Result.Ok -> {
+                        usbReport = result.report
+                        snackbar.showSnackbar(
+                            "Watch USB: read ${result.filesRead} FIT file(s), ${result.newRounds} new round(s).")
+                    }
                 }
             } finally {
                 usbBusy = false
@@ -178,6 +190,35 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+        )
+    }
+
+    usbReport?.let { lines ->
+        AlertDialog(
+            onDismissRequest = { usbReport = null },
+            title = { Text("Watch USB import") },
+            text = {
+                LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                    items(lines.size) { i ->
+                        Text(
+                            lines[i],
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_SUBJECT, "Caddie USB import report")
+                        putExtra(android.content.Intent.EXTRA_TEXT, lines.joinToString("\n"))
+                    }
+                    context.startActivity(android.content.Intent.createChooser(share, "Share report"))
+                }) { Text("Share") }
+            },
+            dismissButton = { TextButton(onClick = { usbReport = null }) { Text("Close") } },
         )
     }
 }

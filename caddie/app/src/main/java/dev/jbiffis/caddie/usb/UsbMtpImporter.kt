@@ -31,7 +31,7 @@ class UsbMtpImporter(private val context: Context) {
         object NoDevice : Result()
         object PermissionDenied : Result()
         object OpenFailed : Result()
-        data class Ok(val filesRead: Int, val newRounds: Int) : Result()
+        data class Ok(val filesRead: Int, val newRounds: Int, val report: List<String>) : Result()
         data class Error(val message: String) : Result()
     }
 
@@ -44,11 +44,11 @@ class UsbMtpImporter(private val context: Context) {
      * call from a background dispatcher.
      */
     suspend fun importWatchFitFiles(
-        onFit: suspend (name: String, bytes: ByteArray) -> Boolean,
-        log: (String) -> Unit,
+        onFit: suspend (name: String, bytes: ByteArray) -> String,
     ): Result {
         val device = usbManager.deviceList.values.firstOrNull() ?: return Result.NoDevice
-        log("USB device ${device.deviceName} (vendor 0x${device.vendorId.toString(16)})")
+        val report = ArrayList<String>()
+        report.add("USB device ${device.deviceName} (vendor 0x${device.vendorId.toString(16)})")
         if (!usbManager.hasPermission(device) && !requestPermission(device)) {
             return Result.PermissionDenied
         }
@@ -56,33 +56,36 @@ class UsbMtpImporter(private val context: Context) {
         val mtp = MtpDevice(device)
         if (!mtp.open(connection)) {
             connection.close()
-            log("MTP open failed — set the watch's USB mode to file transfer (MTP).")
             return Result.OpenFailed
         }
         var read = 0
         var newRounds = 0
         try {
             val storageIds = mtp.storageIds ?: IntArray(0)
-            log("MTP storages: ${storageIds.size}")
+            report.add("MTP storages: ${storageIds.size}")
             for (sid in storageIds) {
-                val fits = collectFitHandles(mtp, sid, log)
-                log("  storage $sid: ${fits.size} FIT file(s)")
+                val fits = collectFitHandles(mtp, sid, report)
                 for (item in fits) {
                     val size = item.size
-                    if (size <= 0 || size > MAX_FILE_BYTES) continue
-                    val bytes = runCatching { mtp.getObject(item.handle, size) }.getOrNull() ?: continue
+                    val where = "${item.folder.ifEmpty { "?" }}/${item.name}"
+                    if (size <= 0 || size > MAX_FILE_BYTES) { report.add("  $where — skipped (size $size)"); continue }
+                    val bytes = runCatching { mtp.getObject(item.handle, size) }.getOrNull()
+                    if (bytes == null) { report.add("  $where — read failed"); continue }
                     read++
-                    if (onFit(item.name, bytes)) newRounds++
-                    if (read >= MAX_FILES) { log("  reached file cap ($MAX_FILES)"); break }
+                    val outcome = onFit(item.name, bytes)
+                    if (outcome.startsWith("NEW")) newRounds++
+                    report.add("  $where (${bytes.size}b) → $outcome")
+                    if (read >= MAX_FILES) { report.add("  reached file cap ($MAX_FILES)"); break }
                 }
             }
         } catch (e: Exception) {
+            report.add("ERROR: ${e.message ?: e}")
             return Result.Error(e.message ?: e.toString())
         } finally {
             mtp.close()
             connection.close()
         }
-        return Result.Ok(read, newRounds)
+        return Result.Ok(read, newRounds, report)
     }
 
     private class FitItem(val handle: Int, val name: String, val size: Int, val folder: String)
@@ -93,7 +96,7 @@ class UsbMtpImporter(private val context: Context) {
      * whether the device returns a flat list or a hierarchy. Golf folders sort
      * first so a file cap keeps rounds, not monitoring data.
      */
-    private fun collectFitHandles(mtp: MtpDevice, storageId: Int, log: (String) -> Unit): List<FitItem> {
+    private fun collectFitHandles(mtp: MtpDevice, storageId: Int, report: MutableList<String>): List<FitItem> {
         val seen = HashSet<Int>()
         val queue = ArrayDeque<Int>()
         fun enqueueChildren(parent: Int) {
@@ -105,18 +108,24 @@ class UsbMtpImporter(private val context: Context) {
         if (seen.isEmpty()) enqueueChildren(0) // fall back to the root directory
         val fits = ArrayList<FitItem>()
         val folderNames = HashMap<Int, String>()
+        val allFolders = HashSet<String>()
         while (queue.isNotEmpty() && seen.size < MAX_OBJECTS) {
             val handle = queue.removeFirst()
             val info = mtp.getObjectInfo(handle) ?: continue
             val name = info.name ?: continue
             if (info.format == MtpConstants.FORMAT_ASSOCIATION) {
                 folderNames[handle] = name
+                allFolders.add(name)
                 enqueueChildren(handle)
             } else if (name.lowercase().endsWith(".fit")) {
                 val folder = folderNames[info.parent] ?: ""
                 fits.add(FitItem(handle, name, info.compressedSize, folder))
             }
         }
+        val byFolder = fits.groupingBy { it.folder.ifEmpty { "(root)" } }.eachCount()
+        report.add("Storage $storageId: scanned ${seen.size} objects, ${fits.size} .fit files")
+        report.add("  folders: ${allFolders.sorted().joinToString(", ")}")
+        report.add("  .fit by folder: ${byFolder.entries.joinToString(", ") { "${it.key}=${it.value}" }}")
         // Golf folders first; within a group, newest-looking names last (stable sort keeps order).
         return fits.sortedByDescending { GOLF_FOLDERS.contains(it.folder) }
     }
