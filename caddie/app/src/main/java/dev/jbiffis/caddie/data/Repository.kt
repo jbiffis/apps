@@ -200,6 +200,47 @@ class Repository(private val dao: CaddieDao) {
         return features.size
     }
 
+    /**
+     * Back-fill wind for a whole round from historical weather. Fetches the hourly
+     * wind at the course for the day(s) played and sets each hole (and its shots)
+     * to the wind at the time that hole was played. Returns the number of holes
+     * updated, or -1 if there was no location/date or the weather lookup failed.
+     */
+    suspend fun fetchWindForRound(roundId: Long): Int {
+        val round = dao.roundOnce(roundId) ?: return -1
+        val holes = dao.holesList(roundId)
+        val shots = dao.shotsList(roundId)
+        val lats = shots.map { it.startLat } + holes.mapNotNull { it.pinLat }
+        val lons = shots.map { it.startLon } + holes.mapNotNull { it.pinLon }
+        if (lats.isEmpty() || holes.isEmpty()) return -1
+        val lat = lats.average()
+        val lon = lons.average()
+        val times = (shots.map { it.timeS } + holes.mapNotNull { it.finishedAtS } + listOf(round.startedAtS))
+            .filter { it > 0 }
+        if (times.isEmpty()) return -1
+        val startS = times.min()
+        val endS = times.max()
+        val hourly = Weather.fetchHourlyWind(lat, lon, utcDate(startS), utcDate(endS)) ?: return -1
+
+        var updated = 0
+        val span = (endS - startS).coerceAtLeast(1)
+        for (h in holes) {
+            // Prefer the hole's real finish time; otherwise interpolate across the round.
+            val holeTime = h.finishedAtS?.takeIf { it > 0 }
+                ?: (startS + span * (h.hole - 1) / holes.size.coerceAtLeast(1))
+            val (speed, dir) = hourly.nearest(holeTime) ?: continue
+            dao.applyHoleWind(roundId, h.hole, speed, dir)
+            updated++
+        }
+        return updated
+    }
+
+    private fun utcDate(unixS: Long): String {
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return fmt.format(java.util.Date(unixS * 1000))
+    }
+
     companion object {
         const val M_TO_YD = 1.0936133
 

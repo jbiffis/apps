@@ -129,6 +129,7 @@ fun ShotMapScreen(
     var editClub by remember { mutableStateOf(false) }
     var editWind by remember { mutableStateOf(false) }
     var sheetOpen by remember { mutableStateOf(false) }
+    var windLoading by remember { mutableStateOf(false) }
     var editMode by remember { mutableStateOf(false) }
     // null = auto (drawn if mapped, satellite if not); true/false = user override.
     var satelliteOverride by remember { mutableStateOf<Boolean?>(null) }
@@ -228,6 +229,16 @@ fun ShotMapScreen(
     // views reuse the cached map instead of re-hitting Overpass.
     LaunchedEffect(roundId) { loadCourse(force = false) }
 
+    fun autoFillWind() {
+        if (windLoading) return
+        windLoading = true
+        editWind = false
+        scope.launch {
+            try { withContext(Dispatchers.IO) { app.repository.fetchWindForRound(roundId) } }
+            finally { windLoading = false }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             // Satellite when the user toggles it on, or (in auto mode) as a fallback
@@ -263,6 +274,7 @@ fun ShotMapScreen(
                 speedKmh = holeInfo?.windSpeedKmh,
                 dirDeg = holeInfo?.windDirDeg,
                 holeBearingDeg = holeBearing,
+                loading = windLoading,
                 modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
                 onClick = { editWind = true },
             )
@@ -483,6 +495,7 @@ fun ShotMapScreen(
             initialSpeed = holeInfo?.windSpeedKmh,
             initialDir = holeInfo?.windDirDeg,
             onDismiss = { editWind = false },
+            onAutoFill = { autoFillWind() },
             onClear = { scope.launch { dao.applyHoleWind(roundId, hole, null, null); editWind = false } },
             onSave = { speed, dir, allHoles ->
                 scope.launch {
@@ -518,6 +531,7 @@ private fun WindBadge(
     speedKmh: Double?,
     dirDeg: Int?,
     holeBearingDeg: Double,
+    loading: Boolean = false,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -528,7 +542,13 @@ private fun WindBadge(
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (speedKmh != null && dirDeg != null) {
+        if (loading) {
+            androidx.compose.material3.CircularProgressIndicator(
+                Modifier.size(16.dp), color = Color(0xFF80D8FF), strokeWidth = 2.dp,
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+            Text("Weather…", color = Color.White, style = MaterialTheme.typography.labelLarge)
+        } else if (speedKmh != null && dirDeg != null) {
             // Wind blows toward (dir + 180); show it relative to the hole bearing.
             val angle = ((dirDeg + 180).toDouble() - holeBearingDeg).toFloat()
             Icon(
@@ -551,6 +571,7 @@ private fun WindEditorDialog(
     initialSpeed: Double?,
     initialDir: Int?,
     onDismiss: () -> Unit,
+    onAutoFill: () -> Unit,
     onClear: () -> Unit,
     onSave: (speed: Double, dir: Int, allHoles: Boolean) -> Unit,
 ) {
@@ -563,6 +584,11 @@ private fun WindEditorDialog(
         title = { Text("Wind") },
         text = {
             Column {
+                OutlinedButton(onClick = onAutoFill, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Air, contentDescription = null, Modifier.padding(end = 6.dp))
+                    Text("Auto-fill whole round from weather")
+                }
+                androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
                 Text("Speed: ${speed.roundToInt()} km/h", fontWeight = FontWeight.Bold)
                 Slider(value = speed.toFloat(), onValueChange = { speed = it.toDouble() }, valueRange = 0f..60f, steps = 11)
                 androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))

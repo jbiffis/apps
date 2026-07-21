@@ -183,6 +183,9 @@ interface CaddieDao {
     @Query("SELECT * FROM rounds WHERE scoreFileTimeS = :ts LIMIT 1")
     suspend fun roundByFileTime(ts: Long): RoundEntity?
 
+    @Query("SELECT * FROM rounds WHERE id = :id LIMIT 1")
+    suspend fun roundOnce(id: Long): RoundEntity?
+
     @Query("SELECT * FROM rounds WHERE activityTimeS IS NULL")
     suspend fun roundsWithoutActivity(): List<RoundEntity>
 
