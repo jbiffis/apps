@@ -13,6 +13,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "rounds", indices = [Index(value = ["scoreFileTimeS"], unique = true)])
@@ -351,7 +353,7 @@ interface CaddieDao {
         CourseGreenEntity::class,
     ],
     version = 4,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class CaddieDb : RoomDatabase() {
     abstract fun dao(): CaddieDao
@@ -359,9 +361,34 @@ abstract class CaddieDb : RoomDatabase() {
     companion object {
         @Volatile private var instance: CaddieDb? = null
 
+        // Additive schema changes preserve existing rounds. NEVER bump the DB
+        // version without adding the matching migration here — a missing migration
+        // would fall back to wiping the database.
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `course_greens` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `courseId` INTEGER NOT NULL, " +
+                        "`minLat` REAL NOT NULL, `minLon` REAL NOT NULL, `maxLat` REAL NOT NULL, " +
+                        "`maxLon` REAL NOT NULL, `points` TEXT NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_course_greens_courseId` ON `course_greens` (`courseId`)")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `holes` ADD COLUMN `windSpeedKmh` REAL")
+                db.execSQL("ALTER TABLE `holes` ADD COLUMN `windDirDeg` INTEGER")
+                db.execSQL("ALTER TABLE `shots` ADD COLUMN `windSpeedKmh` REAL")
+                db.execSQL("ALTER TABLE `shots` ADD COLUMN `windDirDeg` INTEGER")
+            }
+        }
+
         fun get(context: Context): CaddieDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, CaddieDb::class.java, "caddie.db")
-                // Pre-1.0: rebuild on schema change; rounds can be re-imported from FIT files
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                // Last resort only for unknown/older schemas with no migration path.
                 .fallbackToDestructiveMigration()
                 .build()
                 .also { instance = it }

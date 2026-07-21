@@ -17,6 +17,10 @@ android {
         versionName = "0.33-sat"
     }
 
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
