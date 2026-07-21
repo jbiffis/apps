@@ -684,6 +684,15 @@ private fun HoleCanvas(
     var zoom by remember { mutableStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
 
+    // Tiled grass-noise overlay, painted through a shader whose matrix follows the
+    // zoom/pan so the texture is locked to the terrain (no swimming).
+    val grassTile = remember { buildGrassTile() }
+    val grassShader = remember {
+        android.graphics.BitmapShader(grassTile, android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT)
+    }
+    val grassPaint = remember { android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG).apply { shader = grassShader } }
+    val grassMatrix = remember { android.graphics.Matrix() }
+
     // Base fit transform: lat/lon -> screen with the hole framed to the canvas.
     val baseTransform: (Double, Double) -> Offset = remember(bounds, canvasSize) {
         { lat, lon ->
@@ -828,7 +837,12 @@ private fun HoleCanvas(
         drawRect(RoughColor)
         if (canvasSize == IntSize.Zero) return@Canvas
         val zf = zoom.coerceIn(1f, 2.5f) // trees/tufts grow a little as you zoom in
-        turfTexture(0x9F0210) // subtle mottle over the rough (covered where polygons draw)
+        // Lock the grass texture to the terrain: same scale-about-centre + pan.
+        grassMatrix.reset()
+        grassMatrix.setScale(zoom, zoom, size.width / 2f, size.height / 2f)
+        grassMatrix.postTranslate(pan.x, pan.y)
+        grassShader.setLocalMatrix(grassMatrix)
+        drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, grassPaint) }
 
         // Course polygons, least → most specific
         val order = listOf(
@@ -856,10 +870,10 @@ private fun HoleCanvas(
                 }
                 path.close()
                 drawPath(path, color)
-                // Mowing stripes + mottle on the fairway; tee and green stay solid.
+                // Fairway: grass texture + mowing stripes (world-locked); tee/green solid.
                 if (type == Lie.Type.FAIRWAY) {
-                    mowingStripes(path, 26f, Color(0x1EFFFFFF))
-                    clipPath(path) { turfTexture(0x5A17) }
+                    clipPath(path) { drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, grassPaint) } }
+                    mowingStripes(path, 26f, Color(0x1EFFFFFF), zoom, pan.x)
                 }
                 if (type == Lie.Type.GREEN || type == Lie.Type.BUNKER || type == Lie.Type.WATER) {
                     drawPath(path, Color(0x33000000), style = Stroke(width = 2f))
@@ -869,27 +883,29 @@ private fun HoleCanvas(
 
         // Trees on top of everything but the shot chain: OSM tree nodes as canopy
         // glyphs, plus a scatter of tufts inside wood/forest polygons.
+        // Woods tufts placed on a WORLD grid (lat/lon), so each tuft is anchored to
+        // the ground — it moves with the terrain and keeps its identity when panning.
         for (f in features) {
             if (f.type != Lie.Type.WOODS) continue
-            val proj = f.points.map { transform(it.first, it.second) }
-            val minX = proj.minOf { it.x }; val maxX = proj.maxOf { it.x }
-            val minY = proj.minOf { it.y }; val maxY = proj.maxOf { it.y }
-            val step = 24f * zf
-            var y = minY
+            val lats = f.points.map { it.first }; val lons = f.points.map { it.second }
+            val midLat = (lats.min() + lats.max()) / 2
+            val latStep = 7.0 / 111320.0
+            val lonStep = 7.0 / (111320.0 * cos(Math.toRadians(midLat)))
+            var la = lats.min()
             var row = 0
-            while (y <= maxY) {
-                var x = minX + if (row % 2 == 0) 0f else step / 2
-                while (x <= maxX) {
-                    // Jitter each tuft off the grid so the woods don't look regular.
-                    var sd = (x.toInt() * 73856093) xor (y.toInt() * 19349663) xor 0x7A17
-                    sd = sd * 1103515245 + 12345; val jx = x + (((sd ushr 16) and 0x7fff) / 32768f - 0.5f) * step * 0.7f
-                    sd = sd * 1103515245 + 12345; val jy = y + (((sd ushr 16) and 0x7fff) / 32768f - 0.5f) * step * 0.7f
-                    if (jx in -20f..(size.width + 20f) && jy in -20f..(size.height + 20f) &&
-                        pointInScreenPolygon(jx, jy, proj)
-                    ) tree(Offset(jx, jy), 9f * zf, sd)
-                    x += step
+            while (la <= lats.max()) {
+                var lo = lons.min() + if (row % 2 == 0) 0.0 else lonStep / 2
+                while (lo <= lons.max()) {
+                    var sd = ((la * 1e5).toInt() * 73856093) xor ((lo * 1e5).toInt() * 19349663) xor 0x7A17
+                    sd = sd * 1103515245 + 12345; val jla = la + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * latStep * 0.8
+                    sd = sd * 1103515245 + 12345; val jlo = lo + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * lonStep * 0.8
+                    val p = transform(jla, jlo)
+                    if (p.x in -20f..(size.width + 20f) && p.y in -20f..(size.height + 20f) &&
+                        Lie.pointInPolygon(jla, jlo, f.points)
+                    ) tree(p, 9f * zf, sd)
+                    lo += lonStep
                 }
-                y += step * 0.82f; row++
+                la += latStep; row++
             }
         }
         for (f in features) {
@@ -970,35 +986,50 @@ private fun DrawScope.bubble(text: String, at: Offset, emphasised: Boolean) {
     }
 }
 
-/** Faint, jittered dark/light blobs to break up flat turf — subtle grass texture. */
-private fun DrawScope.turfTexture(seedBase: Int) {
-    val w = size.width
-    val h = size.height
-    val step = 56f
-    var yy = -step
-    var row = 0
-    while (yy < h + step) {
-        var xx = if (row % 2 == 0) -step else -step / 2
-        while (xx < w + step) {
-            var s = seedBase xor (xx.toInt() * 73856093) xor (yy.toInt() * 19349663)
-            s = s * 1103515245 + 12345; val jx = xx + (((s ushr 16) and 0x7fff) / 32768f - 0.5f) * step
-            s = s * 1103515245 + 12345; val jy = yy + (((s ushr 16) and 0x7fff) / 32768f - 0.5f) * step
-            s = s * 1103515245 + 12345; val t = ((s ushr 16) and 0x7fff) / 32768f
-            s = s * 1103515245 + 12345; val rad = step * (0.28f + ((s ushr 16) and 0x7fff) / 32768f * 0.45f)
-            drawCircle(Color(if (t < 0.5f) 0x16000000 else 0x14FFFFFF), radius = rad, center = Offset(jx, jy))
-            xx += step
-        }
-        yy += step * 0.82f; row++
+/**
+ * A small seamless grass-noise tile (two octaves of wrapped value noise) used as a
+ * repeating overlay so turf reads as textured grass rather than a flat fill.
+ */
+private fun buildGrassTile(): android.graphics.Bitmap {
+    val size = 128
+    val rng = java.util.Random(20260721)
+    fun lattice(n: Int): Array<DoubleArray> = Array(n) { DoubleArray(n) { rng.nextDouble() } }
+    val coarse = lattice(8)
+    val fine = lattice(32)
+    fun smooth(t: Double) = t * t * (3 - 2 * t)
+    fun sample(grid: Array<DoubleArray>, u: Double, v: Double): Double {
+        val n = grid.size
+        val fx = u * n; val fy = v * n
+        val x0 = fx.toInt() % n; val y0 = fy.toInt() % n
+        val x1 = (x0 + 1) % n; val y1 = (y0 + 1) % n
+        val sx = smooth(fx - fx.toInt()); val sy = smooth(fy - fy.toInt())
+        val top = grid[y0][x0] * (1 - sx) + grid[y0][x1] * sx
+        val bot = grid[y1][x0] * (1 - sx) + grid[y1][x1] * sx
+        return top * (1 - sy) + bot * sy
     }
+    val px = IntArray(size * size)
+    for (y in 0 until size) for (x in 0 until size) {
+        val u = x.toDouble() / size; val v = y.toDouble() / size
+        val n = sample(coarse, u, v) * 0.6 + sample(fine, u, v) * 0.4
+        val d = n - 0.5 // -0.5..0.5
+        val a = (kotlin.math.abs(d) * 90).toInt().coerceIn(0, 46)
+        px[y * size + x] = if (d < 0) android.graphics.Color.argb(a, 24, 54, 20)
+        else android.graphics.Color.argb(a, 210, 240, 175)
+    }
+    return android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        .apply { setPixels(px, 0, size, 0, 0, size, size) }
 }
 
-/** Vertical mowing stripes clipped to a turf polygon (Garmin-golf look). */
-private fun DrawScope.mowingStripes(path: Path, bandPx: Float, color: Color) {
+/** Mowing stripes clipped to a turf polygon, offset by pan and scaled by zoom so
+ *  they track the terrain instead of swimming across it. */
+private fun DrawScope.mowingStripes(path: Path, bandBase: Float, color: Color, zoom: Float, panX: Float) {
+    val band = bandBase * zoom
+    val period = band * 2
     clipPath(path) {
-        var x = 0f
+        var x = (panX % period) - period
         while (x < size.width) {
-            drawRect(color, topLeft = Offset(x, 0f), size = androidx.compose.ui.geometry.Size(bandPx, size.height))
-            x += bandPx * 2
+            drawRect(color, topLeft = Offset(x, 0f), size = androidx.compose.ui.geometry.Size(band, size.height))
+            x += period
         }
     }
 }
@@ -1041,17 +1072,4 @@ private fun DrawScope.tree(center: Offset, baseR: Float, seed: Int) {
     // sunlit highlights, upper-left
     drawCircle(g(0xFF74B84C), radius = r * 0.4f, center = center + Offset(-r * 0.28f, -r * 0.34f))
     drawCircle(g(0xFF9AD268), radius = r * (0.14f + rnd() * 0.1f), center = center + Offset(-r * 0.36f, -r * 0.42f))
-}
-
-/** Ray-cast point-in-polygon on screen-space points, for scattering tufts in woods. */
-private fun pointInScreenPolygon(x: Float, y: Float, poly: List<Offset>): Boolean {
-    if (poly.size < 3) return false
-    var inside = false
-    var j = poly.size - 1
-    for (i in poly.indices) {
-        val pi = poly[i]; val pj = poly[j]
-        if ((pi.y > y) != (pj.y > y) && x < (pj.x - pi.x) * (y - pi.y) / (pj.y - pi.y) + pi.x) inside = !inside
-        j = i
-    }
-    return inside
 }
