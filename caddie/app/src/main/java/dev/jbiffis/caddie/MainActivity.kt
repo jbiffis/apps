@@ -24,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
 import dev.jbiffis.caddie.ui.CaddieTheme
+import dev.jbiffis.caddie.ui.ClubDetailScreen
 import dev.jbiffis.caddie.ui.ClubsScreen
 import dev.jbiffis.caddie.ui.HoleScreen
 import dev.jbiffis.caddie.ui.RoundsScreen
@@ -129,7 +130,15 @@ class MainActivity : ComponentActivity() {
                                 onOpenSatellite = { h -> nav.navigate("hole/$roundId/$h") },
                             )
                         }
-                        composable("stats") { StatsScreen(app) }
+                        composable("stats") {
+                            StatsScreen(app, onOpenClub = { clubId -> nav.navigate("club/$clubId") })
+                        }
+                        composable(
+                            "club/{clubId}",
+                            arguments = listOf(navArgument("clubId") { type = NavType.LongType }),
+                        ) { entry ->
+                            ClubDetailScreen(app, entry.arguments!!.getLong("clubId"), onBack = { nav.popBackStack() })
+                        }
                         composable("clubs") { ClubsScreen(app) }
                         composable("sync") { SyncScreen(app) }
                     }

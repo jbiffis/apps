@@ -1,6 +1,7 @@
 package dev.jbiffis.caddie.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,7 +63,7 @@ private const val MIN_SHOT_M = 15.0       // ignore chips/mis-detections in stat
 private const val APPROACH_MAX_M = 210.0  // start→pin distance where aiming at the pin is plausible
 
 @Composable
-fun StatsScreen(app: CaddieApp) {
+fun StatsScreen(app: CaddieApp, onOpenClub: (Long) -> Unit = {}) {
     val shots by app.db.dao().allShots().collectAsState(initial = emptyList())
     val holes by app.db.dao().allHoles().collectAsState(initial = emptyList())
     val clubs by app.db.dao().clubs().collectAsState(initial = emptyList())
@@ -91,7 +92,7 @@ fun StatsScreen(app: CaddieApp) {
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
-        items(stats, key = { it.clubId }) { stat -> ClubCard(stat) }
+        items(stats, key = { it.clubId }) { stat -> ClubCard(stat, onClick = { onOpenClub(stat.clubId) }) }
         item {
             Text(
                 "Distances use every tracked shot ≥ ${MIN_SHOT_M.toInt()} m with a club. " +
@@ -150,12 +151,15 @@ private fun computeStats(
     }
     return samplesByClub.map { (clubId, samples) ->
         ClubStat(clubId, clubNames[clubId] ?: "Club $clubId", samples, drivingByClub[clubId] ?: emptyMap())
-    }.sortedByDescending { it.avgYd }
+    }.sortedBy { clubLoft(it.name) ?: Double.MAX_VALUE } // by loft, ascending
 }
 
 @Composable
-private fun ClubCard(stat: ClubStat) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+private fun ClubCard(stat: ClubStat, onClick: () -> Unit) {
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            .clickable(onClick = onClick),
+    ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stat.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

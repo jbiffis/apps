@@ -40,6 +40,10 @@ fun clubAbbrev(name: String?, clubId: Long): String {
     }
 }
 
+/** Loft in degrees parsed from a club name like "6 Iron (30.5°)", or null. */
+fun clubLoft(name: String?): Double? =
+    name?.let { Regex("\\(([0-9.]+)\\s*°\\)").find(it)?.groupValues?.get(1)?.toDoubleOrNull() }
+
 private val CARDINALS = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 /** 8-point compass label for a bearing in degrees (the direction wind comes FROM). */
