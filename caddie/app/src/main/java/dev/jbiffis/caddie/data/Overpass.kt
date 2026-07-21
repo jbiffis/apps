@@ -30,6 +30,8 @@ object Overpass {
               way["golf"]($bbox);
               relation["golf"]($bbox);
               way["natural"~"^(water|wood|scrub|sand)$"]($bbox);
+              way["landuse"="forest"]($bbox);
+              node["natural"="tree"]($bbox);
             );
             out tags geom;
         """.trimIndent()
@@ -80,10 +82,20 @@ object Overpass {
         for (i in 0 until elements.length()) {
             val el = elements.getJSONObject(i)
             val tags = el.optJSONObject("tags") ?: continue
-            val type = Lie.typeFromOsm(tags.optString("golf", null), tags.optString("natural", null)) ?: continue
+            val type = Lie.typeFromOsm(
+                tags.optString("golf", null),
+                tags.optString("natural", null),
+                tags.optString("landuse", null),
+            ) ?: continue
             val holeRef = tags.optString("ref", "").toIntOrNull()
 
             when (el.getString("type")) {
+                "node" -> {
+                    // A single tree: store its point (rendered as a canopy glyph).
+                    if (type == Lie.Type.TREE && el.has("lat") && el.has("lon")) {
+                        out.add(CourseFeature(type, null, listOf(el.getDouble("lat") to el.getDouble("lon"))))
+                    }
+                }
                 "way" -> {
                     val points = readGeometry(el.optJSONArray("geometry")) ?: continue
                     out.add(CourseFeature(type, holeRef, points))
@@ -100,8 +112,13 @@ object Overpass {
                 }
             }
         }
-        return out
+        // Cap individual trees so a densely-mapped course doesn't bloat storage/rendering.
+        val trees = out.filter { it.type == Lie.Type.TREE }
+        if (trees.size <= MAX_TREES) return out
+        return out.filter { it.type != Lie.Type.TREE } + trees.take(MAX_TREES)
     }
+
+    private const val MAX_TREES = 600
 
     private fun readGeometry(geometry: org.json.JSONArray?): List<Pair<Double, Double>>? {
         if (geometry == null || geometry.length() < 3) return null

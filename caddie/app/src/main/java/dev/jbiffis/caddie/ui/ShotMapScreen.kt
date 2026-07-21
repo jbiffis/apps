@@ -12,25 +12,33 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,11 +53,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -66,6 +76,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 // Garmin-style flat course colours
 private val RoughColor = Color(0xFF6E9E43)
@@ -77,6 +88,7 @@ private val WaterColor = Color(0xFF64B5F6)
 private val WoodsColor = Color(0xFF4A7A33)
 private val ExplicitRoughColor = Color(0xFF7FAB4C)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShotMapScreen(
     app: CaddieApp,
@@ -99,12 +111,24 @@ fun ShotMapScreen(
     val features = remember(featureEntities) { featureEntities.mapNotNull { it.decode() } }
     val clubNames = clubs.associate { it.clubId to it.name }
 
+    // Per-shot map bubble labels ("6i · 127") and the hole's play bearing (tee→green).
+    val bubbleLabels = shots.map { "${clubAbbrev(clubNames[it.clubId], it.clubId)} · ${it.distanceM.toYards()}" }
+    val holeBearing = remember(shots, holeInfo) {
+        val tLat = shots.firstOrNull()?.startLat; val tLon = shots.firstOrNull()?.startLon
+        val gLat = holeInfo?.pinLat ?: shots.lastOrNull()?.endLat
+        val gLon = holeInfo?.pinLon ?: shots.lastOrNull()?.endLon
+        if (tLat != null && tLon != null && gLat != null && gLon != null)
+            Lie.bearingDeg(tLat, tLon, gLat, gLon) else 0.0
+    }
+
     var shotIdx by rememberSaveable(hole) { mutableIntStateOf(initialShot) }
     if (shots.isNotEmpty()) shotIdx = shotIdx.coerceIn(0, shots.size - 1)
     val current = shots.getOrNull(shotIdx)
 
     var confirmDelete by remember { mutableStateOf(false) }
     var editClub by remember { mutableStateOf(false) }
+    var editWind by remember { mutableStateOf(false) }
+    var sheetOpen by remember { mutableStateOf(false) }
     var editMode by remember { mutableStateOf(false) }
     // null = auto (drawn if mapped, satellite if not); true/false = user override.
     var satelliteOverride by remember { mutableStateOf<Boolean?>(null) }
@@ -172,6 +196,7 @@ fun ShotMapScreen(
                     endLat = endLat, endLon = endLon,
                     clubId = 0L,
                     distanceM = dev.jbiffis.caddie.fit.GolfFit.haversineM(startLat, startLon, endLat, endLon),
+                    windSpeedKmh = holeInfo?.windSpeedKmh, windDirDeg = holeInfo?.windDirDeg,
                 )
             )
             shotIdx = idx // select the newly inserted shot
@@ -217,7 +242,7 @@ fun ShotMapScreen(
                     clubNames = clubNames,
                     modifier = Modifier.matchParentSize(),
                     greens = greens,
-                    onSelectShot = { shotIdx = it },
+                    onSelectShot = { shotIdx = it; sheetOpen = true },
                 )
             } else {
                 HoleCanvas(
@@ -227,10 +252,20 @@ fun ShotMapScreen(
                     pinLon = holeInfo?.pinLon,
                     currentIdx = shotIdx,
                     editMode = editMode,
-                    onSelectShot = { shotIdx = it },
+                    bubbleLabels = bubbleLabels,
+                    onSelectShot = { shotIdx = it; if (!editMode) sheetOpen = true },
                     onMoveNode = { node, lat, lon -> moveNode(node, lat, lon) },
                 )
             }
+            // Wind badge — tap to set the hole's wind (arrow points where it blows,
+            // relative to the hole so up = toward the green).
+            WindBadge(
+                speedKmh = holeInfo?.windSpeedKmh,
+                dirDeg = holeInfo?.windDirDeg,
+                holeBearingDeg = holeBearing,
+                modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                onClick = { editWind = true },
+            )
             if (features.isEmpty()) {
                 OutlinedButton(
                     onClick = { loadCourse(force = true) },
@@ -277,74 +312,26 @@ fun ShotMapScreen(
             }
         }
 
-        // Shot detail sheet
-        Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            if (current == null) {
-                Column(Modifier.padding(16.dp)) {
+        // Slim shot bar — tap to open the editor sheet (or add the first shot).
+        Card(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                .clickable { if (current != null) sheetOpen = true else insertShotAt(0) },
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (current == null) {
+                    Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 6.dp))
+                    Text("Add a shot", fontWeight = FontWeight.Bold)
+                } else {
+                    Text("Shot ${shotIdx + 1}/${shots.size}", fontWeight = FontWeight.Bold)
                     Text(
-                        "No tracked shots on this hole.",
+                        "   ${clubNames[current.clubId] ?: if (current.clubId == 0L) "Putt" else "Club"} · ${current.distanceM.toYards()} yds",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    TextButton(onClick = { insertShotAt(0) }) {
-                        Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 4.dp))
-                        Text("Add a shot")
-                    }
-}
-            } else {
-                val startLie = when {
-                    shotIdx == 0 -> Lie.Type.TEE
-                    else -> Lie.lieAt(current.startLat, current.startLon, features)
-                }
-                val isPutt = current.clubId == 0L
-                val result: String = holeInfo?.let { h ->
-                    if (h.pinLat != null && h.pinLon != null) {
-                        Lie.classifyMiss(
-                            current.startLat, current.startLon,
-                            current.endLat, current.endLon,
-                            h.pinLat, h.pinLon, features,
-                        ).label
-                    } else null
-                } ?: Lie.lieAt(current.endLat, current.endLon, features).label
-
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { if (shotIdx > 0) shotIdx-- }, enabled = shotIdx > 0) {
-                            Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous shot")
-                        }
-                        Text(
-                            "Shot ${shotIdx + 1} of ${shots.size}",
-                            Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
-                        IconButton(onClick = { if (shotIdx < shots.size - 1) shotIdx++ }, enabled = shotIdx < shots.size - 1) {
-                            Icon(Icons.Filled.ChevronRight, contentDescription = "Next shot")
-                        }
-                    }
-                    HorizontalDivider()
-                    DetailRow("Lie", if (isPutt && startLie == Lie.Type.UNKNOWN) "Green" else startLie.label)
-                    DetailRow(
-                        "Club",
-                        clubNames[current.clubId] ?: if (isPutt) "Putt / no club" else "Club ${current.clubId}",
-                        onClick = { editClub = true },
-                    )
-                    DetailRow("Distance", "${current.distanceM.toYards()} yds")
-                    DetailRow("Result", result)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { insertShotAt(shotIdx) }) {
-                            Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 2.dp))
-                            Text("Before")
-                        }
-                        TextButton(onClick = { insertShotAt(shotIdx + 1) }) {
-                            Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 2.dp))
-                            Text("After")
-                        }
-                        androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { confirmDelete = true }) {
-                            Text("Delete", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit shot")
                 }
             }
         }
@@ -431,6 +418,81 @@ fun ShotMapScreen(
             dismissButton = { TextButton(onClick = { editClub = false }) { Text("Cancel") } },
         )
     }
+
+    // Slide-up editor for the tapped shot.
+    if (sheetOpen && current != null) {
+        val startLie = if (shotIdx == 0) Lie.Type.TEE else Lie.lieAt(current.startLat, current.startLon, features)
+        val isPutt = current.clubId == 0L
+        val result: String = holeInfo?.let { h ->
+            if (h.pinLat != null && h.pinLon != null) {
+                Lie.classifyMiss(
+                    current.startLat, current.startLon, current.endLat, current.endLon,
+                    h.pinLat, h.pinLon, features,
+                ).label
+            } else null
+        } ?: Lie.lieAt(current.endLat, current.endLon, features).label
+        ModalBottomSheet(onDismissRequest = { sheetOpen = false }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { if (shotIdx > 0) shotIdx-- }, enabled = shotIdx > 0) {
+                        Icon(Icons.Filled.ChevronLeft, contentDescription = "Previous shot")
+                    }
+                    Text(
+                        "Shot ${shotIdx + 1} of ${shots.size}",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    IconButton(onClick = { if (shotIdx < shots.size - 1) shotIdx++ }, enabled = shotIdx < shots.size - 1) {
+                        Icon(Icons.Filled.ChevronRight, contentDescription = "Next shot")
+                    }
+                }
+                HorizontalDivider()
+                DetailRow("Lie", if (isPutt && startLie == Lie.Type.UNKNOWN) "Green" else startLie.label)
+                DetailRow(
+                    "Club",
+                    clubNames[current.clubId] ?: if (isPutt) "Putt / no club" else "Club ${current.clubId}",
+                    onClick = { editClub = true },
+                )
+                DetailRow("Distance", "${current.distanceM.toYards()} yds")
+                DetailRow("Result", result)
+                DetailRow("Wind", formatWind(holeInfo?.windSpeedKmh, holeInfo?.windDirDeg) ?: "Tap to set", onClick = { editWind = true })
+                androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { insertShotAt(shotIdx) }) {
+                        Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 2.dp))
+                        Text("Before")
+                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { insertShotAt(shotIdx + 1) }) {
+                        Icon(Icons.Filled.Add, contentDescription = null, Modifier.padding(end = 2.dp))
+                        Text("After")
+                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { confirmDelete = true }) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+    }
+
+    if (editWind) {
+        WindEditorDialog(
+            initialSpeed = holeInfo?.windSpeedKmh,
+            initialDir = holeInfo?.windDirDeg,
+            onDismiss = { editWind = false },
+            onClear = { scope.launch { dao.applyHoleWind(roundId, hole, null, null); editWind = false } },
+            onSave = { speed, dir, allHoles ->
+                scope.launch {
+                    if (allHoles) dao.applyRoundWind(roundId, speed, dir)
+                    else dao.applyHoleWind(roundId, hole, speed, dir)
+                    editWind = false
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -449,6 +511,94 @@ private fun DetailRow(label: String, value: String, onClick: (() -> Unit)? = nul
     }
 }
 
+/** Wind chip overlaid on the map. The arrow points where the wind blows, rotated
+ *  so "up" is toward the green (matching the tee-down hole orientation). */
+@Composable
+private fun WindBadge(
+    speedKmh: Double?,
+    dirDeg: Int?,
+    holeBearingDeg: Double,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier
+            .background(Color(0xB3000000), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (speedKmh != null && dirDeg != null) {
+            // Wind blows toward (dir + 180); show it relative to the hole bearing.
+            val angle = ((dirDeg + 180).toDouble() - holeBearingDeg).toFloat()
+            Icon(
+                Icons.Filled.Navigation, contentDescription = "Wind direction",
+                tint = Color(0xFF80D8FF),
+                modifier = Modifier.size(18.dp).rotate(angle),
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+            Text(formatWind(speedKmh, dirDeg) ?: "", color = Color.White, style = MaterialTheme.typography.labelLarge)
+        } else {
+            Icon(Icons.Filled.Air, contentDescription = "Set wind", tint = Color.White, modifier = Modifier.size(18.dp))
+            androidx.compose.foundation.layout.Spacer(Modifier.width(6.dp))
+            Text("Wind", color = Color.White, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun WindEditorDialog(
+    initialSpeed: Double?,
+    initialDir: Int?,
+    onDismiss: () -> Unit,
+    onClear: () -> Unit,
+    onSave: (speed: Double, dir: Int, allHoles: Boolean) -> Unit,
+) {
+    var speed by remember { mutableStateOf(initialSpeed ?: 10.0) }
+    var dir by remember { mutableIntStateOf(initialDir ?: 0) }
+    var allHoles by remember { mutableStateOf(false) }
+    val cardinals = listOf("N" to 0, "NE" to 45, "E" to 90, "SE" to 135, "S" to 180, "SW" to 225, "W" to 270, "NW" to 315)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wind") },
+        text = {
+            Column {
+                Text("Speed: ${speed.roundToInt()} km/h", fontWeight = FontWeight.Bold)
+                Slider(value = speed.toFloat(), onValueChange = { speed = it.toDouble() }, valueRange = 0f..60f, steps = 11)
+                androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                Text("Coming from: ${windCardinal(dir)}", fontWeight = FontWeight.Bold)
+                androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
+                cardinals.chunked(4).forEach { rowItems ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        rowItems.forEach { (lbl, deg) ->
+                            val sel = dir == deg
+                            OutlinedButton(
+                                onClick = { dir = deg },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp),
+                                colors = if (sel) androidx.compose.material3.ButtonDefaults.buttonColors()
+                                    else androidx.compose.material3.ButtonDefaults.outlinedButtonColors(),
+                            ) { Text(lbl, style = MaterialTheme.typography.labelMedium) }
+                        }
+                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = allHoles, onCheckedChange = { allHoles = it })
+                    Text("Apply to all holes in this round")
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(speed, dir, allHoles) }) { Text("Save") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onClear) { Text("Clear") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
+
 /** Flat, Garmin-style drawn hole with the shot chain. Tee is at the bottom, pin at the top. */
 @Composable
 private fun HoleCanvas(
@@ -458,6 +608,7 @@ private fun HoleCanvas(
     pinLon: Double?,
     currentIdx: Int,
     editMode: Boolean,
+    bubbleLabels: List<String>,
     onSelectShot: (Int) -> Unit,
     onMoveNode: (nodeIndex: Int, lat: Double, lon: Double) -> Unit,
 ) {
@@ -614,10 +765,44 @@ private fun HoleCanvas(
                 }
                 path.close()
                 drawPath(path, color)
-                if (type == Lie.Type.GREEN || type == Lie.Type.BUNKER) {
+                // Mowing stripes up the hole for turf areas — the Garmin-golf look.
+                when (type) {
+                    Lie.Type.FAIRWAY -> mowingStripes(path, 26f, Color(0x1EFFFFFF))
+                    Lie.Type.GREEN -> mowingStripes(path, 16f, Color(0x22FFFFFF))
+                    Lie.Type.TEE -> mowingStripes(path, 18f, Color(0x1EFFFFFF))
+                    else -> {}
+                }
+                if (type == Lie.Type.GREEN || type == Lie.Type.BUNKER || type == Lie.Type.WATER) {
                     drawPath(path, Color(0x33000000), style = Stroke(width = 2f))
                 }
             }
+        }
+
+        // Trees on top of everything but the shot chain: OSM tree nodes as canopy
+        // glyphs, plus a scatter of tufts inside wood/forest polygons.
+        for (f in features) {
+            if (f.type != Lie.Type.WOODS) continue
+            val proj = f.points.map { transform(it.first, it.second) }
+            val minX = proj.minOf { it.x }; val maxX = proj.maxOf { it.x }
+            val minY = proj.minOf { it.y }; val maxY = proj.maxOf { it.y }
+            val step = 26f
+            var y = minY
+            var row = 0
+            while (y <= maxY) {
+                var x = minX + if (row % 2 == 0) 0f else step / 2
+                while (x <= maxX) {
+                    if (x in -20f..(size.width + 20f) && y in -20f..(size.height + 20f) &&
+                        pointInScreenPolygon(x, y, proj)
+                    ) tree(Offset(x, y), 9f)
+                    x += step
+                }
+                y += step * 0.86f; row++
+            }
+        }
+        for (f in features) {
+            if (f.type != Lie.Type.TREE) continue
+            val p = transform(f.points[0].first, f.points[0].second)
+            if (p.x in -20f..(size.width + 20f) && p.y in -20f..(size.height + 20f)) tree(p, 12f)
         }
 
         // Shot chain — dark outline under white line, like Garmin.
@@ -660,22 +845,11 @@ private fun HoleCanvas(
             drawPath(flag, Color(0xFFD32F2F))
         }
 
-        // Distance bubbles on each segment (current shot emphasised)
-        shots.forEachIndexed { i, s ->
-            val a = nodeScreen(i)
-            val b = nodeScreen(i + 1)
-            if (hypot((b.x - a.x).toDouble(), (b.y - a.y).toDouble()) < 40) return@forEachIndexed
-            // While dragging, show the live distance instead of the stored one
-            val yards = if (dragNode == i || dragNode == i + 1) {
-                val (la1, lo1) = screenToLatLon(a)
-                val (la2, lo2) = screenToLatLon(b)
-                dev.jbiffis.caddie.fit.GolfFit.haversineM(la1, lo1, la2, lo2).toYards()
-            } else s.distanceM.toYards()
-            bubble(
-                "$yards yds",
-                Offset((a.x + b.x) / 2 + 14f, (a.y + b.y) / 2),
-                emphasised = i == currentIdx,
-            )
+        // Per-shot info bubble at each shot's start node: "club · distance".
+        shots.forEachIndexed { i, _ ->
+            val p = nodeScreen(i)
+            val label = bubbleLabels.getOrNull(i) ?: return@forEachIndexed
+            bubble(label, Offset(p.x + 16f, p.y), emphasised = i == currentIdx)
         }
     }
 }
@@ -698,4 +872,36 @@ private fun DrawScope.bubble(text: String, at: Offset, emphasised: Boolean) {
         canvas.nativeCanvas.drawRoundRect(rect, rect.height() / 2, rect.height() / 2, bg)
         canvas.nativeCanvas.drawText(text, at.x + padX, at.y - (paint.descent() + paint.ascent()) / 2, paint)
     }
+}
+
+/** Vertical mowing stripes clipped to a turf polygon (Garmin-golf look). */
+private fun DrawScope.mowingStripes(path: Path, bandPx: Float, color: Color) {
+    clipPath(path) {
+        var x = 0f
+        while (x < size.width) {
+            drawRect(color, topLeft = Offset(x, 0f), size = androidx.compose.ui.geometry.Size(bandPx, size.height))
+            x += bandPx * 2
+        }
+    }
+}
+
+/** A stylised tree: soft shadow with layered canopy highlights. */
+private fun DrawScope.tree(center: Offset, r: Float) {
+    drawCircle(Color(0x33000000), radius = r * 1.05f, center = center + Offset(r * 0.35f, r * 0.5f))
+    drawCircle(Color(0xFF2F5D2A), radius = r, center = center)
+    drawCircle(Color(0xFF3F7A34), radius = r * 0.82f, center = center + Offset(-r * 0.15f, -r * 0.18f))
+    drawCircle(Color(0xFF6AAE47), radius = r * 0.48f, center = center + Offset(-r * 0.28f, -r * 0.32f))
+}
+
+/** Ray-cast point-in-polygon on screen-space points, for scattering tufts in woods. */
+private fun pointInScreenPolygon(x: Float, y: Float, poly: List<Offset>): Boolean {
+    if (poly.size < 3) return false
+    var inside = false
+    var j = poly.size - 1
+    for (i in poly.indices) {
+        val pi = poly[i]; val pj = poly[j]
+        if ((pi.y > y) != (pj.y > y) && x < (pj.x - pi.x) * (y - pi.y) / (pj.y - pi.y) + pi.x) inside = !inside
+        j = i
+    }
+    return inside
 }

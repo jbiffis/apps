@@ -17,6 +17,7 @@ object Lie {
         FAIRWAY("Fairway"),
         WOODS("Trees"),
         ROUGH("Rough"),
+        TREE("Tree"), // a single OSM tree node (a point, not a polygon)
         UNKNOWN("Unknown"),
     }
 
@@ -32,14 +33,15 @@ object Lie {
         OTHER("Rough"),
     }
 
-    fun typeFromOsm(golf: String?, natural: String?): Type? = when {
+    fun typeFromOsm(golf: String?, natural: String?, landuse: String? = null): Type? = when {
         golf == "green" -> Type.GREEN
         golf == "tee" -> Type.TEE
         golf == "bunker" || natural == "sand" -> Type.BUNKER
         golf == "water_hazard" || golf == "lateral_water_hazard" || natural == "water" -> Type.WATER
         golf == "fairway" -> Type.FAIRWAY
         golf == "rough" -> Type.ROUGH
-        natural == "wood" || natural == "scrub" -> Type.WOODS
+        natural == "tree" -> Type.TREE
+        natural == "wood" || natural == "scrub" || landuse == "forest" -> Type.WOODS
         else -> null
     }
 

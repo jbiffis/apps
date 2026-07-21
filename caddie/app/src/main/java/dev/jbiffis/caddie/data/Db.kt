@@ -54,6 +54,9 @@ data class HoleEntity(
     val strokes: Int,
     val putts: Int?,
     val finishedAtS: Long?,
+    // Wind at this hole (user-entered). Direction = degrees the wind blows FROM.
+    val windSpeedKmh: Double? = null,
+    val windDirDeg: Int? = null,
 )
 
 @Entity(tableName = "shots", indices = [Index("roundId"), Index("clubId")])
@@ -68,6 +71,9 @@ data class ShotEntity(
     val endLon: Double,
     val clubId: Long, // 0 = putt / no club recorded
     val distanceM: Double,
+    // Wind while this shot was played (copied from the hole), for analytics.
+    val windSpeedKmh: Double? = null,
+    val windDirDeg: Int? = null,
 )
 
 @Entity(tableName = "clubs")
@@ -103,7 +109,8 @@ data class CourseFeatureEntity(
             val lon = pair.substring(comma + 1).toDoubleOrNull() ?: return@mapNotNull null
             lat to lon
         }
-        return if (pts.size >= 3) CourseFeature(type, holeRef, pts) else null
+        val min = if (type == Lie.Type.TREE) 1 else 3 // trees are single points
+        return if (pts.size >= min) CourseFeature(type, holeRef, pts) else null
     }
 
     companion object {
@@ -220,6 +227,31 @@ interface CaddieDao {
     @Query("UPDATE shots SET clubId = :clubId WHERE id = :shotId")
     suspend fun updateShotClub(shotId: Long, clubId: Long)
 
+    // Wind — stored on the hole and stamped onto that hole's shots for analytics.
+    @Query("UPDATE holes SET windSpeedKmh = :speed, windDirDeg = :dir WHERE roundId = :roundId AND hole = :hole")
+    suspend fun setHoleWind(roundId: Long, hole: Int, speed: Double?, dir: Int?)
+
+    @Query("UPDATE shots SET windSpeedKmh = :speed, windDirDeg = :dir WHERE roundId = :roundId AND hole = :hole")
+    suspend fun stampShotsWind(roundId: Long, hole: Int, speed: Double?, dir: Int?)
+
+    @Query("UPDATE holes SET windSpeedKmh = :speed, windDirDeg = :dir WHERE roundId = :roundId")
+    suspend fun setRoundWind(roundId: Long, speed: Double?, dir: Int?)
+
+    @Query("UPDATE shots SET windSpeedKmh = :speed, windDirDeg = :dir WHERE roundId = :roundId")
+    suspend fun stampRoundShotsWind(roundId: Long, speed: Double?, dir: Int?)
+
+    @Transaction
+    suspend fun applyHoleWind(roundId: Long, hole: Int, speed: Double?, dir: Int?) {
+        setHoleWind(roundId, hole, speed, dir)
+        stampShotsWind(roundId, hole, speed, dir)
+    }
+
+    @Transaction
+    suspend fun applyRoundWind(roundId: Long, speed: Double?, dir: Int?) {
+        setRoundWind(roundId, speed, dir)
+        stampRoundShotsWind(roundId, speed, dir)
+    }
+
     @Query("SELECT * FROM shots WHERE roundId = :roundId ORDER BY hole, timeS")
     suspend fun shotsList(roundId: Long): List<ShotEntity>
 
@@ -318,7 +350,7 @@ interface CaddieDao {
         ClubEntity::class, TrackPointEntity::class, CourseFeatureEntity::class,
         CourseGreenEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class CaddieDb : RoomDatabase() {
