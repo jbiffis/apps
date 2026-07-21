@@ -18,6 +18,7 @@ object Lie {
         WOODS("Trees"),
         ROUGH("Rough"),
         TREE("Tree"), // a single OSM tree node (a point, not a polygon)
+        PATH("Cart path"), // an open polyline, not a filled area
         UNKNOWN("Unknown"),
     }
 
@@ -40,6 +41,7 @@ object Lie {
         golf == "water_hazard" || golf == "lateral_water_hazard" || natural == "water" -> Type.WATER
         golf == "fairway" -> Type.FAIRWAY
         golf == "rough" -> Type.ROUGH
+        golf == "cartpath" || golf == "path" -> Type.PATH
         natural == "tree" -> Type.TREE
         natural == "wood" || natural == "scrub" || landuse == "forest" -> Type.WOODS
         else -> null

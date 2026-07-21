@@ -57,7 +57,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -66,6 +70,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.jbiffis.caddie.CaddieApp
@@ -90,6 +95,8 @@ private val BunkerColor = Color(0xFFE7DBA8)
 private val WaterColor = Color(0xFF64B5F6)
 private val WoodsColor = Color(0xFF4A7A33)
 private val ExplicitRoughColor = Color(0xFF7FAB4C)
+private val PathColor = Color(0xFFD8D2C4)      // cart path (pale concrete)
+private val PathEdgeColor = Color(0x55000000)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -693,6 +700,11 @@ private fun HoleCanvas(
     val grassPaint = remember { android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG).apply { shader = grassShader } }
     val grassMatrix = remember { android.graphics.Matrix() }
 
+    // Pre-render tree sprites once and cache tuft positions (world coords) so panning
+    // just blits sprites instead of recomputing grids and drawing many circles.
+    val treeSprites = remember { List(12) { buildTreeSprite(it * 1327 + 17) } }
+    val tufts = remember(features) { computeTufts(features) }
+
     // Base fit transform: lat/lon -> screen with the hole framed to the canvas.
     val baseTransform: (Double, Double) -> Offset = remember(bounds, canvasSize) {
         { lat, lon ->
@@ -881,54 +893,58 @@ private fun HoleCanvas(
             }
         }
 
-        // Trees on top of everything but the shot chain: OSM tree nodes as canopy
-        // glyphs, plus a scatter of tufts inside wood/forest polygons.
-        // Woods tufts placed on a WORLD grid (lat/lon), so each tuft is anchored to
-        // the ground — it moves with the terrain and keeps its identity when panning.
+        // Cart paths (open polylines) — pale paved line with a soft edge.
         for (f in features) {
-            if (f.type != Lie.Type.WOODS) continue
-            val lats = f.points.map { it.first }; val lons = f.points.map { it.second }
-            val midLat = (lats.min() + lats.max()) / 2
-            val latStep = 7.0 / 111320.0
-            val lonStep = 7.0 / (111320.0 * cos(Math.toRadians(midLat)))
-            var la = lats.min()
-            var row = 0
-            while (la <= lats.max()) {
-                var lo = lons.min() + if (row % 2 == 0) 0.0 else lonStep / 2
-                while (lo <= lons.max()) {
-                    var sd = ((la * 1e5).toInt() * 73856093) xor ((lo * 1e5).toInt() * 19349663) xor 0x7A17
-                    sd = sd * 1103515245 + 12345; val jla = la + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * latStep * 0.8
-                    sd = sd * 1103515245 + 12345; val jlo = lo + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * lonStep * 0.8
-                    val p = transform(jla, jlo)
-                    if (p.x in -20f..(size.width + 20f) && p.y in -20f..(size.height + 20f) &&
-                        Lie.pointInPolygon(jla, jlo, f.points)
-                    ) tree(p, 9f * zf, sd)
-                    lo += lonStep
-                }
-                la += latStep; row++
-            }
+            if (f.type != Lie.Type.PATH) continue
+            val pts = f.points.map { transform(it.first, it.second) }
+            if (pts.none { it.x in -60f..(size.width + 60f) && it.y in -60f..(size.height + 60f) }) continue
+            val path = Path()
+            pts.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
+            drawPath(path, PathEdgeColor, style = Stroke(width = 8f * zf, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, PathColor, style = Stroke(width = 5f * zf, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
-        for (f in features) {
-            if (f.type != Lie.Type.TREE) continue
-            val p = transform(f.points[0].first, f.points[0].second)
-            if (p.x in -20f..(size.width + 20f) && p.y in -20f..(size.height + 20f)) {
-                val seed = (f.points[0].first * 1e5).toInt() * 31 + (f.points[0].second * 1e5).toInt()
-                tree(p, 12f * zf, seed)
+
+        // Trees: blit cached sprites (fast). Positions are in world coords so they
+        // stay anchored to the ground and keep their identity while panning.
+        for (t in tufts) {
+            val p = transform(t.lat, t.lon)
+            if (p.x > -40f && p.x < size.width + 40f && p.y > -40f && p.y < size.height + 40f) {
+                val half = (t.baseR * zf * 1.35f).toInt().coerceAtLeast(3)
+                val sprite = treeSprites[t.sprite]
+                drawImage(
+                    image = sprite,
+                    srcOffset = IntOffset.Zero,
+                    srcSize = IntSize(sprite.width, sprite.height),
+                    dstOffset = IntOffset((p.x - half).toInt(), (p.y - half).toInt()),
+                    dstSize = IntSize(half * 2, half * 2),
+                )
             }
         }
 
-        // Shot chain — dark outline under white line, like Garmin.
-        // Shot i runs from node i to node i+1, so drags preview live and connected.
-        shots.forEachIndexed { i, _ ->
+        // Shot chain — gently arced (like a ball flight), dark outline under white.
+        // Putts stay straight. Shot i runs from node i to node i+1.
+        shots.forEachIndexed { i, s ->
             val a = nodeScreen(i)
             val b = nodeScreen(i + 1)
             val isCurrent = i == currentIdx
-            drawLine(Color(0x66000000), a, b, strokeWidth = if (isCurrent) 14f else 9f)
-            drawLine(
-                if (isCurrent) Color.White else Color(0xCCFFFFFF),
-                a, b,
-                strokeWidth = if (isCurrent) 9f else 5f,
-            )
+            val path = Path().apply {
+                moveTo(a.x, a.y)
+                val dx = b.x - a.x; val dy = b.y - a.y
+                val len = hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                if (s.clubId == 0L || len < 24f) {
+                    lineTo(b.x, b.y)
+                } else {
+                    // Control point bulged perpendicular to the shot — arcs the flight.
+                    val bulge = (len * 0.13f).coerceAtMost(70f)
+                    quadraticBezierTo(
+                        (a.x + b.x) / 2f - dy / len * bulge,
+                        (a.y + b.y) / 2f + dx / len * bulge,
+                        b.x, b.y,
+                    )
+                }
+            }
+            drawPath(path, Color(0x66000000), style = Stroke(width = if (isCurrent) 14f else 9f, cap = StrokeCap.Round))
+            drawPath(path, if (isCurrent) Color.White else Color(0xCCFFFFFF), style = Stroke(width = if (isCurrent) 9f else 5f, cap = StrokeCap.Round))
         }
         // Shot start balls
         shots.forEachIndexed { i, _ ->
@@ -1034,42 +1050,85 @@ private fun DrawScope.mowingStripes(path: Path, bandBase: Float, color: Color, z
     }
 }
 
+/** One cached tuft/tree instance in world coordinates. */
+private class Tuft(val lat: Double, val lon: Double, val sprite: Int, val baseR: Float)
+
+private const val MAX_TUFTS = 4000
+
 /**
- * A stylised bushy tree, varied per [seed] so no two look identical: the size,
- * lobe count, rotation, tint and highlight all wobble a little. Each lobe is drawn
- * with its own jitter for a lumpy, textured canopy.
+ * Precompute tree/tuft positions once (independent of pan/zoom): tree nodes plus a
+ * jittered world grid inside each woods polygon. Doing this once — instead of every
+ * frame — is what keeps panning smooth.
  */
-private fun DrawScope.tree(center: Offset, baseR: Float, seed: Int) {
-    var s = seed * 374761393 xor 0x632BE5AB
-    fun rnd(): Float { s = s * 1103515245 + 12345; return ((s ushr 16) and 0x7fff) / 32768f }
-
-    val r = baseR * (0.8f + rnd() * 0.7f)          // size varies ±
-    val lobes = 5 + (rnd() * 3).toInt()             // 5..7 lobes
-    val rot = rnd() * 6.2832f                        // random orientation
-    val darkTint = -0.06f + rnd() * 0.12f            // shift greens a touch
-    fun g(base: Long): Color {
-        val c = Color(base)
-        val f = (1f + darkTint).coerceIn(0.85f, 1.15f)
-        return Color((c.red * f).coerceIn(0f, 1f), (c.green * f).coerceIn(0f, 1f), (c.blue * f).coerceIn(0f, 1f))
+private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
+    val out = ArrayList<Tuft>()
+    for (f in features) {
+        when (f.type) {
+            Lie.Type.TREE -> {
+                val seed = (f.points[0].first * 1e5).toInt() * 31 + (f.points[0].second * 1e5).toInt()
+                out.add(Tuft(f.points[0].first, f.points[0].second, seed.mod(12), 12f))
+            }
+            Lie.Type.WOODS -> {
+                val lats = f.points.map { it.first }; val lons = f.points.map { it.second }
+                val midLat = (lats.min() + lats.max()) / 2
+                val latStep = 7.0 / 111320.0
+                val lonStep = 7.0 / (111320.0 * cos(Math.toRadians(midLat)))
+                var la = lats.min(); var row = 0
+                while (la <= lats.max() && out.size < MAX_TUFTS) {
+                    var lo = lons.min() + if (row % 2 == 0) 0.0 else lonStep / 2
+                    while (lo <= lons.max() && out.size < MAX_TUFTS) {
+                        var sd = ((la * 1e5).toInt() * 73856093) xor ((lo * 1e5).toInt() * 19349663) xor 0x7A17
+                        sd = sd * 1103515245 + 12345; val jla = la + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * latStep * 0.8
+                        sd = sd * 1103515245 + 12345; val jlo = lo + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * lonStep * 0.8
+                        if (Lie.pointInPolygon(jla, jlo, f.points)) out.add(Tuft(jla, jlo, (sd ushr 8 and 0xff).mod(12), 9f))
+                        lo += lonStep
+                    }
+                    la += latStep; row++
+                }
+            }
+            else -> {}
+        }
     }
-    val twoPi = 2f * Math.PI.toFloat()
+    return out
+}
 
-    // soft ground shadow
-    drawCircle(Color(0x30000000), radius = r * 1.18f, center = center + Offset(r * 0.4f, r * 0.55f))
-    // dark base canopy — a ring of jittered lobes → bumpy, bushy outline
+/** Render one varied bushy tree sprite (size, lobes, rotation, tint all wobble). */
+private fun buildTreeSprite(seed: Int): ImageBitmap {
+    val s = 80
+    val bmp = android.graphics.Bitmap.createBitmap(s, s, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bmp)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+    var st = seed * 374761393 xor 0x632BE5AB
+    fun rnd(): Float { st = st * 1103515245 + 12345; return ((st ushr 16) and 0x7fff) / 32768f }
+    val r = 22f * (0.8f + rnd() * 0.7f)
+    val lobes = 5 + (rnd() * 3).toInt()
+    val rot = rnd() * 6.2832f
+    val f = (1f + (-0.06f + rnd() * 0.12f)).coerceIn(0.85f, 1.15f)
+    fun g(base: Int): Int {
+        val rr = ((((base ushr 16) and 0xff) * f).toInt()).coerceIn(0, 255)
+        val gg = ((((base ushr 8) and 0xff) * f).toInt()).coerceIn(0, 255)
+        val bb = (((base and 0xff) * f).toInt()).coerceIn(0, 255)
+        return android.graphics.Color.rgb(rr, gg, bb)
+    }
+    val cx = s / 2f; val cy = s / 2f - 3f
+    val twoPi = 2f * Math.PI.toFloat()
+    paint.color = android.graphics.Color.argb(48, 0, 0, 0)
+    canvas.drawCircle(cx + r * 0.4f, cy + r * 0.55f, r * 1.18f, paint)
     for (i in 0 until lobes) {
         val a = rot + i * twoPi / lobes + (rnd() - 0.5f) * 0.4f
         val dist = r * (0.48f + rnd() * 0.2f)
-        drawCircle(g(0xFF2C561F), radius = r * (0.52f + rnd() * 0.22f), center = center + Offset(cos(a) * dist, sin(a) * dist))
+        paint.color = g(0x2C561F)
+        canvas.drawCircle(cx + cos(a) * dist, cy + sin(a) * dist, r * (0.52f + rnd() * 0.22f), paint)
     }
-    drawCircle(g(0xFF34692B), radius = r * 0.88f, center = center)
-    // mid-tone clumps between the base lobes
+    paint.color = g(0x34692B); canvas.drawCircle(cx, cy, r * 0.88f, paint)
     for (i in 0 until lobes) {
         val a = rot + i * twoPi / lobes + 0.5f
         val dist = r * (0.4f + rnd() * 0.18f)
-        drawCircle(g(0xFF4C8B3A), radius = r * (0.3f + rnd() * 0.14f), center = center + Offset(cos(a) * dist, sin(a) * dist - r * 0.1f))
+        paint.color = g(0x4C8B3A)
+        canvas.drawCircle(cx + cos(a) * dist, cy + sin(a) * dist - r * 0.1f, r * (0.3f + rnd() * 0.14f), paint)
     }
-    // sunlit highlights, upper-left
-    drawCircle(g(0xFF74B84C), radius = r * 0.4f, center = center + Offset(-r * 0.28f, -r * 0.34f))
-    drawCircle(g(0xFF9AD268), radius = r * (0.14f + rnd() * 0.1f), center = center + Offset(-r * 0.36f, -r * 0.42f))
+    paint.color = g(0x74B84C); canvas.drawCircle(cx - r * 0.28f, cy - r * 0.34f, r * 0.4f, paint)
+    paint.color = g(0x9AD268); canvas.drawCircle(cx - r * 0.36f, cy - r * 0.42f, r * (0.14f + rnd() * 0.1f), paint)
+    return bmp.asImageBitmap()
 }

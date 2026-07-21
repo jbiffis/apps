@@ -111,7 +111,11 @@ data class CourseFeatureEntity(
             val lon = pair.substring(comma + 1).toDoubleOrNull() ?: return@mapNotNull null
             lat to lon
         }
-        val min = if (type == Lie.Type.TREE) 1 else 3 // trees are single points
+        val min = when (type) {
+            Lie.Type.TREE -> 1 // single point
+            Lie.Type.PATH -> 2 // open polyline
+            else -> 3          // filled area
+        }
         return if (pts.size >= min) CourseFeature(type, holeRef, pts) else null
     }
 

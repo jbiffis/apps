@@ -98,6 +98,8 @@ object Overpass {
                 }
                 "way" -> {
                     val points = readGeometry(el.optJSONArray("geometry")) ?: continue
+                    // Cart paths are open polylines (≥2 points); areas need ≥3.
+                    if (type != Lie.Type.PATH && points.size < 3) continue
                     out.add(CourseFeature(type, holeRef, points))
                 }
                 "relation" -> {
@@ -121,12 +123,12 @@ object Overpass {
     private const val MAX_TREES = 600
 
     private fun readGeometry(geometry: org.json.JSONArray?): List<Pair<Double, Double>>? {
-        if (geometry == null || geometry.length() < 3) return null
+        if (geometry == null || geometry.length() < 2) return null
         val points = ArrayList<Pair<Double, Double>>(geometry.length())
         for (i in 0 until geometry.length()) {
             val p = geometry.optJSONObject(i) ?: continue
             points.add(p.getDouble("lat") to p.getDouble("lon"))
         }
-        return if (points.size >= 3) points else null
+        return if (points.size >= 2) points else null
     }
 }
