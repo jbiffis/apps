@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -680,9 +681,11 @@ private fun HoleCanvas(
     }
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var zoom by remember { mutableStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
 
-    // Screen transform shared by drawing and gesture handling
-    val transform: (Double, Double) -> Offset = remember(bounds, canvasSize) {
+    // Base fit transform: lat/lon -> screen with the hole framed to the canvas.
+    val baseTransform: (Double, Double) -> Offset = remember(bounds, canvasSize) {
         { lat, lon ->
             val (r, a) = frame.project(lat, lon)
             val w = canvasSize.width.toFloat()
@@ -698,20 +701,49 @@ private fun HoleCanvas(
             )
         }
     }
+    // User zoom/pan applied about the canvas centre, on top of the fit transform.
+    val transform: (Double, Double) -> Offset = { lat, lon ->
+        val b = baseTransform(lat, lon)
+        val cx = canvasSize.width / 2f
+        val cy = canvasSize.height / 2f
+        Offset(cx + (b.x - cx) * zoom + pan.x, cy + (b.y - cy) * zoom + pan.y)
+    }
     // Inverse: screen point -> (lat, lon), for dragging shots
-    val screenToLatLon: (Offset) -> Pair<Double, Double> = remember(bounds, canvasSize) {
-        { p ->
-            val w = canvasSize.width.toFloat()
-            val h = canvasSize.height.toFloat()
-            val dR = (bounds[1] - bounds[0]).toFloat()
-            val dA = (bounds[3] - bounds[2]).toFloat()
-            val scale = if (dR > 0 && dA > 0) minOf(w / dR, h / dA) else 1f
-            val offX = (w - dR * scale) / 2f
-            val offY = (h - dA * scale) / 2f
-            val r = (p.x - offX) / scale + bounds[0]
-            val a = (h - offY - p.y) / scale + bounds[2]
-            frame.unproject(r.toDouble(), a.toDouble())
-        }
+    val screenToLatLon: (Offset) -> Pair<Double, Double> = { p ->
+        val w = canvasSize.width.toFloat()
+        val h = canvasSize.height.toFloat()
+        val cx = w / 2f
+        val cy = h / 2f
+        val bx = (p.x - cx - pan.x) / zoom + cx
+        val by = (p.y - cy - pan.y) / zoom + cy
+        val dR = (bounds[1] - bounds[0]).toFloat()
+        val dA = (bounds[3] - bounds[2]).toFloat()
+        val scale = if (dR > 0 && dA > 0) minOf(w / dR, h / dA) else 1f
+        val offX = (w - dR * scale) / 2f
+        val offY = (h - dA * scale) / 2f
+        val r = (bx - offX) / scale + bounds[0]
+        val a = (h - offY - by) / scale + bounds[2]
+        frame.unproject(r.toDouble(), a.toDouble())
+    }
+    // Clamp the pan so the current shot always stays on screen — no panning it away.
+    fun clampPan(p: Offset, z: Float): Offset {
+        val w = canvasSize.width.toFloat()
+        val h = canvasSize.height.toFloat()
+        if (w == 0f || h == 0f) return p
+        val cx = w / 2f
+        val cy = h / 2f
+        val anchor = shots.getOrNull(currentIdx)?.let {
+            val a = baseTransform(it.startLat, it.startLon)
+            val b = baseTransform(it.endLat, it.endLon)
+            Offset((a.x + b.x) / 2f, (a.y + b.y) / 2f)
+        } ?: if (pinLat != null && pinLon != null) baseTransform(pinLat, pinLon) else Offset(cx, cy)
+        val baseX = cx + (anchor.x - cx) * z
+        val baseY = cy + (anchor.y - cy) * z
+        val m = 48f
+        return Offset(
+            p.x.coerceIn(m - baseX, (w - m) - baseX),
+            p.y.coerceIn(m - baseY, (h - m) - baseY),
+        )
     }
 
     // Node k is shots[k].start (k < n) or the final resting point (k == n).
@@ -726,7 +758,18 @@ private fun HoleCanvas(
     Canvas(
         Modifier.fillMaxSize()
             .onSizeChanged { canvasSize = it }
-            .pointerInput(editMode, shots, transform) {
+            .pointerInput(editMode, shots.size) {
+                // Pinch to zoom, drag to pan (view mode). Pan is clamped so the
+                // current shot stays visible; double-tap resets.
+                if (!editMode) {
+                    detectTransformGestures { _, panChange, zoomChange, _ ->
+                        val z = (zoom * zoomChange).coerceIn(1f, 5f)
+                        zoom = z
+                        pan = clampPan(pan + panChange, z)
+                    }
+                }
+            }
+            .pointerInput(editMode, shots.size) {
                 if (editMode) {
                     detectDragGestures(
                         onDragStart = { start ->
@@ -758,17 +801,23 @@ private fun HoleCanvas(
                         },
                         onDragCancel = { dragNode = -1; dragPos = null },
                     )
-                } else {
-                    detectTapGestures { tap ->
-                        var best = -1
-                        var bestDist = 48.dp.toPx()
-                        shots.forEachIndexed { i, s ->
-                            val p = transform(s.startLat, s.startLon)
-                            val d = hypot(p.x - tap.x, p.y - tap.y)
-                            if (d < bestDist) { best = i; bestDist = d }
-                        }
-                        if (best >= 0) onSelectShot(best)
-                    }
+                }
+            }
+            .pointerInput(editMode, shots.size) {
+                if (!editMode) {
+                    detectTapGestures(
+                        onDoubleTap = { zoom = 1f; pan = Offset.Zero },
+                        onTap = { tap ->
+                            var best = -1
+                            var bestDist = 48.dp.toPx()
+                            shots.forEachIndexed { i, s ->
+                                val p = transform(s.startLat, s.startLon)
+                                val d = hypot(p.x - tap.x, p.y - tap.y)
+                                if (d < bestDist) { best = i; bestDist = d }
+                            }
+                            if (best >= 0) onSelectShot(best)
+                        },
+                    )
                 }
             }
     ) {
@@ -778,6 +827,8 @@ private fun HoleCanvas(
             else nodeLatLon(k).let { (la, lo) -> transform(la, lo) }
         drawRect(RoughColor)
         if (canvasSize == IntSize.Zero) return@Canvas
+        val zf = zoom.coerceIn(1f, 2.5f) // trees/tufts grow a little as you zoom in
+        turfTexture(0x9F0210) // subtle mottle over the rough (covered where polygons draw)
 
         // Course polygons, least → most specific
         val order = listOf(
@@ -805,8 +856,11 @@ private fun HoleCanvas(
                 }
                 path.close()
                 drawPath(path, color)
-                // Mowing stripes only on the fairway; tee and green stay solid.
-                if (type == Lie.Type.FAIRWAY) mowingStripes(path, 26f, Color(0x1EFFFFFF))
+                // Mowing stripes + mottle on the fairway; tee and green stay solid.
+                if (type == Lie.Type.FAIRWAY) {
+                    mowingStripes(path, 26f, Color(0x1EFFFFFF))
+                    clipPath(path) { turfTexture(0x5A17) }
+                }
                 if (type == Lie.Type.GREEN || type == Lie.Type.BUNKER || type == Lie.Type.WATER) {
                     drawPath(path, Color(0x33000000), style = Stroke(width = 2f))
                 }
@@ -820,24 +874,31 @@ private fun HoleCanvas(
             val proj = f.points.map { transform(it.first, it.second) }
             val minX = proj.minOf { it.x }; val maxX = proj.maxOf { it.x }
             val minY = proj.minOf { it.y }; val maxY = proj.maxOf { it.y }
-            val step = 26f
+            val step = 24f * zf
             var y = minY
             var row = 0
             while (y <= maxY) {
                 var x = minX + if (row % 2 == 0) 0f else step / 2
                 while (x <= maxX) {
-                    if (x in -20f..(size.width + 20f) && y in -20f..(size.height + 20f) &&
-                        pointInScreenPolygon(x, y, proj)
-                    ) tree(Offset(x, y), 9f)
+                    // Jitter each tuft off the grid so the woods don't look regular.
+                    var sd = (x.toInt() * 73856093) xor (y.toInt() * 19349663) xor 0x7A17
+                    sd = sd * 1103515245 + 12345; val jx = x + (((sd ushr 16) and 0x7fff) / 32768f - 0.5f) * step * 0.7f
+                    sd = sd * 1103515245 + 12345; val jy = y + (((sd ushr 16) and 0x7fff) / 32768f - 0.5f) * step * 0.7f
+                    if (jx in -20f..(size.width + 20f) && jy in -20f..(size.height + 20f) &&
+                        pointInScreenPolygon(jx, jy, proj)
+                    ) tree(Offset(jx, jy), 9f * zf, sd)
                     x += step
                 }
-                y += step * 0.86f; row++
+                y += step * 0.82f; row++
             }
         }
         for (f in features) {
             if (f.type != Lie.Type.TREE) continue
             val p = transform(f.points[0].first, f.points[0].second)
-            if (p.x in -20f..(size.width + 20f) && p.y in -20f..(size.height + 20f)) tree(p, 12f)
+            if (p.x in -20f..(size.width + 20f) && p.y in -20f..(size.height + 20f)) {
+                val seed = (f.points[0].first * 1e5).toInt() * 31 + (f.points[0].second * 1e5).toInt()
+                tree(p, 12f * zf, seed)
+            }
         }
 
         // Shot chain — dark outline under white line, like Garmin.
@@ -909,6 +970,28 @@ private fun DrawScope.bubble(text: String, at: Offset, emphasised: Boolean) {
     }
 }
 
+/** Faint, jittered dark/light blobs to break up flat turf — subtle grass texture. */
+private fun DrawScope.turfTexture(seedBase: Int) {
+    val w = size.width
+    val h = size.height
+    val step = 56f
+    var yy = -step
+    var row = 0
+    while (yy < h + step) {
+        var xx = if (row % 2 == 0) -step else -step / 2
+        while (xx < w + step) {
+            var s = seedBase xor (xx.toInt() * 73856093) xor (yy.toInt() * 19349663)
+            s = s * 1103515245 + 12345; val jx = xx + (((s ushr 16) and 0x7fff) / 32768f - 0.5f) * step
+            s = s * 1103515245 + 12345; val jy = yy + (((s ushr 16) and 0x7fff) / 32768f - 0.5f) * step
+            s = s * 1103515245 + 12345; val t = ((s ushr 16) and 0x7fff) / 32768f
+            s = s * 1103515245 + 12345; val rad = step * (0.28f + ((s ushr 16) and 0x7fff) / 32768f * 0.45f)
+            drawCircle(Color(if (t < 0.5f) 0x16000000 else 0x14FFFFFF), radius = rad, center = Offset(jx, jy))
+            xx += step
+        }
+        yy += step * 0.82f; row++
+    }
+}
+
 /** Vertical mowing stripes clipped to a turf polygon (Garmin-golf look). */
 private fun DrawScope.mowingStripes(path: Path, bandPx: Float, color: Color) {
     clipPath(path) {
@@ -920,26 +1003,44 @@ private fun DrawScope.mowingStripes(path: Path, bandPx: Float, color: Color) {
     }
 }
 
-/** A stylised bushy tree: a lumpy ring of canopy lobes with layered highlights. */
-private fun DrawScope.tree(center: Offset, r: Float) {
-    // soft ground shadow
-    drawCircle(Color(0x30000000), radius = r * 1.2f, center = center + Offset(r * 0.4f, r * 0.55f))
-    val lobes = 6
-    val twoPi = 2f * Math.PI.toFloat()
-    // dark base canopy — a ring of overlapping lobes gives a bushy, bumpy outline
-    for (i in 0 until lobes) {
-        val a = i * twoPi / lobes
-        drawCircle(Color(0xFF2C561F), radius = r * 0.62f, center = center + Offset(cos(a) * r * 0.55f, sin(a) * r * 0.55f))
+/**
+ * A stylised bushy tree, varied per [seed] so no two look identical: the size,
+ * lobe count, rotation, tint and highlight all wobble a little. Each lobe is drawn
+ * with its own jitter for a lumpy, textured canopy.
+ */
+private fun DrawScope.tree(center: Offset, baseR: Float, seed: Int) {
+    var s = seed * 374761393 xor 0x632BE5AB
+    fun rnd(): Float { s = s * 1103515245 + 12345; return ((s ushr 16) and 0x7fff) / 32768f }
+
+    val r = baseR * (0.8f + rnd() * 0.7f)          // size varies ±
+    val lobes = 5 + (rnd() * 3).toInt()             // 5..7 lobes
+    val rot = rnd() * 6.2832f                        // random orientation
+    val darkTint = -0.06f + rnd() * 0.12f            // shift greens a touch
+    fun g(base: Long): Color {
+        val c = Color(base)
+        val f = (1f + darkTint).coerceIn(0.85f, 1.15f)
+        return Color((c.red * f).coerceIn(0f, 1f), (c.green * f).coerceIn(0f, 1f), (c.blue * f).coerceIn(0f, 1f))
     }
-    drawCircle(Color(0xFF34692B), radius = r * 0.9f, center = center)
-    // mid-tone clumps, offset between the base lobes for depth
+    val twoPi = 2f * Math.PI.toFloat()
+
+    // soft ground shadow
+    drawCircle(Color(0x30000000), radius = r * 1.18f, center = center + Offset(r * 0.4f, r * 0.55f))
+    // dark base canopy — a ring of jittered lobes → bumpy, bushy outline
     for (i in 0 until lobes) {
-        val a = i * twoPi / lobes + 0.52f
-        drawCircle(Color(0xFF4C8B3A), radius = r * 0.36f, center = center + Offset(cos(a) * r * 0.46f, sin(a) * r * 0.46f - r * 0.1f))
+        val a = rot + i * twoPi / lobes + (rnd() - 0.5f) * 0.4f
+        val dist = r * (0.48f + rnd() * 0.2f)
+        drawCircle(g(0xFF2C561F), radius = r * (0.52f + rnd() * 0.22f), center = center + Offset(cos(a) * dist, sin(a) * dist))
+    }
+    drawCircle(g(0xFF34692B), radius = r * 0.88f, center = center)
+    // mid-tone clumps between the base lobes
+    for (i in 0 until lobes) {
+        val a = rot + i * twoPi / lobes + 0.5f
+        val dist = r * (0.4f + rnd() * 0.18f)
+        drawCircle(g(0xFF4C8B3A), radius = r * (0.3f + rnd() * 0.14f), center = center + Offset(cos(a) * dist, sin(a) * dist - r * 0.1f))
     }
     // sunlit highlights, upper-left
-    drawCircle(Color(0xFF74B84C), radius = r * 0.4f, center = center + Offset(-r * 0.28f, -r * 0.34f))
-    drawCircle(Color(0xFF97D268), radius = r * 0.18f, center = center + Offset(-r * 0.36f, -r * 0.42f))
+    drawCircle(g(0xFF74B84C), radius = r * 0.4f, center = center + Offset(-r * 0.28f, -r * 0.34f))
+    drawCircle(g(0xFF9AD268), radius = r * (0.14f + rnd() * 0.1f), center = center + Offset(-r * 0.36f, -r * 0.42f))
 }
 
 /** Ray-cast point-in-polygon on screen-space points, for scattering tufts in woods. */
