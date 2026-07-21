@@ -75,14 +75,16 @@ import dev.jbiffis.caddie.data.ShotEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 // Garmin-style flat course colours
 private val RoughColor = Color(0xFF6E9E43)
 private val FairwayColor = Color(0xFF90BF57)
-private val GreenColor = Color(0xFFA9D468)
-private val TeeColor = Color(0xFF9CCB61)
+private val GreenColor = Color(0xFF2E7D32)   // putting surface: solid dark green
+private val TeeColor = Color(0xFFB7DD7C)      // tee box: solid light green
 private val BunkerColor = Color(0xFFE7DBA8)
 private val WaterColor = Color(0xFF64B5F6)
 private val WoodsColor = Color(0xFF4A7A33)
@@ -803,13 +805,8 @@ private fun HoleCanvas(
                 }
                 path.close()
                 drawPath(path, color)
-                // Mowing stripes up the hole for turf areas — the Garmin-golf look.
-                when (type) {
-                    Lie.Type.FAIRWAY -> mowingStripes(path, 26f, Color(0x1EFFFFFF))
-                    Lie.Type.GREEN -> mowingStripes(path, 16f, Color(0x22FFFFFF))
-                    Lie.Type.TEE -> mowingStripes(path, 18f, Color(0x1EFFFFFF))
-                    else -> {}
-                }
+                // Mowing stripes only on the fairway; tee and green stay solid.
+                if (type == Lie.Type.FAIRWAY) mowingStripes(path, 26f, Color(0x1EFFFFFF))
                 if (type == Lie.Type.GREEN || type == Lie.Type.BUNKER || type == Lie.Type.WATER) {
                     drawPath(path, Color(0x33000000), style = Stroke(width = 2f))
                 }
@@ -923,12 +920,26 @@ private fun DrawScope.mowingStripes(path: Path, bandPx: Float, color: Color) {
     }
 }
 
-/** A stylised tree: soft shadow with layered canopy highlights. */
+/** A stylised bushy tree: a lumpy ring of canopy lobes with layered highlights. */
 private fun DrawScope.tree(center: Offset, r: Float) {
-    drawCircle(Color(0x33000000), radius = r * 1.05f, center = center + Offset(r * 0.35f, r * 0.5f))
-    drawCircle(Color(0xFF2F5D2A), radius = r, center = center)
-    drawCircle(Color(0xFF3F7A34), radius = r * 0.82f, center = center + Offset(-r * 0.15f, -r * 0.18f))
-    drawCircle(Color(0xFF6AAE47), radius = r * 0.48f, center = center + Offset(-r * 0.28f, -r * 0.32f))
+    // soft ground shadow
+    drawCircle(Color(0x30000000), radius = r * 1.2f, center = center + Offset(r * 0.4f, r * 0.55f))
+    val lobes = 6
+    val twoPi = 2f * Math.PI.toFloat()
+    // dark base canopy — a ring of overlapping lobes gives a bushy, bumpy outline
+    for (i in 0 until lobes) {
+        val a = i * twoPi / lobes
+        drawCircle(Color(0xFF2C561F), radius = r * 0.62f, center = center + Offset(cos(a) * r * 0.55f, sin(a) * r * 0.55f))
+    }
+    drawCircle(Color(0xFF34692B), radius = r * 0.9f, center = center)
+    // mid-tone clumps, offset between the base lobes for depth
+    for (i in 0 until lobes) {
+        val a = i * twoPi / lobes + 0.52f
+        drawCircle(Color(0xFF4C8B3A), radius = r * 0.36f, center = center + Offset(cos(a) * r * 0.46f, sin(a) * r * 0.46f - r * 0.1f))
+    }
+    // sunlit highlights, upper-left
+    drawCircle(Color(0xFF74B84C), radius = r * 0.4f, center = center + Offset(-r * 0.28f, -r * 0.34f))
+    drawCircle(Color(0xFF97D268), radius = r * 0.18f, center = center + Offset(-r * 0.36f, -r * 0.42f))
 }
 
 /** Ray-cast point-in-polygon on screen-space points, for scattering tufts in woods. */
