@@ -239,6 +239,18 @@ fun ShotMapScreen(
         }
     }
 
+    // The first time a round with no wind is opened, back-fill it from the weather
+    // automatically (once per round per session — never re-hits the network while
+    // paging holes). Runs only once the holes have loaded and none carry wind.
+    val roundHasWind = holes.any { it.windSpeedKmh != null }
+    LaunchedEffect(roundId, holes.isNotEmpty(), roundHasWind) {
+        if (holes.isNotEmpty() && !roundHasWind && !windLoading) {
+            windLoading = true
+            try { withContext(Dispatchers.IO) { app.repository.autoFillWindIfMissing(roundId) } }
+            finally { windLoading = false }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             // Satellite when the user toggles it on, or (in auto mode) as a fallback

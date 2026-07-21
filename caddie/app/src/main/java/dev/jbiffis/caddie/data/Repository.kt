@@ -26,6 +26,9 @@ class Repository(private val dao: CaddieDao) {
     /** Rounds whose OSM course map we've already re-fetched this app session. */
     private val courseRefreshedThisSession = java.util.Collections.synchronizedSet(HashSet<Long>())
 
+    /** Rounds we've already tried to auto-fill wind for this app session. */
+    private val windAutoAttempted = java.util.Collections.synchronizedSet(HashSet<Long>())
+
     /**
      * Import any file pulled off the watch, routing by content: Garmin FIT files
      * (scorecards, activities, clubs) start with a ".FIT" tag at byte 8; everything
@@ -233,6 +236,19 @@ class Repository(private val dao: CaddieDao) {
             updated++
         }
         return updated
+    }
+
+    /**
+     * Auto-fill wind the first time a round is opened, if it has no wind yet.
+     * Tries the network at most once per round per app session, so opening/paging
+     * holes never re-hits the weather service. Returns holes updated, or 0 if
+     * skipped (already has wind, or already tried this session).
+     */
+    suspend fun autoFillWindIfMissing(roundId: Long): Int {
+        val holes = dao.holesList(roundId)
+        if (holes.isEmpty() || holes.any { it.windSpeedKmh != null }) return 0
+        if (!windAutoAttempted.add(roundId)) return 0
+        return fetchWindForRound(roundId).coerceAtLeast(0)
     }
 
     private fun utcDate(unixS: Long): String {
