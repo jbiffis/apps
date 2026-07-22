@@ -57,11 +57,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -70,7 +68,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.jbiffis.caddie.CaddieApp
@@ -700,9 +697,7 @@ private fun HoleCanvas(
     val grassPaint = remember { android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG).apply { shader = grassShader } }
     val grassMatrix = remember { android.graphics.Matrix() }
 
-    // Pre-render tree sprites once and cache tuft positions (world coords) so panning
-    // just blits sprites instead of recomputing grids and drawing many circles.
-    val treeSprites = remember { List(12) { buildTreeSprite(it * 1327 + 17) } }
+    // Cache tuft positions (world coords) once so panning doesn't recompute the grid.
     val tufts = remember(features) { computeTufts(features) }
 
     // Base fit transform: lat/lon -> screen with the hole framed to the canvas.
@@ -904,20 +899,13 @@ private fun HoleCanvas(
             drawPath(path, PathColor, style = Stroke(width = 5f * zf, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
 
-        // Trees: blit cached sprites (fast). Positions are in world coords so they
-        // stay anchored to the ground and keep their identity while panning.
+        // Trees: draw cached tuft instances. Positions are precomputed in world
+        // coords (no per-frame grid work — that was the pan lag), and only the ones
+        // on screen are drawn.
         for (t in tufts) {
             val p = transform(t.lat, t.lon)
-            if (p.x > -40f && p.x < size.width + 40f && p.y > -40f && p.y < size.height + 40f) {
-                val half = (t.baseR * zf * 1.35f).toInt().coerceAtLeast(3)
-                val sprite = treeSprites[t.sprite]
-                drawImage(
-                    image = sprite,
-                    srcOffset = IntOffset.Zero,
-                    srcSize = IntSize(sprite.width, sprite.height),
-                    dstOffset = IntOffset((p.x - half).toInt(), (p.y - half).toInt()),
-                    dstSize = IntSize(half * 2, half * 2),
-                )
+            if (p.x > -30f && p.x < size.width + 30f && p.y > -30f && p.y < size.height + 30f) {
+                tree(p, t.baseR * zf, t.seed)
             }
         }
 
@@ -1051,9 +1039,9 @@ private fun DrawScope.mowingStripes(path: Path, bandBase: Float, color: Color, z
 }
 
 /** One cached tuft/tree instance in world coordinates. */
-private class Tuft(val lat: Double, val lon: Double, val sprite: Int, val baseR: Float)
+private class Tuft(val lat: Double, val lon: Double, val seed: Int, val baseR: Float)
 
-private const val MAX_TUFTS = 4000
+private const val MAX_TUFTS = 3000
 
 /**
  * Precompute tree/tuft positions once (independent of pan/zoom): tree nodes plus a
@@ -1066,7 +1054,7 @@ private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
         when (f.type) {
             Lie.Type.TREE -> {
                 val seed = (f.points[0].first * 1e5).toInt() * 31 + (f.points[0].second * 1e5).toInt()
-                out.add(Tuft(f.points[0].first, f.points[0].second, seed.mod(12), 12f))
+                out.add(Tuft(f.points[0].first, f.points[0].second, seed, 12f))
             }
             Lie.Type.WOODS -> {
                 val lats = f.points.map { it.first }; val lons = f.points.map { it.second }
@@ -1080,7 +1068,7 @@ private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
                         var sd = ((la * 1e5).toInt() * 73856093) xor ((lo * 1e5).toInt() * 19349663) xor 0x7A17
                         sd = sd * 1103515245 + 12345; val jla = la + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * latStep * 0.8
                         sd = sd * 1103515245 + 12345; val jlo = lo + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * lonStep * 0.8
-                        if (Lie.pointInPolygon(jla, jlo, f.points)) out.add(Tuft(jla, jlo, (sd ushr 8 and 0xff).mod(12), 9f))
+                        if (Lie.pointInPolygon(jla, jlo, f.points)) out.add(Tuft(jla, jlo, sd, 9f))
                         lo += lonStep
                     }
                     la += latStep; row++
@@ -1092,43 +1080,32 @@ private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
     return out
 }
 
-/** Render one varied bushy tree sprite (size, lobes, rotation, tint all wobble). */
-private fun buildTreeSprite(seed: Int): ImageBitmap {
-    val s = 80
-    val bmp = android.graphics.Bitmap.createBitmap(s, s, android.graphics.Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bmp)
-    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-
-    var st = seed * 374761393 xor 0x632BE5AB
-    fun rnd(): Float { st = st * 1103515245 + 12345; return ((st ushr 16) and 0x7fff) / 32768f }
-    val r = 22f * (0.8f + rnd() * 0.7f)
+/** A stylised bushy tree, varied per [seed]: size, lobe count, rotation, tint. */
+private fun DrawScope.tree(center: Offset, baseR: Float, seed: Int) {
+    var s = seed * 374761393 xor 0x632BE5AB
+    fun rnd(): Float { s = s * 1103515245 + 12345; return ((s ushr 16) and 0x7fff) / 32768f }
+    val r = baseR * (0.8f + rnd() * 0.7f)
     val lobes = 5 + (rnd() * 3).toInt()
     val rot = rnd() * 6.2832f
-    val f = (1f + (-0.06f + rnd() * 0.12f)).coerceIn(0.85f, 1.15f)
-    fun g(base: Int): Int {
-        val rr = ((((base ushr 16) and 0xff) * f).toInt()).coerceIn(0, 255)
-        val gg = ((((base ushr 8) and 0xff) * f).toInt()).coerceIn(0, 255)
-        val bb = (((base and 0xff) * f).toInt()).coerceIn(0, 255)
-        return android.graphics.Color.rgb(rr, gg, bb)
+    val darkTint = -0.06f + rnd() * 0.12f
+    fun g(base: Long): Color {
+        val c = Color(base)
+        val f = (1f + darkTint).coerceIn(0.85f, 1.15f)
+        return Color((c.red * f).coerceIn(0f, 1f), (c.green * f).coerceIn(0f, 1f), (c.blue * f).coerceIn(0f, 1f))
     }
-    val cx = s / 2f; val cy = s / 2f - 3f
     val twoPi = 2f * Math.PI.toFloat()
-    paint.color = android.graphics.Color.argb(48, 0, 0, 0)
-    canvas.drawCircle(cx + r * 0.4f, cy + r * 0.55f, r * 1.18f, paint)
+    drawCircle(Color(0x30000000), radius = r * 1.18f, center = center + Offset(r * 0.4f, r * 0.55f))
     for (i in 0 until lobes) {
         val a = rot + i * twoPi / lobes + (rnd() - 0.5f) * 0.4f
         val dist = r * (0.48f + rnd() * 0.2f)
-        paint.color = g(0x2C561F)
-        canvas.drawCircle(cx + cos(a) * dist, cy + sin(a) * dist, r * (0.52f + rnd() * 0.22f), paint)
+        drawCircle(g(0xFF2C561F), radius = r * (0.52f + rnd() * 0.22f), center = center + Offset(cos(a) * dist, sin(a) * dist))
     }
-    paint.color = g(0x34692B); canvas.drawCircle(cx, cy, r * 0.88f, paint)
+    drawCircle(g(0xFF34692B), radius = r * 0.88f, center = center)
     for (i in 0 until lobes) {
         val a = rot + i * twoPi / lobes + 0.5f
         val dist = r * (0.4f + rnd() * 0.18f)
-        paint.color = g(0x4C8B3A)
-        canvas.drawCircle(cx + cos(a) * dist, cy + sin(a) * dist - r * 0.1f, r * (0.3f + rnd() * 0.14f), paint)
+        drawCircle(g(0xFF4C8B3A), radius = r * (0.3f + rnd() * 0.14f), center = center + Offset(cos(a) * dist, sin(a) * dist - r * 0.1f))
     }
-    paint.color = g(0x74B84C); canvas.drawCircle(cx - r * 0.28f, cy - r * 0.34f, r * 0.4f, paint)
-    paint.color = g(0x9AD268); canvas.drawCircle(cx - r * 0.36f, cy - r * 0.42f, r * (0.14f + rnd() * 0.1f), paint)
-    return bmp.asImageBitmap()
+    drawCircle(g(0xFF74B84C), radius = r * 0.4f, center = center + Offset(-r * 0.28f, -r * 0.34f))
+    drawCircle(g(0xFF9AD268), radius = r * (0.14f + rnd() * 0.1f), center = center + Offset(-r * 0.36f, -r * 0.42f))
 }
