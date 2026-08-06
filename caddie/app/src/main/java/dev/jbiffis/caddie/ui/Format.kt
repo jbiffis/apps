@@ -15,11 +15,52 @@ fun formatDate(unixS: Long): String =
 fun formatTime(unixS: Long): String =
     SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(unixS * 1000))
 
+/** Compact date for inline notes, e.g. "Jun 2". */
+fun formatShortDate(unixS: Long): String =
+    SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(unixS * 1000))
+
+/** Weekday and day, e.g. "Wed, Jul 22" — used in shot history rows. */
+fun formatDayDate(unixS: Long): String =
+    SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(unixS * 1000))
+
 fun toParString(score: Int, par: Int): String = when {
     score == 0 -> "–"
     score == par -> "E"
     score > par -> "+${score - par}"
     else -> "${score - par}"
+}
+
+/** Golf's name for a score, e.g. 6 on a par 5 is a "Bogey". */
+fun scoreName(strokes: Int, par: Int): String = when {
+    strokes <= 0 || par <= 0 -> "Not played"
+    strokes == 1 -> "Hole in one"
+    else -> when (strokes - par) {
+        -3 -> "Albatross"
+        -2 -> "Eagle"
+        -1 -> "Birdie"
+        0 -> "Par"
+        1 -> "Bogey"
+        2 -> "Double bogey"
+        3 -> "Triple bogey"
+        else -> if (strokes < par) "${par - strokes} under" else "${strokes - par} over"
+    }
+}
+
+/** Feet, for putts and anything measured around the hole. */
+fun Double.toFeet(): Int = (this * 3.280839895).roundToInt()
+
+/**
+ * A shot's distance the way a golfer says it: putts in feet, everything else in
+ * yards. Returns the number and its unit separately so the unit can be set smaller.
+ */
+fun shotDistance(distanceM: Double, isPutt: Boolean): Pair<String, String> =
+    if (isPutt) "${distanceM.toFeet()}" to "ft" else "${distanceM.toYards()}" to "yd"
+
+/** Signed strokes-gained value, e.g. 0.42 -> "+0.4" and -0.25 -> "−0.3". */
+fun signedSg(value: Double): String {
+    val rounded = Math.round(value * 10.0) / 10.0
+    // U+2212 minus, not a hyphen — it aligns with the digits.
+    return if (rounded < 0) "−${"%.1f".format(-rounded)}" else "+${"%.1f".format(rounded)}"
 }
 
 /** Short label for a club, e.g. "Driver (10.5°)" -> "Dr", "6 Iron (30.5°)" -> "6i". */

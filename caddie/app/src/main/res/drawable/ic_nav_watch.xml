@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Watch: rounded body with lug straps. From the design mock (24x24, 2px stroke). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path
+        android:pathData="M9.5,6h5a3.5,3.5 0 0 1 3.5,3.5v5a3.5,3.5 0 0 1 -3.5,3.5h-5a3.5,3.5 0 0 1 -3.5,-3.5v-5A3.5,3.5 0 0 1 9.5,6Z"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9,6l0.6,-3h4.8l0.6,3M9,18l0.6,3h4.8l0.6,-3"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

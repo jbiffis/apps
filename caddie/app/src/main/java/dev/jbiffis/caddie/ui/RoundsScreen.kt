@@ -2,6 +2,7 @@ package dev.jbiffis.caddie.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +48,10 @@ import androidx.compose.ui.unit.dp
 import dev.jbiffis.caddie.CaddieApp
 import dev.jbiffis.caddie.data.ImportResult
 import dev.jbiffis.caddie.data.RoundEntity
+import dev.jbiffis.caddie.ui.design.C
+import dev.jbiffis.caddie.ui.design.CaddieCard
+import dev.jbiffis.caddie.ui.design.ScreenHeader
+import dev.jbiffis.caddie.ui.design.T
 import dev.jbiffis.caddie.usb.UsbMtpImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -149,17 +154,18 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
     ) { padding ->
         if (rounds.isEmpty()) {
             Column(
-                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                Modifier.fillMaxSize().background(C.Canvas).padding(padding).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text("No rounds yet", style = MaterialTheme.typography.titleLarge)
+                Text("No rounds yet", style = T.screenTitle, color = C.TextPrimary)
                 Spacer(Modifier.padding(8.dp))
                 Text(
                     "Import SCORE and ACTIVITY .fit files from your watch " +
                         "(GARMIN/Scorecards and GARMIN/Activity folders), or sync over Bluetooth from the Watch tab.",
                     textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = T.bodySmall,
+                    color = C.TextSecondary,
                 )
                 Spacer(Modifier.padding(8.dp))
                 OutlinedButton(onClick = {
@@ -175,7 +181,19 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
                 }) { Text("Load sample round (The Marshes)") }
             }
         } else {
-            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
+            LazyColumn(
+                Modifier.fillMaxSize().background(C.Canvas).padding(padding),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = 14.dp, end = 14.dp, top = 6.dp, bottom = 96.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item {
+                    ScreenHeader(
+                        "Your rounds",
+                        if (rounds.size == 1) "1 round imported" else "${rounds.size} rounds imported",
+                    )
+                }
                 items(rounds, key = { it.id }) { round ->
                     RoundCard(round, onClick = { onOpenRound(round.id) }, onDelete = { confirmDelete = round })
                 }
@@ -229,11 +247,12 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit) {
 
 @Composable
 private fun RoundCard(round: RoundEntity, onClick: () -> Unit, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = onClick)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    CaddieCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(round.courseName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(formatDate(round.startedAtS), style = MaterialTheme.typography.bodySmall)
+                Text(round.courseName, style = T.rowTitleBold, color = C.TextPrimary)
+                Spacer(Modifier.padding(top = 2.dp))
+                Text(formatDate(round.startedAtS), style = T.meta, color = C.TextSecondary)
                 val details = buildList {
                     round.teeName?.let { add("$it tees") }
                     round.totalPutts?.let { add("$it putts") }
@@ -241,19 +260,27 @@ private fun RoundCard(round: RoundEntity, onClick: () -> Unit, onDelete: () -> U
                     round.avgHeartRate?.let { add("$it bpm avg") }
                 }
                 if (details.isNotEmpty()) {
-                    Text(details.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.padding(top = 2.dp))
+                    Text(details.joinToString(" · "), style = T.metaSmall, color = C.TextSecondary)
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("${round.totalScore}", style = T.stat26, color = C.TextPrimary)
+                Spacer(Modifier.padding(top = 3.dp))
                 Text(
-                    "${round.totalScore}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    toParString(round.totalScore, round.totalPar),
+                    style = T.metaSmall,
+                    color = when {
+                        round.totalScore == 0 -> C.TextSecondary
+                        round.totalScore > round.totalPar -> C.Orange
+                        round.totalScore < round.totalPar -> C.Green
+                        else -> C.TextPrimary
+                    },
                 )
-                Text(toParString(round.totalScore, round.totalPar), style = MaterialTheme.typography.bodyMedium)
             }
-            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Delete, contentDescription = "Delete round", tint = C.TextTertiary)
+            }
         }
     }
 }

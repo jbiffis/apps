@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="launcher_background">#1B5E20</color>
+
+    <!-- Kept in step with dev.jbiffis.caddie.ui.design.C -->
+    <color name="canvas">#0E1613</color>
+    <color name="tab_bar">#101B16</color>
 </resources>

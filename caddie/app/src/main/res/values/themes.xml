@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Caddie" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/white</item>
+        <!-- Matches the app's canvas colour so launch and screen transitions don't
+             flash white behind the dark UI. -->
+        <item name="android:windowBackground">@color/canvas</item>
+        <item name="android:statusBarColor">@color/canvas</item>
+        <item name="android:navigationBarColor">@color/tab_bar</item>
     </style>
 </resources>

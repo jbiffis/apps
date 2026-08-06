@@ -9,29 +9,42 @@ Connect account required).
 
 - **Rounds list** — every imported round with score, putts, distance walked and
   average heart rate.
-- **Full scorecard** — classic 18-hole card with yards, handicap/stroke index,
-  par, score (colour-coded eagle/birdie/bogey/double+) and putts per hole,
-  front/back/total rows.
+- **Full scorecard** — hole-by-hole card with yards, par and a score badge
+  coloured against par (under / par / bogey / double+), plus a summary of
+  score, to-par and holes played. Tap any hole to open its map.
 - **Hole-by-hole view** — satellite map of each hole showing your individual
   shot locations: numbered markers at each shot's start point, shot lines,
   your walked GPS track, and the pin position. Shot list with club and
   distance in yards.
-- **Shot-by-shot view** — Garmin-style *drawn* hole map (flat vector
-  rendering, no satellite imagery) built from OpenStreetMap course polygons:
-  fairways, greens, bunkers, tees, water and trees. Step through each shot
-  with distance bubbles on every segment, see its lie (tee/fairway/rough/
-  bunker/green — detected by point-in-polygon against the course map) and its
-  result (fairway hit, missed left/right, short), **reassign the club**, or
-  **delete phantom shots** the watch invented (AutoShot loves fake putts).
-  Course geometry is fetched from the Overpass API automatically on import
-  and cached in the database; a retry button appears if the download failed.
-- **Club stats** — per-club average / median / longest distance, left–right
-  miss percentages measured against the shot→pin target line, short/long
-  distribution for approach shots, and a dispersion scatter plot. When the
-  course is mapped on OSM, tee shots on par 4/5s also get true **driving
-  accuracy**: % fairways hit and a breakdown of misses (left/right/short/
-  bunker/water) measured against the actual fairway polygons.
-- **Bag** — the watch only records opaque club IDs; name them once here
+- **Shot map** — the in-round view: a full-bleed, Garmin-style *drawn* hole
+  (flat vector rendering, no satellite imagery) built from OpenStreetMap
+  course polygons — fairways, greens, bunkers, tees, water and trees — with
+  this round's shot path over it. Pinch or use the zoom stack to magnify, drag
+  to pan, tap a shot for its detail, and tap the pencil to drag any shot pin to
+  where the ball really was. Each shot shows its lie (tee/fairway/rough/bunker/
+  green, by point-in-polygon against the course map) and its result (fairway
+  hit, missed left/right, short); you can **reassign the club** or **delete
+  phantom shots** the watch invented (AutoShot loves fake putts). The layers
+  button swaps in satellite imagery for courses OSM has not mapped. Course
+  geometry is fetched from the Overpass API automatically on import and cached
+  in the database; a retry button appears if the download failed.
+- **Per-hole history** — swipe up from the bottom of the shot map for
+  everything previous rounds at the same course say about the hole: best /
+  average / this round with a score trend, **strokes gained** split into off
+  the tee, approach, short game and putting, where your approaches actually
+  finish (a dispersion target plotted from your own shots), your best approach
+  ever, and this round's shot list.
+- **Bag** — a distance ladder of every club you actually carry, longest first,
+  each bar measured against the longest. Overlapping clubs and unnamed ones the
+  watch invented are shown as they are, because the gaps are the point.
+- **Club detail** — average / median / **solid** / longest, where *solid* is
+  the average of your better half of shots: the number to club off, since a
+  plain average is dragged down by mishits. Plus left–straight–right dispersion
+  measured against the shot→pin target line, a distance histogram with the
+  median and solid buckets marked, and recent shot history with date and wind.
+  When the course is mapped on OSM, tee shots on par 4/5s also get true
+  **driving accuracy**: % fairways hit and a breakdown of misses.
+- **Club naming** — the watch only records opaque club IDs; name them once
   (Driver, 7 Iron, …) and every screen uses your names.
 - **Watch sync (experimental)** — direct BLE link to the watch speaking the
   GFDI protocol (COBS framing + CRC-16), with a live protocol log. See status
@@ -86,6 +99,11 @@ cd caddie
 
 `minSdk 26`, `targetSdk 34`, Kotlin + Jetpack Compose + Room + osmdroid
 (Esri World Imagery satellite tiles — no API key needed).
+
+Space Grotesk and Hanken Grotesk are bundled in `app/src/main/res/font` rather
+than fetched at runtime — the app has to work with no signal on a course. Both
+are SIL Open Font Licensed; the licences ship in
+`app/src/main/assets/licenses`.
 
 Two real vivoactive 5 files (a round at The Marshes Golf Club) ship in
 `app/src/main/assets/samples/`; the unit tests parse them, and the empty
@@ -143,13 +161,43 @@ app/src/main/java/dev/jbiffis/caddie/
   fit/    FitReader.kt (generic decoder), GolfFit.kt (golf messages)
   data/   Db.kt (Room), Repository.kt (import + miss geometry),
           Lie.kt (point-in-polygon lie detection, fairway miss classifier),
-          Overpass.kt (OpenStreetMap course geometry fetch)
+          ClubStats.kt (per-club distances, dispersion, histogram),
+          StrokesGained.kt (expected-strokes model), HoleHistory.kt
+          (per-hole record across rounds), Overpass.kt (OSM geometry fetch)
   ble/    Cobs.kt, Crc16.kt, MultiLink.kt (ML transport), Gfdi.kt (messages),
           GarminBleClient.kt (GATT + handshake + sync)
-  ui/     Rounds, Scorecard, Hole (satellite map), ShotMap (drawn hole view),
-          Stats, Clubs, Sync screens (Compose)
+  ui/     Rounds, Scorecard, ShotMap (drawn hole view) + HoleHistorySheet,
+          Hole (satellite map), Bag, ClubDetail, Clubs (naming), Sync (Compose)
+  ui/design/  Tokens.kt (colours/radii), Type.kt (the two bundled faces),
+          Components.kt (card, badge, chip, glass chrome)
 app/src/test/  parser + framing + lie-detection tests (real sample files)
 ```
+
+## Strokes gained
+
+`data/StrokesGained.kt` implements Broadie's model: every position on the course
+(a lie plus a distance to the hole) has an expected number of strokes to hole
+out, and a shot is worth
+
+    SG = E(where it started) − E(where it finished) − 1
+
+The built-in tables are the PGA Tour baseline. Measuring an amateur directly
+against those produces a large negative number on every single shot — true, but
+useless, because it only ever says "you are not a tour pro".
+
+So the shot map's card compares a hole against **your own** average hole
+instead. Both halves are computed on the same absolute scale and one is
+subtracted from the other, so what the card shows is: on this hole, you play
+this category this much better or worse than you usually do. That is the
+question a golfer who plays the same course every week actually has.
+
+Lies come from the OpenStreetMap polygons where the course is mapped. Where it
+is not, the model falls back to what the shot itself implies — the first shot is
+off a tee, a club-less shot near the green is a putt, anything else is assumed
+to be a fairway lie so the estimate stays neutral — and the card says so.
+
+Holes with no recorded pin position cannot be measured at all, and say that
+rather than showing a zero.
 
 ## Known limitations / next steps
 
@@ -165,5 +213,9 @@ app/src/test/  parser + framing + lie-detection tests (real sample files)
 - Club IDs come from the watch; if you re-order your bag in Garmin Golf the
   IDs stay stable, but a new club gets a new ID you'll need to name.
 - Multi-player scorecards: only player 0 (you) is imported.
+- The Watch tab is still the Bluetooth sync screen in its original styling; the
+  designed on-wrist view (GPS distances, PlaysLike, biometrics) is not built yet.
+- The satellite `HoleScreen` is still in the app but no longer has a way in from
+  the UI — the shot map's layers button now swaps to satellite in place.
 - Shot end-positions are where the watch detected the *next* swing, so putts
   and penalty drops can look odd — same limitation as Garmin Golf's AutoShot.
