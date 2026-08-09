@@ -97,6 +97,10 @@ cd caddie
 ./gradlew :app:testDebugUnitTest    # parser tests run against real FIT samples
 ```
 
+To build the APK on CI instead, copy `caddie/ci/caddie-android.yml` to
+`.github/workflows/` and push — GitHub's runners ship the Android SDK, and the
+workflow runs the unit tests and uploads a debug APK as a build artifact.
+
 `minSdk 26`, `targetSdk 34`, Kotlin + Jetpack Compose + Room + osmdroid
 (Esri World Imagery satellite tiles — no API key needed).
 

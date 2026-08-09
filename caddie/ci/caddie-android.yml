@@ -1,0 +1,62 @@
+name: Caddie Android
+
+# Builds the Caddie APK on GitHub's runners, which have the Android SDK
+# preinstalled. Download the APK from the run's Artifacts section.
+on:
+  push:
+    paths:
+      - 'caddie/**'
+      - '.github/workflows/caddie-android.yml'
+  pull_request:
+    paths:
+      - 'caddie/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: caddie
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Runs the FIT parser, BLE framing, lie-detection, strokes-gained,
+      # hole-history and club-stats suites against the real sample files.
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Name the APK after the commit
+        run: |
+          version=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          mkdir -p ../out
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             "../out/caddie-${version}-${GITHUB_SHA::7}.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: caddie-apk
+          path: out/*.apk
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caddie-test-reports
+          path: caddie/app/build/reports/tests/
+          if-no-files-found: ignore
