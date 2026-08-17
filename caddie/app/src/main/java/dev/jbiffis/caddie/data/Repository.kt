@@ -173,9 +173,12 @@ class Repository(private val dao: CaddieDao) {
      * the number of features now stored.
      */
     suspend fun refreshCourseFeaturesForSession(roundId: Long): Int {
-        val firstThisSession = courseRefreshedThisSession.add(roundId)
-        if (!firstThisSession) return dao.featureCount(roundId) // already tried this session
-        return downloadCourseFeatures(roundId)
+        if (roundId in courseRefreshedThisSession) return dao.featureCount(roundId)
+        // Only mark the round done once a fetch actually succeeds — a transient
+        // network failure must not block every other hole from retrying.
+        val n = downloadCourseFeatures(roundId)
+        courseRefreshedThisSession.add(roundId)
+        return n
     }
 
     /**

@@ -333,7 +333,10 @@ fun ShotMapScreen(
         }
     }
 
-    val useSatellite = satelliteOverride ?: (features.isEmpty() && fetchState != null && !fetching)
+    // Show satellite whenever there's no OSM vector geometry yet (during the
+    // download or when the course isn't mapped), so the user always sees a real
+    // map instead of blank turf. Flips to the drawn view once features arrive.
+    val useSatellite = satelliteOverride ?: (features.isEmpty() && fetchState != null)
 
     BoxWithConstraints(Modifier.fillMaxSize().background(C.Canvas)) {
         val density = LocalDensity.current

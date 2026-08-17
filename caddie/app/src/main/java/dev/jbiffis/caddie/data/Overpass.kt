@@ -12,12 +12,13 @@ import java.net.URLEncoder
  */
 object Overpass {
 
-    // The main instance rate-limits aggressively (429/504); try mirrors in order,
-    // then the main instance once more — transient overload usually clears fast.
+    // Mirror availability swings a lot (mirrors are frequently 503/504 while the
+    // main instance is up, and vice-versa), so try several with short timeouts and
+    // fall back across them. Main first — it's usually the fastest when it's up.
     private val ENDPOINTS = listOf(
         "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
         "https://overpass.private.coffee/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
         "https://overpass-api.de/api/interpreter",
     )
 
@@ -54,8 +55,8 @@ object Overpass {
         try {
             conn.requestMethod = "POST"
             conn.doOutput = true
-            conn.connectTimeout = 15000
-            conn.readTimeout = 45000
+            conn.connectTimeout = 8000
+            conn.readTimeout = 22000
             conn.setRequestProperty("User-Agent", "Caddie/0.1 (personal golf app)")
             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             conn.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray()) }
