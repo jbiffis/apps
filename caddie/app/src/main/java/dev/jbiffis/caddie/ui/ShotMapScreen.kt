@@ -79,6 +79,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -111,15 +112,17 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // Garmin-style flat course colours
-private val RoughColor = Color(0xFF6E9E43)
-private val FairwayColor = Color(0xFF90BF57)
-private val GreenColor = Color(0xFF2E7D32)   // putting surface: solid dark green
-private val TeeColor = Color(0xFFB7DD7C)      // tee box: solid light green
-private val BunkerColor = Color(0xFFE7DBA8)
-private val WaterColor = Color(0xFF64B5F6)
-private val WoodsColor = Color(0xFF4A7A33)
-private val ExplicitRoughColor = Color(0xFF7FAB4C)
-private val PathColor = Color(0xFFD8D2C4)      // cart path (pale concrete)
+// Palette tuned to the Claude Design hole view: clean striped fairway, light
+// mint green, dense trees in the rough.
+private val RoughColor = Color(0xFF5F9438)        // base rough (mostly under trees)
+private val FairwayColor = Color(0xFF9ECE69)      // light striped fairway
+private val GreenColor = Color(0xFFC0E28D)        // putting surface: light mint
+private val TeeColor = Color(0xFFAAD96D)          // tee box
+private val BunkerColor = Color(0xFFE3D4A2)
+private val WaterColor = Color(0xFF5BA9D6)
+private val WoodsColor = Color(0xFF4E8A3A)
+private val ExplicitRoughColor = Color(0xFF6BA043)
+private val PathColor = Color(0xFFD2CBBA)          // cart path (pale concrete)
 private val PathEdgeColor = Color(0x55000000)
 
 /** How much of the screen the history sheet covers, and how much of it peeks when closed. */
@@ -1027,15 +1030,6 @@ private fun HoleCanvas(
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // Tiled grass-noise overlay, painted through a shader whose matrix follows the
-    // zoom/pan so the texture is locked to the terrain (no swimming).
-    val grassTile = remember { buildGrassTile() }
-    val grassShader = remember {
-        android.graphics.BitmapShader(grassTile, android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT)
-    }
-    val grassPaint = remember { android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG).apply { shader = grassShader } }
-    val grassMatrix = remember { android.graphics.Matrix() }
-
     // Cache tuft positions (world coords) once so panning doesn't recompute the grid.
     val tufts = remember(features) { computeTufts(features) }
 
@@ -1222,12 +1216,6 @@ private fun HoleCanvas(
         drawRect(RoughColor)
         if (canvasSize == IntSize.Zero) return@Canvas
         val zf = zoom.coerceIn(1f, 2.5f) // trees/tufts grow a little as you zoom in
-        // Lock the grass texture to the terrain: same scale-about-centre + pan.
-        grassMatrix.reset()
-        grassMatrix.setScale(zoom, zoom, size.width / 2f, size.height / 2f)
-        grassMatrix.postTranslate(livePan.x, livePan.y)
-        grassShader.setLocalMatrix(grassMatrix)
-        drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, grassPaint) }
 
         // Course polygons, least → most specific
         val order = listOf(
@@ -1255,13 +1243,15 @@ private fun HoleCanvas(
                 }
                 path.close()
                 drawPath(path, color)
-                // Fairway: grass texture + mowing stripes (world-locked); tee/green solid.
-                if (type == Lie.Type.FAIRWAY) {
-                    clipPath(path) { drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, grassPaint) } }
-                    mowingStripes(path, 26f, Color(0x1EFFFFFF), zoom, livePan.x)
+                // Diagonal mowing stripes on the mown surfaces, like the design.
+                when (type) {
+                    Lie.Type.FAIRWAY -> mowingStripes(path, 20f * zf, Color(0x22FFFFFF))
+                    Lie.Type.GREEN -> mowingStripes(path, 13f * zf, Color(0x2BFFFFFF))
+                    Lie.Type.TEE -> mowingStripes(path, 14f * zf, Color(0x20FFFFFF))
+                    else -> {}
                 }
                 if (type == Lie.Type.GREEN || type == Lie.Type.BUNKER || type == Lie.Type.WATER) {
-                    drawPath(path, Color(0x33000000), style = Stroke(width = 2f))
+                    drawPath(path, Color(0x2A000000), style = Stroke(width = 2f))
                 }
             }
         }
@@ -1403,50 +1393,21 @@ private fun DrawScope.bubble(text: String, at: Offset, typeface: android.graphic
     }
 }
 
-/**
- * A small seamless grass-noise tile (two octaves of wrapped value noise) used as a
- * repeating overlay so turf reads as textured grass rather than a flat fill.
- */
-private fun buildGrassTile(): android.graphics.Bitmap {
-    val size = 128
-    val rng = java.util.Random(20260721)
-    fun lattice(n: Int): Array<DoubleArray> = Array(n) { DoubleArray(n) { rng.nextDouble() } }
-    val coarse = lattice(8)
-    val fine = lattice(32)
-    fun smooth(t: Double) = t * t * (3 - 2 * t)
-    fun sample(grid: Array<DoubleArray>, u: Double, v: Double): Double {
-        val n = grid.size
-        val fx = u * n; val fy = v * n
-        val x0 = fx.toInt() % n; val y0 = fy.toInt() % n
-        val x1 = (x0 + 1) % n; val y1 = (y0 + 1) % n
-        val sx = smooth(fx - fx.toInt()); val sy = smooth(fy - fy.toInt())
-        val top = grid[y0][x0] * (1 - sx) + grid[y0][x1] * sx
-        val bot = grid[y1][x0] * (1 - sx) + grid[y1][x1] * sx
-        return top * (1 - sy) + bot * sy
-    }
-    val px = IntArray(size * size)
-    for (y in 0 until size) for (x in 0 until size) {
-        val u = x.toDouble() / size; val v = y.toDouble() / size
-        val n = sample(coarse, u, v) * 0.6 + sample(fine, u, v) * 0.4
-        val d = n - 0.5 // -0.5..0.5
-        val a = (kotlin.math.abs(d) * 90).toInt().coerceIn(0, 46)
-        px[y * size + x] = if (d < 0) android.graphics.Color.argb(a, 24, 54, 20)
-        else android.graphics.Color.argb(a, 210, 240, 175)
-    }
-    return android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-        .apply { setPixels(px, 0, size, 0, 0, size, size) }
-}
-
-/** Mowing stripes clipped to a turf polygon, offset by pan and scaled by zoom so
- *  they track the terrain instead of swimming across it. */
-private fun DrawScope.mowingStripes(path: Path, bandBase: Float, color: Color, zoom: Float, panX: Float) {
-    val band = bandBase * zoom
-    val period = band * 2
+/** Diagonal mowing stripes clipped to a mown surface (fairway / green / tee). */
+private fun DrawScope.mowingStripes(path: Path, band: Float, color: Color) {
+    val b = path.getBounds()
+    if (b.isEmpty) return
+    val cx = b.center.x
+    val cy = b.center.y
+    val reach = hypot(b.width.toDouble(), b.height.toDouble()).toFloat() / 2f + band
+    // Rotate so the lighter bands run diagonally across the mown surface.
     clipPath(path) {
-        var x = (panX % period) - period
-        while (x < size.width) {
-            drawRect(color, topLeft = Offset(x, 0f), size = androidx.compose.ui.geometry.Size(band, size.height))
-            x += period
+        rotate(degrees = -32f, pivot = Offset(cx, cy)) {
+            var x = cx - reach
+            while (x < cx + reach) {
+                drawRect(color, topLeft = Offset(x, cy - reach), size = androidx.compose.ui.geometry.Size(band, reach * 2f))
+                x += band * 2f
+            }
         }
     }
 }
