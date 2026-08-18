@@ -112,12 +112,11 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // Garmin-style flat course colours
-// Palette tuned to the Claude Design hole view: clean striped fairway, light
-// mint green, dense trees in the rough.
-private val RoughColor = Color(0xFF5F9438)        // base rough (mostly under trees)
-private val FairwayColor = Color(0xFF9ECE69)      // light striped fairway
-private val GreenColor = Color(0xFFC0E28D)        // putting surface: light mint
-private val TeeColor = Color(0xFFAAD96D)          // tee box
+// Rich, saturated turf — striped fairway, deep putting green, dense trees.
+private val RoughColor = Color(0xFF57892F)        // base rough (mostly under trees)
+private val FairwayColor = Color(0xFF7FB449)      // striped fairway corridor
+private val GreenColor = Color(0xFF357E30)        // putting surface: deep green
+private val TeeColor = Color(0xFF8CC152)          // tee box
 private val BunkerColor = Color(0xFFE3D4A2)
 private val WaterColor = Color(0xFF5BA9D6)
 private val WoodsColor = Color(0xFF4E8A3A)
@@ -1246,8 +1245,8 @@ private fun HoleCanvas(
                 // Diagonal mowing stripes on the mown surfaces, like the design.
                 when (type) {
                     Lie.Type.FAIRWAY -> mowingStripes(path, 20f * zf, Color(0x22FFFFFF))
-                    Lie.Type.GREEN -> mowingStripes(path, 13f * zf, Color(0x2BFFFFFF))
-                    Lie.Type.TEE -> mowingStripes(path, 14f * zf, Color(0x20FFFFFF))
+                    Lie.Type.GREEN -> mowingStripes(path, 13f * zf, Color(0x30FFFFFF))
+                    Lie.Type.TEE -> mowingStripes(path, 14f * zf, Color(0x22FFFFFF))
                     else -> {}
                 }
                 if (type == Lie.Type.GREEN || type == Lie.Type.BUNKER || type == Lie.Type.WATER) {
