@@ -56,7 +56,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-50 richer-greens"
+        const val BLE_BUILD = "ble-51 list-files-diagnostic"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -110,6 +110,8 @@ class GarminBleClient(
     private var prevRemoteCount = 0
     private var emptyPageStreak = 0
     private var filePagesFetched = 0
+    // Diagnostic: list files without downloading them (safe to run during a round).
+    private var diagnosticListOnly = false
 
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
     private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
@@ -572,6 +574,18 @@ class GarminBleClient(
             return
         }
         log("  → paging done (${remoteFiles.size} files total)")
+        if (diagnosticListOnly) {
+            log("── File list (V2, no download) — ${remoteFiles.size} file(s), largest first:")
+            remoteFiles.sortedByDescending { it.size }.take(60).forEach {
+                log("  id=${it.id?.id1} type=${it.typeCode}/${it.typeName ?: "?"} ${it.size}b")
+            }
+            log("── Re-run 'List files' after a hole or two — a file whose size GROWS is the live round.")
+            log("Heads-up: this list only shows UNSYNCED files, so an in-progress round may not appear until you save it.")
+            diagnosticListOnly = false
+            send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE))
+            _state.value = State.READY
+            return
+        }
         // The golf round's file_id.type is unknown and NOT the "sports" code (code 9
         // turned out to be monitoring). So scan every distinct file and let importFit
         // decide by content. Cap each identical (typeCode,size) bucket at two files so
@@ -803,6 +817,52 @@ class GarminBleClient(
         clearSyncHistory()
         if (_state.value == State.READY) startSync()
         else log("Connect first, then Sync to re-download.")
+    }
+
+    /**
+     * Diagnostic: enumerate the watch's files and log each with its size, WITHOUT
+     * downloading anything. Safe to run mid-round — re-run it every hole or two and
+     * watch for a file whose size grows (that would be the live round, if the watch
+     * exposes its in-progress activity).
+     */
+    fun listFilesOnly() {
+        scope.launch {
+            if (_state.value != State.READY) { log("Connect to the watch first, then List files."); return@launch }
+            _state.value = State.SYNCING
+            diagnosticListOnly = true
+            try {
+                log("── Diagnostic: listing files (no download) ──")
+                send(Gfdi.directoryFilter())
+                awaitResponse(Gfdi.MSG_DIRECTORY_FILE_FILTER, 3000)
+                val dir = downloadFile(0)
+                if (dir == null) {
+                    log("Directory download failed")
+                    diagnosticListOnly = false
+                    _state.value = State.READY
+                    return@launch
+                }
+                val entries = Gfdi.parseDirectory(dir)
+                if (entries.isNotEmpty()) {
+                    log("── ANT-FS directory — ${entries.size} file(s), newest first:")
+                    entries.sortedByDescending { it.fitTimestamp }.forEach {
+                        log("  #${it.index} type=${it.dataType} sub=${it.subType} num=${it.number} ${it.size}b ts=${it.fitTimestamp}")
+                    }
+                    _directory.value = entries
+                    log("── Re-run 'List files' after a hole — a growing size means live round data is available.")
+                    diagnosticListOnly = false
+                    _state.value = State.READY
+                } else {
+                    log("Empty ANT-FS directory — enumerating via FileSyncService (V2)…")
+                    remoteFiles.clear(); lastFileListCursor = -1; prevRemoteCount = 0; emptyPageStreak = 0; filePagesFetched = 0
+                    sendProtobuf(FileSync.buildFileListRequest(null))
+                    // onFileListPage finishes the diagnostic (no download); leave the session open.
+                }
+            } catch (e: Exception) {
+                log("List files failed: ${e.message}")
+                diagnosticListOnly = false
+                if (_state.value == State.SYNCING) _state.value = State.READY
+            }
+        }
     }
 
     fun startSync() {

@@ -181,7 +181,13 @@ fun SyncScreen(app: CaddieApp) {
                         ) { Text("Re-sync all") }
                         Text(statusText, style = MaterialTheme.typography.labelMedium)
                     }
-                    OutlinedButton(onClick = { client.disconnect() }) { Text("Disconnect") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(
+                            onClick = { client.listFilesOnly() },
+                            enabled = state == GarminBleClient.State.READY,
+                        ) { Text("List files (no download)") }
+                        OutlinedButton(onClick = { client.disconnect() }) { Text("Disconnect") }
+                    }
                 }
                 else -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
