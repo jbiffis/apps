@@ -509,6 +509,8 @@ fun ShotMapScreen(
 
         if (editMode) {
             EditBanner(
+                shotLabel = current?.let { "Shot ${shotIdx + 1}/${shots.size}" },
+                onDelete = if (current != null) ({ confirmDelete = true }) else null,
                 onDone = { editMode = false },
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 114.dp),
             )
@@ -738,7 +740,12 @@ private fun WindPill(
 }
 
 @Composable
-private fun EditBanner(onDone: () -> Unit, modifier: Modifier = Modifier) {
+private fun EditBanner(
+    shotLabel: String?,
+    onDelete: (() -> Unit)?,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier
             .clip(RoundedCornerShape(Radii.pill))
@@ -746,8 +753,25 @@ private fun EditBanner(onDone: () -> Unit, modifier: Modifier = Modifier) {
             .padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Drag any shot to reposition", style = T.body.copy(fontWeight = FontWeight.Bold), color = C.OnAccent)
+        Text(
+            shotLabel?.let { "$it · drag to move" } ?: "Tap a shot to select",
+            style = T.body.copy(fontWeight = FontWeight.Bold),
+            color = C.OnAccent,
+        )
         Spacer(Modifier.width(12.dp))
+        if (onDelete != null) {
+            Text(
+                "Delete",
+                Modifier
+                    .clip(RoundedCornerShape(Radii.pill))
+                    .background(C.OnAccent)
+                    .clickable(onClick = onDelete)
+                    .padding(horizontal = 13.dp, vertical = 5.dp),
+                style = T.body.copy(fontWeight = FontWeight.Bold),
+                color = C.Orange,
+            )
+            Spacer(Modifier.width(8.dp))
+        }
         Text(
             "Done",
             Modifier
@@ -1190,22 +1214,22 @@ private fun HoleCanvas(
                 }
             }
             .pointerInput(editMode) {
-                if (!editMode) {
-                    detectTapGestures(
-                        onDoubleTap = { liveOnTransform(1f, Offset.Zero) },
-                        onTap = { tap ->
-                            var best = -1
-                            var bestDist = 48.dp.toPx()
-                            for (i in 0 until liveNodeCount - 1) {
-                                val (la, lo) = liveNodeLatLon(i)
-                                val p = liveTransform(la, lo)
-                                val d = hypot(p.x - tap.x, p.y - tap.y)
-                                if (d < bestDist) { best = i; bestDist = d }
-                            }
-                            if (best >= 0) liveSelectShot(best)
-                        },
-                    )
-                }
+                // Tap selects the nearest shot in both modes (view mode also opens the
+                // editor sheet); double-tap resets the zoom in view mode only.
+                detectTapGestures(
+                    onDoubleTap = { if (!editMode) liveOnTransform(1f, Offset.Zero) },
+                    onTap = { tap ->
+                        var best = -1
+                        var bestDist = 48.dp.toPx()
+                        for (i in 0 until liveNodeCount - 1) {
+                            val (la, lo) = liveNodeLatLon(i)
+                            val p = liveTransform(la, lo)
+                            val d = hypot(p.x - tap.x, p.y - tap.y)
+                            if (d < bestDist) { best = i; bestDist = d }
+                        }
+                        if (best >= 0) liveSelectShot(best)
+                    },
+                )
             }
     ) {
         // Live screen position of a node, honouring an in-progress drag
