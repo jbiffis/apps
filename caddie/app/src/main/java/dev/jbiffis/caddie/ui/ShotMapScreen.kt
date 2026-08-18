@@ -461,6 +461,7 @@ fun ShotMapScreen(
                 Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = SHEET_PEEK + 42.dp)
+                    .width(42.dp) // keep the pill button-sized; the divider fills this, not the screen
                     .clip(RoundedCornerShape(Radii.card))
                     .background(C.GlassFill)
                     .border(1.dp, C.HairlineStrong, RoundedCornerShape(Radii.card)),
