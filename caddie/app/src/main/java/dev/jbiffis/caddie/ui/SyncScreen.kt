@@ -130,10 +130,27 @@ fun SyncScreen(app: CaddieApp) {
                 color = MaterialTheme.colorScheme.primary,
             )
             IconButton(onClick = {
+                // Share the log as a FILE, not inline text — receiving apps clip long
+                // EXTRA_TEXT and drop the tail (exactly the lines that matter most).
+                val logText = client.exportLog()
+                val uri = runCatching {
+                    val dir = java.io.File(context.cacheDir, "shared").apply { mkdirs() }
+                    val f = java.io.File(dir, "caddie-sync-log.txt")
+                    f.writeText(logText)
+                    androidx.core.content.FileProvider.getUriForFile(
+                        context, "${context.packageName}.fileprovider", f,
+                    )
+                }.getOrNull()
                 val share = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
                     putExtra(Intent.EXTRA_SUBJECT, "Caddie sync log")
-                    putExtra(Intent.EXTRA_TEXT, client.exportLog())
+                    if (uri != null) {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } else {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, logText)
+                    }
                 }
                 context.startActivity(Intent.createChooser(share, "Share sync log"))
             }) { Icon(Icons.Filled.Share, contentDescription = "Share log") }
