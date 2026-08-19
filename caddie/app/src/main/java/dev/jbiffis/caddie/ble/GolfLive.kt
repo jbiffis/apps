@@ -119,19 +119,18 @@ object GolfLive {
         .toByteArray()
 
     /**
-     * Reply to the watch's token request with a well-formed but FAKE credential set.
-     * If the watch accepts it and streams golf, the local push doesn't validate tokens;
-     * if it NAKs or withholds golf, real Garmin-account auth is required (the wall).
+     * Reply to the watch's token request. Replayed verbatim from the owner's own HCI
+     * capture (service 27, the account/session credentials Garmin Golf presents). These
+     * are the device owner's credentials, embedded only to test whether the LOCAL
+     * scorecard push requires valid auth — remove/rotate if the feature is abandoned.
      */
-    fun buildTokenStub(): ByteArray {
-        val creds = Protobuf.Writer()
-            .bytes(1, "00000000-0000-0000-0000-000000000000".toByteArray(Charsets.US_ASCII))
-            .bytes(2, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".toByteArray(Charsets.US_ASCII))
-            .bytes(3, "00000000-0000-0000-0000-000000000001".toByteArray(Charsets.US_ASCII))
-            .bytes(4, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".toByteArray(Charsets.US_ASCII))
-        val inner = Protobuf.Writer().message(1, creds).varint(2, 0)
-        return Protobuf.Writer().message(SMART_TOKEN, Protobuf.Writer().message(2, inner)).toByteArray()
-    }
+    private const val TOKEN_HEX =
+        "da019e01129b010a96010a2435343661383063612d326631362d346238362d623564632d373063366639656239" +
+            "3231641223565338485761667337775a447a4f586c6752746f627030754c6e47686d72556a5969791a24393765" +
+            "61313431302d343935302d346263322d396239342d3035303162643861343666662223376932336c6c38493170" +
+            "434e5843335051423946345474734a396131776e6f444571421000"
+
+    fun buildTokenReply(): ByteArray = TOKEN_HEX.hexToBytes()
 
     /** Reply to the watch's s16 query: Smart{ 16:{ 5:{ 1:0, 2:{1:0}, 2:{1:1} } } }. */
     fun build16Ack(): ByteArray {

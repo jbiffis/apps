@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-67 golf-handshake"
+        const val BLE_BUILD = "ble-68 golf-token"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -564,8 +564,8 @@ class GarminBleClient(
         // Onboarding handshake the watch runs before it will announce scorecards.
         if (golfLiveOn) {
             if (GolfLive.isTokenRequest(smart)) {
-                log("Live golf: watch requested tokens — replying with STUB (auth test)")
-                scope.launch { runCatching { sendProtobuf(GolfLive.buildTokenStub()) } }
+                log("Live golf: watch requested tokens — replying with captured credentials")
+                scope.launch { runCatching { sendProtobuf(GolfLive.buildTokenReply()) } }
                 return
             }
             when (GolfLive.topField(smart)) {

@@ -33,10 +33,11 @@ class GolfLiveTest {
         assertEquals("f201060a040a020813", GolfLive.buildS30Hello().toHex())
         assertEquals("82010c2a0a08001202080012020801", GolfLive.build16Ack().toHex())
         assertEquals("52046a020801", GolfLive.build10Ack().toHex())
-        // Token stub: right shape (service 27, nested creds), fake values.
-        val stub = GolfLive.buildTokenStub()
-        assertEquals(27, GolfLive.topField(stub))
-        assertTrue(String(stub, Charsets.US_ASCII).contains("AAAAAAAA"))
+        // Token reply: the captured service-27 credential message, replayed verbatim.
+        val token = GolfLive.buildTokenReply()
+        assertEquals(27, GolfLive.topField(token))
+        assertEquals(162, token.size)
+        assertTrue(String(token, Charsets.US_ASCII).contains("VS8HWafs7wZ"))
         assertEquals(30, GolfLive.topField(GolfLive.buildS30Hello()))
     }
 
