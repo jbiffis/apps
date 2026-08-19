@@ -1440,7 +1440,7 @@ private fun DrawScope.mowingStripes(path: Path, band: Float, color: Color) {
 private class Tuft(val lat: Double, val lon: Double, val seed: Int, val baseR: Float)
 
 private const val MAX_TUFTS = 14000     // total tuft budget across the whole course view
-private const val PER_WOOD = 500.0      // approx max tufts per wood polygon (grid coarsens for big ones)
+private const val PER_WOOD = 4500.0     // approx max tufts per wood polygon (grid coarsens for big ones)
 
 /**
  * Precompute tree/tuft positions once (independent of pan/zoom): tree nodes plus a
