@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-69 golf-heartbeat"
+        const val BLE_BUILD = "ble-70 golf-caps"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -497,6 +497,11 @@ class GarminBleClient(
                     "implemented yet. Export this log so support for it can be added.")
                 scope.launch { send(Gfdi.response(msg.id, Gfdi.STATUS_UNSUPPORTED)) }
             }
+            5042 -> {
+                // Capability query in the golf handshake — Connect answers with this extra.
+                log("RX id=5042 — answering as Garmin Golf")
+                scope.launch { send(Gfdi.response(5042, Gfdi.STATUS_ACK, hex("050001020304"))) }
+            }
             else -> {
                 // Configuration, fit definition, etc. — acknowledge so the watch
                 // advances its send sequence and proceeds to file data.
@@ -695,9 +700,27 @@ class GarminBleClient(
         send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE))
     }
 
+    private fun hex(s: String): ByteArray =
+        ByteArray(s.length / 2) { ((s[it * 2].digitToInt(16) shl 4) or s[it * 2 + 1].digitToInt(16)).toByte() }
+
+    /**
+     * Replicate the capability handshake Garmin Connect performs before golf. Caddie
+     * normally sends an EMPTY configuration; the watch appears to gate the golf service
+     * on a host that declares these capability bits (captured verbatim from Connect).
+     */
+    private suspend fun declareGolfCapabilities() {
+        log("Live golf: declaring Garmin Golf capabilities…")
+        // Two CONFIGURATION messages carrying Connect's capability flags.
+        send(Gfdi.frame(Gfdi.MSG_CONFIGURATION, hex("0ffa07080006001e00823402150a0021")))
+        send(Gfdi.frame(Gfdi.MSG_CONFIGURATION, hex("11f9ffdffffffffeccdfa50a172b02230002")))
+        // Ask for supported file types, then declare device settings, as Connect does.
+        send(Gfdi.frame(Gfdi.MSG_SUPPORTED_FILE_TYPES, ByteArray(0)))
+        send(Gfdi.frame(Gfdi.MSG_DEVICE_SETTINGS, hex("03060101070101080100")))
+    }
+
     private suspend fun completeHandshake() {
         val address = device?.address ?: return
-        send(Gfdi.configuration())
+        if (isGolfArmed()) declareGolfCapabilities() else send(Gfdi.configuration())
         awaitResponse(Gfdi.MSG_CONFIGURATION, 5000)  // tolerate silence
         if (!isPaired(address)) {
             send(Gfdi.systemEvent(Gfdi.EVENT_PAIR_COMPLETE))
