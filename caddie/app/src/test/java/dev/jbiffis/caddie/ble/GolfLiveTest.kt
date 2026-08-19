@@ -27,6 +27,19 @@ class GolfLiveTest {
         assertEquals("6a0a32080801120408001001", GolfLive.buildAppRegAck().toHex())
     }
 
+    /** Handshake builders must match the exact bytes the real app sent. */
+    @Test
+    fun handshakeBuildersMatchCapture() {
+        assertEquals("f201060a040a020813", GolfLive.buildS30Hello().toHex())
+        assertEquals("82010c2a0a08001202080012020801", GolfLive.build16Ack().toHex())
+        assertEquals("52046a020801", GolfLive.build10Ack().toHex())
+        // Token stub: right shape (service 27, nested creds), fake values.
+        val stub = GolfLive.buildTokenStub()
+        assertEquals(27, GolfLive.topField(stub))
+        assertTrue(String(stub, Charsets.US_ASCII).contains("AAAAAAAA"))
+        assertEquals(30, GolfLive.topField(GolfLive.buildS30Hello()))
+    }
+
     /** The watch's scorecard announcement 5:{7:{1:seq,2:size}} yields the seq to poll. */
     @Test
     fun parsesAnnouncedSeq() {

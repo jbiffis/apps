@@ -101,6 +101,68 @@ object GolfLive {
     fun isNotify(smart: ByteArray): Boolean =
         Protobuf.decode(smart).any { it.number == SMART_NOTIFY }
 
+    // ---- Post-registration session handshake -----------------------------------
+    // After registering, the real app sends an s30 "hello" that kicks the watch into
+    // its onboarding burst; the watch then asks for tokens (s27) and pokes s16/s10,
+    // and only after this does it announce scorecards. All static except the token
+    // reply, which carries account-bound credentials — we send a well-formed STUB to
+    // test whether the LOCAL scorecard push actually validates it.
+    const val SMART_S30 = 30
+    const val SMART_TOKEN = 27
+    const val SMART_S16 = 16
+    const val SMART_S10 = 10
+
+    /** s30 hello: Smart{ 30:{ 1:{ 1:{ 1:19 } } } } — triggers the watch's onboarding. */
+    fun buildS30Hello(): ByteArray = Protobuf.Writer()
+        .message(SMART_S30, Protobuf.Writer().message(1,
+            Protobuf.Writer().message(1, Protobuf.Writer().varint(1, 19))))
+        .toByteArray()
+
+    /**
+     * Reply to the watch's token request with a well-formed but FAKE credential set.
+     * If the watch accepts it and streams golf, the local push doesn't validate tokens;
+     * if it NAKs or withholds golf, real Garmin-account auth is required (the wall).
+     */
+    fun buildTokenStub(): ByteArray {
+        val creds = Protobuf.Writer()
+            .bytes(1, "00000000-0000-0000-0000-000000000000".toByteArray(Charsets.US_ASCII))
+            .bytes(2, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".toByteArray(Charsets.US_ASCII))
+            .bytes(3, "00000000-0000-0000-0000-000000000001".toByteArray(Charsets.US_ASCII))
+            .bytes(4, "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".toByteArray(Charsets.US_ASCII))
+        val inner = Protobuf.Writer().message(1, creds).varint(2, 0)
+        return Protobuf.Writer().message(SMART_TOKEN, Protobuf.Writer().message(2, inner)).toByteArray()
+    }
+
+    /** Reply to the watch's s16 query: Smart{ 16:{ 5:{ 1:0, 2:{1:0}, 2:{1:1} } } }. */
+    fun build16Ack(): ByteArray {
+        val inner = Protobuf.Writer().varint(1, 0)
+            .message(2, Protobuf.Writer().varint(1, 0))
+            .message(2, Protobuf.Writer().varint(1, 1))
+        return Protobuf.Writer().message(SMART_S16, Protobuf.Writer().message(5, inner)).toByteArray()
+    }
+
+    /** Reply to the watch's s10 query: Smart{ 10:{ 13:{ 1:1 } } }. */
+    fun build10Ack(): ByteArray = Protobuf.Writer()
+        .message(SMART_S10, Protobuf.Writer().message(13, Protobuf.Writer().varint(1, 1)))
+        .toByteArray()
+
+    /** The Smart-message's top-level service field number (handles multi-byte keys). */
+    fun topField(smart: ByteArray): Int {
+        var v = 0L; var shift = 0; var i = 0
+        while (i < smart.size) {
+            val c = smart[i].toInt() and 0xFF; i++
+            v = v or ((c.toLong() and 0x7F) shl shift)
+            if (c and 0x80 == 0) break
+            shift += 7
+        }
+        return (v shr 3).toInt()
+    }
+
+    fun isTokenRequest(smart: ByteArray): Boolean {
+        val t = Protobuf.firstBytes(Protobuf.decode(smart), SMART_TOKEN) ?: return false
+        return Protobuf.decode(t).any { it.number == 1 }
+    }
+
     fun isGolf(smart: ByteArray): Boolean = golfServiceOf(smart) != null
 
     private fun golfServiceOf(smart: ByteArray): ByteArray? =

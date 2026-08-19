@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-66 golf-announce"
+        const val BLE_BUILD = "ble-67 golf-handshake"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -561,6 +561,30 @@ class GarminBleClient(
             }
             return
         }
+        // Onboarding handshake the watch runs before it will announce scorecards.
+        if (golfLiveOn) {
+            if (GolfLive.isTokenRequest(smart)) {
+                log("Live golf: watch requested tokens — replying with STUB (auth test)")
+                scope.launch { runCatching { sendProtobuf(GolfLive.buildTokenStub()) } }
+                return
+            }
+            when (GolfLive.topField(smart)) {
+                GolfLive.SMART_S16 -> {
+                    log("Live golf: answering s16")
+                    scope.launch { runCatching { sendProtobuf(GolfLive.build16Ack()) } }
+                    return
+                }
+                GolfLive.SMART_S10 -> {
+                    log("Live golf: answering s10")
+                    scope.launch { runCatching { sendProtobuf(GolfLive.build10Ack()) } }
+                    return
+                }
+                24, 42, 21, 8, 30 -> {
+                    log("Live golf: watch svc${GolfLive.topField(smart)} ${Gfdi.hex(smart, 16)} (noted)")
+                    return
+                }
+            }
+        }
         val fss = FileSync.fileSyncServiceOf(smart)
         if (fss == null) {
             log("Smart msg (non-filesync): ${Gfdi.hex(smart, 32)}")
@@ -994,6 +1018,11 @@ class GarminBleClient(
             runCatching { sendProtobuf(reg) }
             kotlinx.coroutines.delay(300)
         }
+        // The s30 "hello" is what makes the watch begin its onboarding burst (token
+        // request, s16/s10 pokes) that precedes scorecard announcements.
+        kotlinx.coroutines.delay(200)
+        log("Live golf: sending s30 hello to start onboarding…")
+        runCatching { sendProtobuf(GolfLive.buildS30Hello()) }
     }
 
     fun stopGolfLive() {
