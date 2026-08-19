@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-68 golf-token"
+        const val BLE_BUILD = "ble-69 golf-heartbeat"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -761,7 +761,7 @@ class GarminBleClient(
             if (remaining <= 0) return null
             val r = withTimeoutOrNull(remaining) { responses.receive() } ?: return null
             if (r.requestId == requestId) return r
-            log("(out-of-band ack[${r.requestId}] while waiting for $requestId)")
+            if (verboseRx) log("(out-of-band ack[${r.requestId}] while waiting for $requestId)")
         }
     }
 
@@ -1000,12 +1000,21 @@ class GarminBleClient(
         golfJob = scope.launch {
             registerGolfApp()
             // The watch drives us: it announces 5:{7:{1:seq}} when the scorecard changes and
-            // we poll that seq. As a safety net, re-poll the last announced seq periodically
-            // in case an announcement is missed.
+            // we poll that seq. A 15s heartbeat makes the log self-documenting — it shows
+            // unambiguously whether the watch is streaming or silent, no matter when the log
+            // is captured — and re-polls the last announced seq as a safety net.
+            var elapsed = 0
             while (golfLiveOn) {
-                kotlinx.coroutines.delay(fallbackMs)
-                if (_state.value == State.READY && lastAnnouncedSeq > 0) {
-                    runCatching { sendProtobuf(GolfLive.buildPoll(lastAnnouncedSeq)) }
+                kotlinx.coroutines.delay(15_000)
+                elapsed += 15
+                if (lastAnnouncedSeq > 0) {
+                    log("Live golf: ${elapsed}s alive — last announced seq=$lastAnnouncedSeq, re-polling")
+                    if (_state.value == State.READY) {
+                        runCatching { sendProtobuf(GolfLive.buildPoll(lastAnnouncedSeq)) }
+                    }
+                } else {
+                    log("Live golf: ${elapsed}s — no scorecard announcement yet " +
+                        "(watch silent after handshake). Score a hole on the watch and keep waiting.")
                 }
             }
         }
