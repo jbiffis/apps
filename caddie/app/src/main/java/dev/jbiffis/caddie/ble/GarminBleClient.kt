@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-75 golf-services"
+        const val BLE_BUILD = "ble-76 golf-reliable"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -379,6 +379,24 @@ class GarminBleClient(
      * is decoded exactly like GFDI traffic.
      */
     private suspend fun registerAuxServices() {
+        // Garmin Connect runs GFDI over the RELIABLE (MLR) transport — every frame in the
+        // capture has bit7 set, and the ~1 KB scorecard push arrives there. Our own GFDI
+        // handle is unreliable, which is fine for request/response but appears never to
+        // receive async pushes. Connect registers GFDI twice (two client ids), so add a
+        // second, reliable GFDI registration purely to listen on; inbound MLR frames
+        // already flow through the normal decode path.
+        while (controlResponses.tryReceive().getOrNull() != null) { /* drain */ }
+        sendRaw(MultiLink.registerRequest(MultiLink.SERVICE_GFDI, reliability = 2, clientId = 1L))
+        val g = withTimeoutOrNull(3000) { controlResponses.receive() }
+        if (g != null && g.handle != 0) {
+            auxHandles.add(g.handle)
+            log("Reliable GFDI registered on handle ${g.handle} (MLR stream ${g.handle and 0x07}) " +
+                "— listening for pushes here")
+        } else {
+            log("Reliable GFDI registration failed (status=${g?.status})")
+        }
+        kotlinx.coroutines.delay(150)
+
         for ((service, reliability) in listOf(0x0004 to 0, 0x0016 to 0, 0x0002 to 2)) {
             while (controlResponses.tryReceive().getOrNull() != null) { /* drain */ }
             sendRaw(MultiLink.registerRequest(service, reliability))
@@ -416,6 +434,9 @@ class GarminBleClient(
             val next = (expected + 1) % MultiLink.MLR_SEQ_MODULO
             mlrRcvSeq[m.handle] = next
             scope.launch { sendRaw(MultiLink.reliableAck(m.handle, next)) }
+            if (golfLiveOn && m.handle != (fileXferHandle and 0x07)) {
+                log("MLR h${m.handle} ← ${m.payload.size}b ${Gfdi.hex(m.payload, 24)}")
+            }
             feedCobs(m.handle, m.payload)
             return
         }
