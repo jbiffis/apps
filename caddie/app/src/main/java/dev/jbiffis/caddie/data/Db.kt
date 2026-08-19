@@ -41,6 +41,10 @@ data class RoundEntity(
     val totalCalories: Int? = null,
     val avgHeartRate: Int? = null,
     val maxHeartRate: Int? = null,
+    // True while this round is still being played and updated from the watch's
+    // in-progress (partial) file. Cleared when the finished file syncs, after which
+    // re-imports no longer overwrite the round (so manual edits stick).
+    val live: Boolean = false,
 )
 
 @Entity(tableName = "holes", indices = [Index("roundId")])
@@ -196,6 +200,13 @@ interface CaddieDao {
     @Insert
     suspend fun insertRound(round: RoundEntity): Long
 
+    @Update
+    suspend fun updateRound(round: RoundEntity)
+
+    /** Live rounds currently being played (updated from the watch's partial file). */
+    @Query("SELECT * FROM rounds WHERE live = 1")
+    suspend fun liveRounds(): List<RoundEntity>
+
     @Query(
         "UPDATE rounds SET activityTimeS = :activityTimeS, totalCalories = :calories, " +
             "avgHeartRate = :avgHr, maxHeartRate = :maxHr WHERE id = :roundId"
@@ -343,6 +354,20 @@ interface CaddieDao {
         insertGreens(greens)
     }
 
+    /**
+     * Atomically refresh a live round's summary, holes and shots from a newer
+     * (still-growing or now-finished) watch file. The caller has already merged in
+     * any user edits worth keeping; this just swaps the contents in one transaction.
+     */
+    @Transaction
+    suspend fun replaceRoundContents(round: RoundEntity, holes: List<HoleEntity>, shots: List<ShotEntity>) {
+        updateRound(round)
+        deleteHoles(round.id)
+        insertHoles(holes)
+        deleteShots(round.id)
+        insertShots(shots)
+    }
+
     @Transaction
     suspend fun deleteRoundCascade(roundId: Long) {
         deleteHoles(roundId)
@@ -359,7 +384,7 @@ interface CaddieDao {
         ClubEntity::class, TrackPointEntity::class, CourseFeatureEntity::class,
         CourseGreenEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class CaddieDb : RoomDatabase() {
@@ -392,9 +417,15 @@ abstract class CaddieDb : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `rounds` ADD COLUMN `live` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun get(context: Context): CaddieDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, CaddieDb::class.java, "caddie.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 // Last resort only for unknown/older schemas with no migration path.
                 .fallbackToDestructiveMigration()
                 .build()

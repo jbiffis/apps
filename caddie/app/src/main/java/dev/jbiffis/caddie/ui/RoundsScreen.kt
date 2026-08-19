@@ -75,6 +75,8 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit, onOpenSettings: ()
             }
             when (result) {
                 is ImportResult.NewRound -> { imported++; snackbar.showSnackbar("Imported ${result.courseName} (${result.totalScore})") }
+                is ImportResult.UpdatedRound -> { imported++; snackbar.showSnackbar(
+                    "${if (result.finalized) "Finalized" else "Updated"} ${result.courseName} (${result.totalScore})") }
                 is ImportResult.ActivityAttached -> snackbar.showSnackbar("GPS track attached to round")
                 is ImportResult.ActivityStored -> snackbar.showSnackbar(result.reason)
                 is ImportResult.Duplicate -> snackbar.showSnackbar("Already imported: ${result.what}")
@@ -103,6 +105,8 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit, onOpenSettings: ()
                     usbImporter.importWatchFitFiles(onFit = { _, bytes ->
                         when (val r = app.repository.importFile(bytes)) {
                             is ImportResult.NewRound -> "NEW round: ${r.courseName} (${r.totalScore})"
+                            is ImportResult.UpdatedRound ->
+                                "${if (r.finalized) "finalized" else "updated"} round: ${r.courseName} (${r.totalScore})"
                             is ImportResult.ActivityAttached -> "activity attached"
                             is ImportResult.ActivityStored -> "activity held: ${r.reason}"
                             is ImportResult.Duplicate -> "already have: ${r.what}"

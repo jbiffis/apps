@@ -10,6 +10,14 @@ import kotlin.math.sqrt
 
 sealed class ImportResult {
     data class NewRound(val roundId: Long, val courseName: String, val totalScore: Int) : ImportResult()
+    /** A live round refreshed from a newer watch file. [finalized] = the finished file arrived. */
+    data class UpdatedRound(
+        val roundId: Long,
+        val courseName: String,
+        val totalScore: Int,
+        val holesPlayed: Int,
+        val finalized: Boolean,
+    ) : ImportResult()
     data class ActivityAttached(val roundId: Long) : ImportResult()
     data class ActivityStored(val reason: String) : ImportResult()
     data class Duplicate(val what: String) : ImportResult()
@@ -37,6 +45,34 @@ class Repository(private val dao: CaddieDao) {
      */
     suspend fun importFile(bytes: ByteArray): ImportResult =
         if (isFit(bytes)) importFit(bytes) else importCourseDat(bytes)
+
+    /**
+     * Import an in-progress round straight off the watch mid-play. The file is still
+     * being written, so it's decoded leniently (up to the last complete message) and
+     * the resulting scorecard is upserted onto a "live" round: the first poll creates
+     * it, later polls refresh it with the new holes/shots the watch has recorded,
+     * keeping any wind/club edits made in the meantime. Safe to call repeatedly with
+     * the same growing file.
+     */
+    suspend fun importPartialFit(bytes: ByteArray): ImportResult {
+        val messages = try {
+            FitReader.decode(bytes, lenient = true)
+        } catch (e: Exception) {
+            return ImportResult.Failed("Could not decode partial FIT: ${e.message}")
+        }
+        if (messages.isEmpty()) return ImportResult.Failed("No complete records yet")
+        return try {
+            when {
+                GolfFit.hasGolfScore(messages) -> importScore(GolfFit.parseScore(messages), partial = true)
+                GolfFit.hasActivityData(messages) -> importActivity(GolfFit.parseActivity(messages))
+                // Round summary not written yet (watch writes it as holes complete) —
+                // nothing to upsert, just report so the caller can poll again.
+                else -> ImportResult.Failed("Round summary not written yet — try again after a hole")
+            }
+        } catch (e: Exception) {
+            ImportResult.Failed("partial parse error: ${e.message}")
+        }
+    }
 
     private fun isFit(b: ByteArray): Boolean =
         b.size > 12 && b[8] == '.'.code.toByte() && b[9] == 'F'.code.toByte() &&
@@ -72,7 +108,7 @@ class Repository(private val dao: CaddieDao) {
         return try {
             when {
                 GolfFit.hasClubs(messages) -> importClubs(GolfFit.parseClubs(messages))
-                GolfFit.hasGolfScore(messages) -> importScore(GolfFit.parseScore(messages))
+                GolfFit.hasGolfScore(messages) -> importScore(GolfFit.parseScore(messages), partial = false)
                 type == GolfFit.FILE_TYPE_ACTIVITY || GolfFit.hasActivityData(messages) ->
                     importActivity(GolfFit.parseActivity(messages))
                 else -> ImportResult.Failed(
@@ -84,47 +120,23 @@ class Repository(private val dao: CaddieDao) {
         }
     }
 
-    private suspend fun importScore(score: GolfFit.ScoreFile): ImportResult {
-        if (dao.roundByFileTime(score.createdAtS) != null) return ImportResult.Duplicate(score.courseName)
+    private suspend fun importScore(score: GolfFit.ScoreFile, partial: Boolean): ImportResult {
+        val existing = dao.roundByFileTime(score.createdAtS)
+        if (existing != null) {
+            // A finalized round we're not tracking live: keep the stored copy (and any
+            // manual edits) rather than clobbering it on a routine re-sync.
+            if (!existing.live) return ImportResult.Duplicate(score.courseName)
+            // A live round: refresh it from the newer file, preserving wind/club edits.
+            return updateLiveRound(existing, score, partial)
+        }
 
         val roundId = dao.insertRound(
-            RoundEntity(
-                scoreFileTimeS = score.createdAtS,
-                deviceSerial = score.serialNumber,
-                startedAtS = score.startedAtS,
-                courseName = score.courseName,
-                teeName = score.teeName,
-                playerName = score.playerName,
-                frontPar = score.frontPar,
-                backPar = score.backPar,
-                totalPar = score.totalPar,
-                frontScore = score.frontScore,
-                backScore = score.backScore,
-                totalScore = score.totalScore,
-                totalPutts = score.totalPutts,
-                slope = score.slope,
-                rating = score.rating,
-                distanceWalkedM = score.distanceWalkedM,
-            )
+            roundEntity(score, id = 0, live = partial)
         )
-        dao.insertHoles(score.holes.map {
-            HoleEntity(
-                roundId = roundId, hole = it.hole, par = it.par, strokeIndex = it.strokeIndex,
-                lengthM = it.lengthM, pinLat = it.pinLat, pinLon = it.pinLon,
-                strokes = it.strokes, putts = it.putts, finishedAtS = it.finishedAtS,
-            )
-        })
-        dao.insertShots(score.shots.map {
-            ShotEntity(
-                roundId = roundId, hole = it.hole, timeS = it.timeS,
-                startLat = it.startLat, startLon = it.startLon,
-                endLat = it.endLat, endLon = it.endLon,
-                clubId = it.clubId, distanceM = it.distanceM,
-            )
-        })
-        for (clubId in score.shots.map { it.clubId }.distinct().filter { it != 0L }) {
-            dao.insertClubIfMissing(ClubEntity(clubId, defaultClubName(clubId)))
-        }
+        val merged = LiveRound.merge(roundId, score, emptyList(), emptyList())
+        dao.insertHoles(merged.holes)
+        dao.insertShots(merged.shots)
+        registerClubs(score)
         // An activity imported earlier may belong to this round.
         val matched = pendingActivities.filter { overlaps(score.startedAtS, it) }
         for (activity in matched) attach(roundId, activity)
@@ -134,6 +146,65 @@ class Repository(private val dao: CaddieDao) {
         // do NOT download them here — that network call can block for minutes when
         // Overpass is slow, which would stall a bulk import (USB/BLE) after one round.
         return ImportResult.NewRound(roundId, score.courseName, score.totalScore)
+    }
+
+    /**
+     * Refresh a live round in place from a newer watch file. Summary, holes and shots
+     * come from the file; per-hole wind and user-set club assignments are carried over.
+     * A non-partial (finished) file finalizes the round so later re-syncs leave it alone.
+     */
+    private suspend fun updateLiveRound(
+        existing: RoundEntity,
+        score: GolfFit.ScoreFile,
+        partial: Boolean,
+    ): ImportResult {
+        val oldHoles = dao.holesList(existing.id)
+        val oldShots = dao.shotsList(existing.id)
+        val merged = LiveRound.merge(existing.id, score, oldHoles, oldShots)
+        // Keep the row id and any already-attached activity; refresh scores + live flag.
+        val stillLive = partial // a finished file clears live
+        val updatedRound = roundEntity(score, id = existing.id, live = stillLive).copy(
+            activityTimeS = existing.activityTimeS,
+            totalCalories = existing.totalCalories,
+            avgHeartRate = existing.avgHeartRate,
+            maxHeartRate = existing.maxHeartRate,
+        )
+        dao.replaceRoundContents(updatedRound, merged.holes, merged.shots)
+        registerClubs(score)
+        return ImportResult.UpdatedRound(
+            roundId = existing.id,
+            courseName = score.courseName,
+            totalScore = score.totalScore,
+            holesPlayed = score.holes.count { it.strokes > 0 },
+            finalized = !partial,
+        )
+    }
+
+    private fun roundEntity(score: GolfFit.ScoreFile, id: Long, live: Boolean) = RoundEntity(
+        id = id,
+        scoreFileTimeS = score.createdAtS,
+        deviceSerial = score.serialNumber,
+        startedAtS = score.startedAtS,
+        courseName = score.courseName,
+        teeName = score.teeName,
+        playerName = score.playerName,
+        frontPar = score.frontPar,
+        backPar = score.backPar,
+        totalPar = score.totalPar,
+        frontScore = score.frontScore,
+        backScore = score.backScore,
+        totalScore = score.totalScore,
+        totalPutts = score.totalPutts,
+        slope = score.slope,
+        rating = score.rating,
+        distanceWalkedM = score.distanceWalkedM,
+        live = live,
+    )
+
+    private suspend fun registerClubs(score: GolfFit.ScoreFile) {
+        for (clubId in score.shots.map { it.clubId }.distinct().filter { it != 0L }) {
+            dao.insertClubIfMissing(ClubEntity(clubId, defaultClubName(clubId)))
+        }
     }
 
     private suspend fun importActivity(activity: GolfFit.ActivityFile): ImportResult {

@@ -15,6 +15,9 @@ class CaddieApp : Application() {
         GarminBleClient(this, getSharedPreferences("ble_sync", MODE_PRIVATE)) { _, bytes ->
             when (val r = repository.importFile(bytes)) {
                 is ImportResult.NewRound -> "NEW round: ${r.courseName} (${r.totalScore})"
+                is ImportResult.UpdatedRound ->
+                    "${if (r.finalized) "finalized" else "updated"} round: ${r.courseName} " +
+                        "(${r.totalScore}, ${r.holesPlayed} holes)"
                 is ImportResult.ActivityAttached -> "activity attached to existing round"
                 is ImportResult.ActivityStored -> "activity held: ${r.reason}"
                 is ImportResult.Duplicate -> "already have round: ${r.what}"
