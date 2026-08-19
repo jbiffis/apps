@@ -1,0 +1,70 @@
+package dev.jbiffis.caddie.ble
+
+import dev.jbiffis.caddie.fit.FitReader
+import dev.jbiffis.caddie.fit.GolfFit
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * Live-golf service (Smart field 7), verified against a real Garmin Golf HCI capture.
+ * The captured scorecard FIT blobs live in test resources.
+ */
+class GolfLiveTest {
+
+    private fun resource(name: String): ByteArray =
+        javaClass.getResourceAsStream("/golf_live/$name")!!.readBytes()
+
+    /** The poll and ack builders must match the exact bytes Garmin Golf sent. */
+    @Test
+    fun buildersMatchCapturedBytes() {
+        // phone->watch  7:{ 3:{ 1:16 } }
+        assertEquals("3a041a020810", GolfLive.buildPoll(16).toHex())
+        // phone->watch  7:{ 6:{ 1:16, 2:1 } }
+        assertEquals("3a06320408101001", GolfLive.buildReceiveAck(16).toHex())
+    }
+
+    /** A service-7 push round-trips: wrap a real FIT, parse it back out unchanged. */
+    @Test
+    fun parsesScorecardPush() {
+        val fit = resource("live_scorecard.fit")
+        // Rebuild the watch's push: Smart{ 7:{ 5:{ 1:seq, 2:0, 3:FIT } } }
+        val inner = Protobuf.Writer().varint(1, 42).varint(2, 0).bytes(3, fit)
+        val smart = Protobuf.Writer()
+            .message(GolfLive.SMART_GOLF, Protobuf.Writer().message(5, inner))
+            .toByteArray()
+
+        assertTrue(GolfLive.isGolf(smart))
+        val push = GolfLive.parsePush(smart)!!
+        assertEquals(42L, push.seq)
+        assertArrayEquals(fit, push.fit)
+    }
+
+    /** The pushed FIT is a real golf scorecard our parser reads end-to-end. */
+    @Test
+    fun pushedFitParsesAsScorecard() {
+        val fit = resource("live_scorecard.fit")
+        val messages = FitReader.decode(fit)
+        assertTrue("has golf score", GolfFit.hasGolfScore(messages))
+        val score = GolfFit.parseScore(messages)
+        // A round that was mid-play when captured: some holes have strokes, start time set.
+        assertTrue("start time present", score.startedAtS > 0)
+        assertTrue("at least one hole scored", score.holes.any { it.strokes > 0 })
+    }
+
+    /**
+     * Two pushes of the SAME round carry different file_id timestamps but the same
+     * start time — the key the live importer must de-dupe on.
+     */
+    @Test
+    fun sameRoundKeepsStableStartAcrossPushes() {
+        val early = GolfFit.parseScore(FitReader.decode(resource("live_early.fit")))
+        val later = GolfFit.parseScore(FitReader.decode(resource("live_scorecard.fit")))
+        assertEquals("stable round start", early.startedAtS, later.startedAtS)
+        // The later push has strictly more scoring than the early one.
+        assertTrue(later.holes.sumOf { it.strokes } >= early.holes.sumOf { it.strokes })
+    }
+
+    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
+}

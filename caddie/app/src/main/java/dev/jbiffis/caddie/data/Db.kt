@@ -207,6 +207,14 @@ interface CaddieDao {
     @Query("SELECT * FROM rounds WHERE live = 1")
     suspend fun liveRounds(): List<RoundEntity>
 
+    /**
+     * Match an in-progress round by its stable start time. Live scorecard pushes each
+     * carry a freshly-stamped file_id, so they can't be de-duped on scoreFileTimeS —
+     * the round-start timestamp (mesg 190) is what stays constant across pushes.
+     */
+    @Query("SELECT * FROM rounds WHERE live = 1 AND startedAtS = :startedAtS LIMIT 1")
+    suspend fun liveRoundByStart(startedAtS: Long): RoundEntity?
+
     @Query(
         "UPDATE rounds SET activityTimeS = :activityTimeS, totalCalories = :calories, " +
             "avgHeartRate = :avgHr, maxHeartRate = :maxHr WHERE id = :roundId"

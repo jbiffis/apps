@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-63 rt-capture"
+        const val BLE_BUILD = "ble-64 golf-live"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -120,16 +120,12 @@ class GarminBleClient(
     // Realtime-capture diagnostic: log every inbound message to reverse the live stream.
     @Volatile private var captureAll = false
 
-    // ---- Live-round polling ----------------------------------------------------
-    // While the watch is on the wrist mid-round, re-enumerate every so often and pull
-    // only files whose size GREW since the last look — that growing file is the round
-    // in progress. This needs no knowledge of the golf file-type code, and if the watch
-    // doesn't expose the in-progress file, nothing grows and nothing is pulled.
-    @Volatile private var livePolling = false
-    private var livePollActive = false          // an enumeration for a poll is in flight
-    private var liveBaselined = false           // first poll only snapshots sizes
-    private val liveFileSizes = HashMap<Long, Long>() // fileId.id1 → last seen size
-    private var liveJob: kotlinx.coroutines.Job? = null
+    // ---- Live golf polling -----------------------------------------------------
+    // While a round is in progress, poll the golf service (Smart field 7) for the
+    // current scorecard; the watch answers with the whole scorecard as a golf FIT.
+    @Volatile private var golfLiveOn = false
+    private var golfSeq = 0
+    private var golfJob: kotlinx.coroutines.Job? = null
 
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
     private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
@@ -221,7 +217,7 @@ class GarminBleClient(
     }
 
     fun disconnect() {
-        stopLivePolling()
+        stopGolfLive()
         unregisterBondReceiver()
         gatt?.close()
         gatt = null
@@ -544,6 +540,7 @@ class GarminBleClient(
     }
 
     private fun onSmartMessage(smart: ByteArray) {
+        if (GolfLive.isGolf(smart)) { handleGolfSmart(smart); return }
         val fss = FileSync.fileSyncServiceOf(smart)
         if (fss == null) {
             log("Smart msg (non-filesync): ${Gfdi.hex(smart, 32)}")
@@ -599,7 +596,6 @@ class GarminBleClient(
             return
         }
         log("  → paging done (${remoteFiles.size} files total)")
-        if (livePollActive) { finishLivePoll(); return }
         if (diagnosticListOnly) {
             log("── File list (V2, no download) — ${remoteFiles.size} file(s), largest first:")
             remoteFiles.sortedByDescending { it.size }.take(60).forEach {
@@ -922,84 +918,61 @@ class GarminBleClient(
 
     val isCapturing: Boolean get() = captureAll
 
-    fun startLivePolling(intervalMs: Long = 75_000) {
-        if (onPartialFile == null) { log("Live polling unavailable (no partial importer)."); return }
-        if (livePolling) return
-        livePolling = true
-        liveBaselined = false
-        liveFileSizes.clear()
-        log("── Live round polling ON (every ${intervalMs / 1000}s). Play a hole and watch for updates.")
-        liveJob = scope.launch {
-            while (livePolling) {
-                if (_state.value == State.READY) livePollOnce()
+    /**
+     * Live golf: while a round is in progress on the watch, poll the golf service
+     * (Smart field 7) for the current scorecard every [intervalMs]. The watch answers
+     * with the whole scorecard as a golf FIT, which we import as a live round. See
+     * [GolfLive]. Safe no-op if no partial importer was wired in.
+     */
+    fun startGolfLive(intervalMs: Long = 60_000) {
+        if (onPartialFile == null) { log("Live golf unavailable (no partial importer)."); return }
+        if (golfLiveOn) return
+        golfLiveOn = true
+        golfSeq = 0
+        log("── LIVE GOLF ON. Asking the watch for the scorecard every ${intervalMs / 1000}s. " +
+            "Play a hole; it should appear as a LIVE round.")
+        golfJob = scope.launch {
+            while (golfLiveOn) {
+                if (_state.value == State.READY) {
+                    golfSeq++
+                    log("Live golf: poll #$golfSeq")
+                    runCatching { sendProtobuf(GolfLive.buildPoll(golfSeq)) }
+                }
                 kotlinx.coroutines.delay(intervalMs)
             }
         }
     }
 
-    fun stopLivePolling() {
-        if (!livePolling) return
-        livePolling = false
-        liveJob?.cancel()
-        liveJob = null
-        if (livePollActive) { livePollActive = false; if (_state.value == State.SYNCING) _state.value = State.READY }
-        log("── Live round polling OFF.")
+    fun stopGolfLive() {
+        if (!golfLiveOn) return
+        golfLiveOn = false
+        golfJob?.cancel(); golfJob = null
+        log("── Live golf OFF.")
     }
 
-    val isLivePolling: Boolean get() = livePolling
+    val isGolfLive: Boolean get() = golfLiveOn
 
-    /** One enumeration pass for live polling. Terminates in [finishLivePoll]. */
-    private suspend fun livePollOnce() {
-        if (livePollActive) return
-        _state.value = State.SYNCING
-        livePollActive = true
-        try {
-            send(Gfdi.directoryFilter())
-            awaitResponse(Gfdi.MSG_DIRECTORY_FILE_FILTER, 3000)
-            // vívoactive-class watches enumerate over FileSyncService (V2); the ANT-FS
-            // directory is empty. Go straight to V2 — the size-diff needs its byte sizes.
-            remoteFiles.clear(); lastFileListCursor = -1; prevRemoteCount = 0
-            emptyPageStreak = 0; filePagesFetched = 0
-            sendProtobuf(FileSync.buildFileListRequest(null))
-            // Async: onFileListPage → finishLivePoll when paging completes.
-        } catch (e: Exception) {
-            log("Live poll failed: ${e.message}")
-            livePollActive = false
-            if (_state.value == State.SYNCING) _state.value = State.READY
-        }
-    }
-
-    private suspend fun finishLivePoll() {
-        val partialImport = onPartialFile
-        // First pass just records a size baseline; we can't tell what's growing yet.
-        val candidates = if (!liveBaselined) emptyList() else remoteFiles.filter { f ->
-            val id = f.id?.id1 ?: return@filter false
-            val prev = liveFileSizes[id]
-            prev == null || f.size > prev // brand-new file, or one that grew
-        }
-        remoteFiles.forEach { f -> f.id?.id1?.let { liveFileSizes[it] = f.size } }
-        liveBaselined = true
-        livePollActive = false
-
-        if (partialImport == null || candidates.isEmpty()) {
-            log("Live poll: no growing file yet (${remoteFiles.size} files seen).")
-        } else {
-            log("Live poll: ${candidates.size} changed file(s) — importing as partial round.")
-            for (f in candidates.sortedByDescending { it.size }) {
-                val bytes = downloadFileV2(f) ?: continue
-                try {
-                    val summary = partialImport("live_${f.id?.id1}.fit", bytes)
-                    if (!summary.startsWith("skipped") && !summary.startsWith("Could not") &&
-                        !summary.startsWith("Round summary not")) {
-                        log("  ↻ ${f.typeName ?: "file"} ${bytes.size}b → $summary")
-                    }
-                } catch (e: Exception) {
-                    log("  live import error: ${e.message}")
+    /** Handle an inbound golf-service (field 7) Smart message: scorecard push or descriptor. */
+    private fun handleGolfSmart(smart: ByteArray) {
+        GolfLive.parsePush(smart)?.let { push ->
+            log("Live golf: scorecard push seq=${push.seq} (${push.fit.size}b FIT)")
+            scope.launch {
+                runCatching { sendProtobuf(GolfLive.buildReceiveAck(push.seq)) }
+                val importer = onPartialFile
+                if (importer != null) {
+                    val summary = runCatching { importer("golf_live_${push.seq}.fit", push.fit) }
+                        .getOrElse { "import error: ${it.message}" }
+                    log("  → $summary")
                 }
             }
+            return
         }
-        runCatching { send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE)) }
-        _state.value = State.READY
+        GolfLive.parseXfer(smart)?.let { n ->
+            // Secondary transfer descriptor — acknowledge so the watch stays happy.
+            scope.launch { runCatching { sendProtobuf(GolfLive.buildXferAck(n, n, 0L)) } }
+            return
+        }
+        log("Live golf: other service-7 msg ${Gfdi.hex(smart, 24)}")
     }
 
     fun startSync() {

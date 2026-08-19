@@ -121,6 +121,14 @@ class Repository(private val dao: CaddieDao) {
     }
 
     private suspend fun importScore(score: GolfFit.ScoreFile, partial: Boolean): ImportResult {
+        // Live scorecard pushes re-stamp file_id every time, so match an in-progress
+        // round by its stable start time. This unifies every poll of a round — and the
+        // final saved file — onto the one live round, finalizing it when complete.
+        if (score.startedAtS > 0) {
+            dao.liveRoundByStart(score.startedAtS)?.let { live ->
+                return updateLiveRound(live, score, partial)
+            }
+        }
         val existing = dao.roundByFileTime(score.createdAtS)
         if (existing != null) {
             // A finalized round we're not tracking live: keep the stored copy (and any

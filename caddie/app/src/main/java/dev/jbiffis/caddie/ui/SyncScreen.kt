@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import dev.jbiffis.caddie.CaddieApp
 import dev.jbiffis.caddie.ble.GarminBleClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private fun blePermissions(): Array<String> =
     if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
@@ -76,8 +78,18 @@ fun SyncScreen(app: CaddieApp) {
 
     val devices = remember { mutableStateListOf<BluetoothDevice>() }
     var scanning by remember { mutableStateOf(false) }
-    var livePolling by remember { mutableStateOf(client.isLivePolling) }
+    var livePolling by remember { mutableStateOf(client.isGolfLive) }
     var capturing by remember { mutableStateOf(client.isCapturing) }
+
+    // While live scoring is on, also refresh wind for the in-progress round every ~5 min
+    // so the shot view reflects current conditions, not just the round's start.
+    LaunchedEffect(livePolling) {
+        while (livePolling) {
+            val live = withContext(Dispatchers.IO) { app.db.dao().liveRounds() }
+            for (r in live) withContext(Dispatchers.IO) { app.repository.fetchWindForRound(r.id) }
+            kotlinx.coroutines.delay(5 * 60_000L)
+        }
+    }
 
     val bluetoothManager = remember { context.getSystemService(BluetoothManager::class.java) }
     val scanCallback = remember {
@@ -209,16 +221,15 @@ fun SyncScreen(app: CaddieApp) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (livePolling) {
-                            Button(onClick = { client.stopLivePolling(); livePolling = false }) {
+                            Button(onClick = { client.stopGolfLive(); livePolling = false }) {
                                 Text("Stop live round")
                             }
-                            Text("watching for updates…", style = MaterialTheme.typography.labelMedium)
+                            Text("live scoring on…", style = MaterialTheme.typography.labelMedium)
                         } else {
                             OutlinedButton(
-                                onClick = { client.startLivePolling(); livePolling = true },
+                                onClick = { client.startGolfLive(); livePolling = true },
                                 enabled = state == GarminBleClient.State.READY,
                             ) { Text("Watch live round") }
-                            Text("experimental", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
