@@ -1297,7 +1297,7 @@ private fun HoleCanvas(
         for (t in tufts) {
             val p = transform(t.lat, t.lon)
             if (p.x > -30f && p.x < size.width + 30f && p.y > -30f && p.y < size.height + 30f) {
-                tree(p, t.baseR * zf, t.seed)
+                tree(p, t.baseR * zf * 1.3f, t.seed)
             }
         }
 
