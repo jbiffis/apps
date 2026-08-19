@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-74 golf-response"
+        const val BLE_BUILD = "ble-75 golf-services"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -91,6 +91,8 @@ class GarminBleClient(
 
     // Multi-link state
     private var gfdiHandle = -1
+    /** Extra service handles registered alongside GFDI (Connect opens several). */
+    private val auxHandles = java.util.Collections.synchronizedSet(HashSet<Int>())
     private val controlResponses = Channel<MultiLink.RegisterResponse>(Channel.BUFFERED)
 
     // COBS reassembly buffer per multi-link handle (streams must not interleave)
@@ -229,6 +231,7 @@ class GarminBleClient(
         writeChar = null
         notifyChar = null
         gfdiHandle = -1
+        auxHandles.clear()
         fileXferHandle = -1
         fileXferService = -1
         fileXferServiceIdx = 0
@@ -358,10 +361,35 @@ class GarminBleClient(
         log("GFDI registered on handle ${gfdiHandle} (reliability=${resp.reliability}). " +
             "Waiting for the watch's device info…")
 
+        // Garmin Connect registers several multi-link services, not just GFDI. The watch
+        // pushes live golf on one of those other channels, so a client that registers only
+        // GFDI never sees it however correct its handshake is. Open them too.
+        if (isGolfArmed()) registerAuxServices()
+
         // First-connect pairing courtesy event; the watch then sends DEVICE_INFORMATION.
         val address = device?.address
         if (address != null && !isPaired(address)) {
             send(Gfdi.systemEvent(Gfdi.EVENT_PAIR_START))
+        }
+    }
+
+    /**
+     * Register the non-GFDI multi-link services Garmin Connect opens (captured:
+     * 0x0004 and 0x0016 unreliable, 0x0002 reliable). Data arriving on their handles
+     * is decoded exactly like GFDI traffic.
+     */
+    private suspend fun registerAuxServices() {
+        for ((service, reliability) in listOf(0x0004 to 0, 0x0016 to 0, 0x0002 to 2)) {
+            while (controlResponses.tryReceive().getOrNull() != null) { /* drain */ }
+            sendRaw(MultiLink.registerRequest(service, reliability))
+            val r = withTimeoutOrNull(3000) { controlResponses.receive() }
+            if (r == null || r.handle == 0) {
+                log("Aux service 0x${service.toString(16)}: no handle (status=${r?.status})")
+            } else {
+                auxHandles.add(r.handle)
+                log("Aux service 0x${service.toString(16)} registered on handle ${r.handle}")
+            }
+            kotlinx.coroutines.delay(150)
         }
     }
 
@@ -414,6 +442,9 @@ class GarminBleClient(
         if (handle == fileXferHandle) {
             fileXferChunks.trySend(payload)
             return
+        }
+        if (handle != gfdiHandle && handle in auxHandles) {
+            log("AUX h$handle ← ${Gfdi.hex(payload, 32)}")
         }
         feedCobs(handle, payload)
     }
