@@ -76,6 +76,7 @@ fun SyncScreen(app: CaddieApp) {
 
     val devices = remember { mutableStateListOf<BluetoothDevice>() }
     var scanning by remember { mutableStateOf(false) }
+    var livePolling by remember { mutableStateOf(client.isLivePolling) }
 
     val bluetoothManager = remember { context.getSystemService(BluetoothManager::class.java) }
     val scanCallback = remember {
@@ -187,6 +188,20 @@ fun SyncScreen(app: CaddieApp) {
                             enabled = state == GarminBleClient.State.READY,
                         ) { Text("List files (no download)") }
                         OutlinedButton(onClick = { client.disconnect() }) { Text("Disconnect") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (livePolling) {
+                            Button(onClick = { client.stopLivePolling(); livePolling = false }) {
+                                Text("Stop live round")
+                            }
+                            Text("watching for updates…", style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            OutlinedButton(
+                                onClick = { client.startLivePolling(); livePolling = true },
+                                enabled = state == GarminBleClient.State.READY,
+                            ) { Text("Watch live round") }
+                            Text("experimental", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
                 else -> {

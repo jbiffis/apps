@@ -3,6 +3,7 @@ package dev.jbiffis.caddie.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -254,13 +255,34 @@ fun RoundsScreen(app: CaddieApp, onOpenRound: (Long) -> Unit, onOpenSettings: ()
 }
 
 @Composable
+private fun LiveBadge() {
+    Box(
+        Modifier
+            .background(C.Orange, RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+    ) {
+        Text("LIVE", style = T.metaSmall, color = C.Canvas)
+    }
+}
+
+@Composable
 private fun RoundCard(round: RoundEntity, onClick: () -> Unit, onDelete: () -> Unit) {
     CaddieCard(onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(round.courseName, style = T.rowTitleBold, color = C.TextPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(round.courseName, style = T.rowTitleBold, color = C.TextPrimary)
+                    if (round.live) {
+                        Spacer(Modifier.padding(start = 4.dp))
+                        LiveBadge()
+                    }
+                }
                 Spacer(Modifier.padding(top = 2.dp))
-                Text(formatDate(round.startedAtS), style = T.meta, color = C.TextSecondary)
+                Text(
+                    if (round.live) "In progress · ${formatDate(round.startedAtS)}"
+                    else formatDate(round.startedAtS),
+                    style = T.meta, color = C.TextSecondary,
+                )
                 val details = buildList {
                     round.teeName?.let { add("$it tees") }
                     round.totalPutts?.let { add("$it putts") }

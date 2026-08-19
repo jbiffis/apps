@@ -51,12 +51,17 @@ import java.util.TimeZone
 class GarminBleClient(
     private val context: Context,
     private val prefs: SharedPreferences,
+    /**
+     * Import a still-growing (partial) file pulled during live-round polling and
+     * return a short human summary. Null disables live polling.
+     */
+    private val onPartialFile: (suspend (name: String, bytes: ByteArray) -> String)? = null,
     /** Import the downloaded FIT and return a short human summary for the sync log. */
     private val onFileDownloaded: suspend (name: String, bytes: ByteArray) -> String,
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-60 partial-fit"
+        const val BLE_BUILD = "ble-61 live-poll"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -112,6 +117,17 @@ class GarminBleClient(
     private var filePagesFetched = 0
     // Diagnostic: list files without downloading them (safe to run during a round).
     private var diagnosticListOnly = false
+
+    // ---- Live-round polling ----------------------------------------------------
+    // While the watch is on the wrist mid-round, re-enumerate every so often and pull
+    // only files whose size GREW since the last look — that growing file is the round
+    // in progress. This needs no knowledge of the golf file-type code, and if the watch
+    // doesn't expose the in-progress file, nothing grows and nothing is pulled.
+    @Volatile private var livePolling = false
+    private var livePollActive = false          // an enumeration for a poll is in flight
+    private var liveBaselined = false           // first poll only snapshots sizes
+    private val liveFileSizes = HashMap<Long, Long>() // fileId.id1 → last seen size
+    private var liveJob: kotlinx.coroutines.Job? = null
 
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
     private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
@@ -203,6 +219,7 @@ class GarminBleClient(
     }
 
     fun disconnect() {
+        stopLivePolling()
         unregisterBondReceiver()
         gatt?.close()
         gatt = null
@@ -574,6 +591,7 @@ class GarminBleClient(
             return
         }
         log("  → paging done (${remoteFiles.size} files total)")
+        if (livePollActive) { finishLivePoll(); return }
         if (diagnosticListOnly) {
             log("── File list (V2, no download) — ${remoteFiles.size} file(s), largest first:")
             remoteFiles.sortedByDescending { it.size }.take(60).forEach {
@@ -863,6 +881,91 @@ class GarminBleClient(
                 if (_state.value == State.SYNCING) _state.value = State.READY
             }
         }
+    }
+
+    /**
+     * Start watching for an in-progress round: every [intervalMs] (while connected and
+     * idle) re-enumerate the watch's files and import any that have grown since the last
+     * look as a partial round. Safe no-op if no partial importer was wired in.
+     */
+    fun startLivePolling(intervalMs: Long = 75_000) {
+        if (onPartialFile == null) { log("Live polling unavailable (no partial importer)."); return }
+        if (livePolling) return
+        livePolling = true
+        liveBaselined = false
+        liveFileSizes.clear()
+        log("── Live round polling ON (every ${intervalMs / 1000}s). Play a hole and watch for updates.")
+        liveJob = scope.launch {
+            while (livePolling) {
+                if (_state.value == State.READY) livePollOnce()
+                kotlinx.coroutines.delay(intervalMs)
+            }
+        }
+    }
+
+    fun stopLivePolling() {
+        if (!livePolling) return
+        livePolling = false
+        liveJob?.cancel()
+        liveJob = null
+        if (livePollActive) { livePollActive = false; if (_state.value == State.SYNCING) _state.value = State.READY }
+        log("── Live round polling OFF.")
+    }
+
+    val isLivePolling: Boolean get() = livePolling
+
+    /** One enumeration pass for live polling. Terminates in [finishLivePoll]. */
+    private suspend fun livePollOnce() {
+        if (livePollActive) return
+        _state.value = State.SYNCING
+        livePollActive = true
+        try {
+            send(Gfdi.directoryFilter())
+            awaitResponse(Gfdi.MSG_DIRECTORY_FILE_FILTER, 3000)
+            // vívoactive-class watches enumerate over FileSyncService (V2); the ANT-FS
+            // directory is empty. Go straight to V2 — the size-diff needs its byte sizes.
+            remoteFiles.clear(); lastFileListCursor = -1; prevRemoteCount = 0
+            emptyPageStreak = 0; filePagesFetched = 0
+            sendProtobuf(FileSync.buildFileListRequest(null))
+            // Async: onFileListPage → finishLivePoll when paging completes.
+        } catch (e: Exception) {
+            log("Live poll failed: ${e.message}")
+            livePollActive = false
+            if (_state.value == State.SYNCING) _state.value = State.READY
+        }
+    }
+
+    private suspend fun finishLivePoll() {
+        val partialImport = onPartialFile
+        // First pass just records a size baseline; we can't tell what's growing yet.
+        val candidates = if (!liveBaselined) emptyList() else remoteFiles.filter { f ->
+            val id = f.id?.id1 ?: return@filter false
+            val prev = liveFileSizes[id]
+            prev == null || f.size > prev // brand-new file, or one that grew
+        }
+        remoteFiles.forEach { f -> f.id?.id1?.let { liveFileSizes[it] = f.size } }
+        liveBaselined = true
+        livePollActive = false
+
+        if (partialImport == null || candidates.isEmpty()) {
+            log("Live poll: no growing file yet (${remoteFiles.size} files seen).")
+        } else {
+            log("Live poll: ${candidates.size} changed file(s) — importing as partial round.")
+            for (f in candidates.sortedByDescending { it.size }) {
+                val bytes = downloadFileV2(f) ?: continue
+                try {
+                    val summary = partialImport("live_${f.id?.id1}.fit", bytes)
+                    if (!summary.startsWith("skipped") && !summary.startsWith("Could not") &&
+                        !summary.startsWith("Round summary not")) {
+                        log("  ↻ ${f.typeName ?: "file"} ${bytes.size}b → $summary")
+                    }
+                } catch (e: Exception) {
+                    log("  live import error: ${e.message}")
+                }
+            }
+        }
+        runCatching { send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_COMPLETE)) }
+        _state.value = State.READY
     }
 
     fun startSync() {
