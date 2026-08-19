@@ -31,7 +31,9 @@ object Overpass {
               way["golf"]($bbox);
               relation["golf"]($bbox);
               way["natural"~"^(water|wood|scrub|sand)$"]($bbox);
+              relation["natural"~"^(water|wood|scrub)$"]($bbox);
               way["landuse"="forest"]($bbox);
+              relation["landuse"="forest"]($bbox);
               node["natural"="tree"]($bbox);
             );
             out tags geom;
