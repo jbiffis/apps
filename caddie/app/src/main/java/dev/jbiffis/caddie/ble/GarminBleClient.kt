@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-72 golf-newfile"
+        const val BLE_BUILD = "ble-73 golf-invite"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -626,7 +626,10 @@ class GarminBleClient(
         }
         if (Protobuf.firstBytes(Protobuf.decode(fss), FileSync.FS_FILE_RESPONSE) != null) {
             val handle = FileSync.parseFileResponseHandle(fss)
-            log("File response: transfer handle=$handle")
+            val status = FileSync.parseFileResponseStatus(fss)
+            if (handle == null && status != null && status != 0L) {
+                log("File response REFUSED: status=$status (watch won't serve this file now)")
+            } else log("File response: transfer handle=$handle")
             fileResponseHandles.trySend(handle ?: -1)
             return
         }
@@ -1063,10 +1066,11 @@ class GarminBleClient(
                         runCatching { sendProtobuf(GolfLive.buildPoll(lastAnnouncedSeq)) }
                     }
                 } else {
-                    log("Live golf: ${elapsed}s — no announcement yet; re-declaring foreground. " +
+                    log("Live golf: ${elapsed}s — no announcement yet; re-inviting scorecard. " +
                         "Score a hole on the watch and keep waiting.")
                     if (_state.value == State.READY) {
                         runCatching { send(Gfdi.systemEvent(Gfdi.EVENT_HOST_FOREGROUND)) }
+                        runCatching { sendProtobuf(GolfLive.buildOwnScorecardState(0, 0)) }
                     }
                 }
             }
@@ -1092,6 +1096,11 @@ class GarminBleClient(
         runCatching { send(Gfdi.systemEvent(Gfdi.EVENT_HOST_FOREGROUND)) }
         runCatching { sendProtobuf(GolfLive.buildS42Activate()) }
         runCatching { sendProtobuf(GolfLive.buildFileSyncActivate()) }
+        // Scorecard sync is bidirectional: tell the watch we hold nothing, so it
+        // pushes the current scorecard.
+        kotlinx.coroutines.delay(400)
+        log("Live golf: announcing empty scorecard state (inviting the watch to push)…")
+        runCatching { sendProtobuf(GolfLive.buildOwnScorecardState(0, 0)) }
     }
 
     fun stopGolfLive() {

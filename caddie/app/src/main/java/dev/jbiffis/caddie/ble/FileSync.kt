@@ -135,4 +135,15 @@ object FileSync {
         if (status != 0L) return null
         return Protobuf.firstVarint(r, 3)?.toInt()
     }
+
+    /**
+     * Why a FileRequest was refused. The watch returns a non-zero status when it won't
+     * serve a file (e.g. while an activity is in progress), which otherwise surfaces
+     * only as a null transfer handle.
+     */
+    fun parseFileResponseStatus(fileSyncService: ByteArray): Long? {
+        val fss = Protobuf.decode(fileSyncService)
+        val resp = Protobuf.firstBytes(fss, FS_FILE_RESPONSE) ?: return null
+        return Protobuf.firstVarint(Protobuf.decode(resp), 1) ?: 0L
+    }
 }

@@ -164,6 +164,17 @@ object GolfLive {
 
     // Connect sends these two {3:{1:36352}} requests (on services 42 and 43) shortly
     // before the watch begins pushing the golf scorecard — the "activate golf" nudge.
+    /**
+     * Announce OUR scorecard state to the watch: Smart{ 5:{ 7:{ 1:seq, 2:size } } }.
+     * The capture shows this is bidirectional — the phone tells the watch which
+     * scorecard version it holds, and the watch pushes anything newer. Declaring
+     * seq 0 / size 0 ("I have nothing") should invite the current scorecard.
+     */
+    fun buildOwnScorecardState(seq: Int = 0, size: Int = 0): ByteArray = Protobuf.Writer()
+        .message(SMART_NOTIFY, Protobuf.Writer().message(7,
+            Protobuf.Writer().varint(1, seq.toLong()).varint(2, size.toLong())))
+        .toByteArray()
+
     private const val ACTIVATE_MAGIC = 36352L
     fun buildS42Activate(): ByteArray = Protobuf.Writer()
         .message(42, Protobuf.Writer().message(3, Protobuf.Writer().varint(1, ACTIVATE_MAGIC))).toByteArray()
