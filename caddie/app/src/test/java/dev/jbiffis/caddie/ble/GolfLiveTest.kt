@@ -41,6 +41,27 @@ class GolfLiveTest {
         assertEquals(30, GolfLive.topField(GolfLive.buildS30Hello()))
     }
 
+    /**
+     * Replies to watch-initiated requests must go out as PROTOBUF_RESPONSE echoing the
+     * watch's request id — sent as a REQUEST the watch never sees its question answered.
+     */
+    @Test
+    fun repliesAreResponsesEchoingRequestId() {
+        val body = GolfLive.buildTokenReply()
+        val resp = Gfdi.protobufResponse(0x1234, body)
+        val req = Gfdi.protobufRequest(0x1234, body)
+
+        // type field (bytes 2..3, little endian) distinguishes them
+        fun typeOf(f: ByteArray) = (f[2].toInt() and 0xFF) or ((f[3].toInt() and 0xFF) shl 8)
+        assertEquals(Gfdi.MSG_PROTOBUF_RESPONSE, typeOf(resp))
+        assertEquals(Gfdi.MSG_PROTOBUF_REQUEST, typeOf(req))
+
+        // both carry the same request id and payload, so only the type differs
+        val parsed = Gfdi.parseProtobufRequest(resp.copyOfRange(4, resp.size - 2))!!
+        assertEquals(0x1234, parsed.requestId)
+        assertArrayEquals(body, parsed.data)
+    }
+
     /** The watch's scorecard announcement 5:{7:{1:seq,2:size}} yields the seq to poll. */
     @Test
     fun parsesAnnouncedSeq() {

@@ -255,14 +255,28 @@ object Gfdi {
     }
 
     /** Build a PROTOBUF_REQUEST (single chunk) carrying a Smart-message [protobuf]. */
-    fun protobufRequest(requestId: Int, protobuf: ByteArray): ByteArray {
+    fun protobufRequest(requestId: Int, protobuf: ByteArray): ByteArray =
+        protobufMessage(MSG_PROTOBUF_REQUEST, requestId, protobuf)
+
+    /**
+     * Build a PROTOBUF_RESPONSE answering the watch's request [requestId].
+     *
+     * This distinction matters: replies to watch-initiated requests (tokens, config
+     * queries, scorecard receipts) must come back as RESPONSE echoing the watch's own
+     * request id. Sent as a REQUEST instead, the watch never sees its question answered
+     * and re-asks forever.
+     */
+    fun protobufResponse(requestId: Int, protobuf: ByteArray): ByteArray =
+        protobufMessage(MSG_PROTOBUF_RESPONSE, requestId, protobuf)
+
+    private fun protobufMessage(type: Int, requestId: Int, protobuf: ByteArray): ByteArray {
         val payload = ByteBuffer.allocate(2 + 4 + 4 + 4 + protobuf.size).order(ByteOrder.LITTLE_ENDIAN)
         payload.putShort(requestId.toShort())
         payload.putInt(0)                    // dataOffset
         payload.putInt(protobuf.size)        // total protobuf length
         payload.putInt(protobuf.size)        // this chunk length
         payload.put(protobuf)
-        return frame(MSG_PROTOBUF_REQUEST, payload.array())
+        return frame(type, payload.array())
     }
 
     /**

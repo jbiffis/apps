@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-73 golf-invite"
+        const val BLE_BUILD = "ble-74 golf-response"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -545,12 +545,16 @@ class GarminBleClient(
             val smart = buf.toByteArray()
             protobufBuffers.remove(req.requestId)
             log("protobuf #${req.requestId} complete (${smart.size}b)")
-            onSmartMessage(smart)
+            onSmartMessage(smart, req.requestId)
         }
     }
 
-    private fun onSmartMessage(smart: ByteArray) {
-        if (GolfLive.isGolf(smart)) { handleGolfSmart(smart); return }
+    /** Reply to a watch-initiated protobuf request, echoing its request id. */
+    private suspend fun replyProtobuf(requestId: Int, smart: ByteArray): Boolean =
+        send(Gfdi.protobufResponse(requestId, smart))
+
+    private fun onSmartMessage(smart: ByteArray, requestId: Int = 0) {
+        if (GolfLive.isGolf(smart)) { handleGolfSmart(smart, requestId); return }
         if (GolfLive.isNotify(smart)) {
             val seq = GolfLive.parseAnnouncedSeq(smart)
             if (seq != null) {
@@ -565,7 +569,7 @@ class GarminBleClient(
         if (GolfLive.isAppReg(smart)) {
             if (GolfLive.isAppRegConfigRequest(smart)) {
                 log("Live golf: completing app-reg handshake")
-                scope.launch { runCatching { sendProtobuf(GolfLive.buildAppRegAck()) } }
+                scope.launch { runCatching { replyProtobuf(requestId, GolfLive.buildAppRegAck()) } }
             } else {
                 log("Live golf: app-registration response ${Gfdi.hex(smart, 24)}")
             }
@@ -574,19 +578,19 @@ class GarminBleClient(
         // Onboarding handshake the watch runs before it will announce scorecards.
         if (golfLiveOn) {
             if (GolfLive.isTokenRequest(smart)) {
-                log("Live golf: watch requested tokens — replying with captured credentials")
-                scope.launch { runCatching { sendProtobuf(GolfLive.buildTokenReply()) } }
+                log("Live golf: watch requested tokens — answering (as RESPONSE #$requestId)")
+                scope.launch { runCatching { replyProtobuf(requestId, GolfLive.buildTokenReply()) } }
                 return
             }
             when (GolfLive.topField(smart)) {
                 GolfLive.SMART_S16 -> {
                     log("Live golf: answering s16")
-                    scope.launch { runCatching { sendProtobuf(GolfLive.build16Ack()) } }
+                    scope.launch { runCatching { replyProtobuf(requestId, GolfLive.build16Ack()) } }
                     return
                 }
                 GolfLive.SMART_S10 -> {
                     log("Live golf: answering s10")
-                    scope.launch { runCatching { sendProtobuf(GolfLive.build10Ack()) } }
+                    scope.launch { runCatching { replyProtobuf(requestId, GolfLive.build10Ack()) } }
                     return
                 }
                 24, 42, 21, 8, 30 -> {
@@ -1116,11 +1120,11 @@ class GarminBleClient(
     val isGolfLive: Boolean get() = golfLiveOn
 
     /** Handle an inbound golf-service (field 7) Smart message: scorecard push or descriptor. */
-    private fun handleGolfSmart(smart: ByteArray) {
+    private fun handleGolfSmart(smart: ByteArray, requestId: Int = 0) {
         GolfLive.parsePush(smart)?.let { push ->
             log("Live golf: scorecard push seq=${push.seq} (${push.fit.size}b FIT)")
             scope.launch {
-                runCatching { sendProtobuf(GolfLive.buildReceiveAck(push.seq)) }
+                runCatching { replyProtobuf(requestId, GolfLive.buildReceiveAck(push.seq)) }
                 val importer = onPartialFile
                 if (importer != null) {
                     val summary = runCatching { importer("golf_live_${push.seq}.fit", push.fit) }
@@ -1132,7 +1136,7 @@ class GarminBleClient(
         }
         GolfLive.parseXfer(smart)?.let { n ->
             // Secondary transfer descriptor — acknowledge so the watch stays happy.
-            scope.launch { runCatching { sendProtobuf(GolfLive.buildXferAck(n, n, 0L)) } }
+            scope.launch { runCatching { replyProtobuf(requestId, GolfLive.buildXferAck(n, n, 0L)) } }
             return
         }
         log("Live golf: other service-7 msg ${Gfdi.hex(smart, 24)}")
