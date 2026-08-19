@@ -21,6 +21,7 @@ package dev.jbiffis.caddie.ble
 object GolfLive {
     const val SMART_GOLF = 7
     const val SMART_APP_REG = 13   // app-registration service
+    const val SMART_NOTIFY = 5     // scorecard-availability announcements
 
     /**
      * The watch only pushes golf data to a client that has registered itself as the
@@ -71,6 +72,34 @@ object GolfLive {
         val idMsg = Protobuf.Writer().fixed64(1, id).fixed64(2, hash)
         return smart(XFER_ACK, Protobuf.Writer().varint(1, 1).varint(2, n).message(3, idMsg))
     }
+
+    /**
+     * Complete the app-registration handshake: the watch sends Smart{ 13:{ 5:{..} } }
+     * and expects Smart{ 13:{ 6:{ 1:1, 2:{ 1:0, 2:1 } } } } back (captured verbatim).
+     */
+    fun buildAppRegAck(): ByteArray = Protobuf.Writer()
+        .message(SMART_APP_REG, Protobuf.Writer().message(6,
+            Protobuf.Writer().varint(1, 1).message(2, Protobuf.Writer().varint(1, 0).varint(2, 1))))
+        .toByteArray()
+
+    /** True if this app-reg message carries the 13:{5:{..}} config request the watch sends. */
+    fun isAppRegConfigRequest(smart: ByteArray): Boolean {
+        val reg = Protobuf.firstBytes(Protobuf.decode(smart), SMART_APP_REG) ?: return false
+        return Protobuf.decode(reg).any { it.number == 5 }
+    }
+
+    /**
+     * The watch announces an available scorecard as Smart{ 5:{ 7:{ 1:seq, 2:size } } }.
+     * Returns that seq — the value we must poll with — or null if this isn't such a notice.
+     */
+    fun parseAnnouncedSeq(smart: ByteArray): Int? {
+        val svc = Protobuf.firstBytes(Protobuf.decode(smart), SMART_NOTIFY) ?: return null
+        val f7 = Protobuf.firstBytes(Protobuf.decode(svc), 7) ?: return null
+        return Protobuf.firstVarint(Protobuf.decode(f7), 1)?.toInt()
+    }
+
+    fun isNotify(smart: ByteArray): Boolean =
+        Protobuf.decode(smart).any { it.number == SMART_NOTIFY }
 
     fun isGolf(smart: ByteArray): Boolean = golfServiceOf(smart) != null
 

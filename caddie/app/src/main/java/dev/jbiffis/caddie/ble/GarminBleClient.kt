@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-65 golf-reg"
+        const val BLE_BUILD = "ble-66 golf-announce"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -124,7 +124,7 @@ class GarminBleClient(
     // While a round is in progress, poll the golf service (Smart field 7) for the
     // current scorecard; the watch answers with the whole scorecard as a golf FIT.
     @Volatile private var golfLiveOn = false
-    private var golfSeq = 0
+    @Volatile private var lastAnnouncedSeq = 0
     private var golfJob: kotlinx.coroutines.Job? = null
 
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
@@ -541,7 +541,26 @@ class GarminBleClient(
 
     private fun onSmartMessage(smart: ByteArray) {
         if (GolfLive.isGolf(smart)) { handleGolfSmart(smart); return }
-        if (GolfLive.isAppReg(smart)) { log("Live golf: app-registration response ${Gfdi.hex(smart, 24)}"); return }
+        if (GolfLive.isNotify(smart)) {
+            val seq = GolfLive.parseAnnouncedSeq(smart)
+            if (seq != null) {
+                lastAnnouncedSeq = seq
+                log("Live golf: watch announced scorecard seq=$seq — polling it")
+                scope.launch { runCatching { sendProtobuf(GolfLive.buildPoll(seq)) } }
+            } else {
+                log("Live golf: notify ${Gfdi.hex(smart, 16)}")
+            }
+            return
+        }
+        if (GolfLive.isAppReg(smart)) {
+            if (GolfLive.isAppRegConfigRequest(smart)) {
+                log("Live golf: completing app-reg handshake")
+                scope.launch { runCatching { sendProtobuf(GolfLive.buildAppRegAck()) } }
+            } else {
+                log("Live golf: app-registration response ${Gfdi.hex(smart, 24)}")
+            }
+            return
+        }
         val fss = FileSync.fileSyncServiceOf(smart)
         if (fss == null) {
             log("Smart msg (non-filesync): ${Gfdi.hex(smart, 32)}")
@@ -663,8 +682,15 @@ class GarminBleClient(
         }
         send(Gfdi.systemEvent(Gfdi.EVENT_SYNC_READY))
         _state.value = State.READY
-        log("Handshake complete — syncing golf files")
-        startSync()
+        if (isGolfArmed()) {
+            // Mirror the real Garmin Golf app: register as the golf app immediately,
+            // before any bulk file sync, so the watch starts announcing scorecards.
+            log("Handshake complete — live golf armed; registering as golf app (skipping bulk sync).")
+            startGolfLive()
+        } else {
+            log("Handshake complete — syncing golf files")
+            startSync()
+        }
     }
 
     // ---- TX --------------------------------------------------------------------
@@ -925,24 +951,38 @@ class GarminBleClient(
      * with the whole scorecard as a golf FIT, which we import as a live round. See
      * [GolfLive]. Safe no-op if no partial importer was wired in.
      */
-    fun startGolfLive(intervalMs: Long = 60_000) {
+    /** Persisted: register as the golf app on connect so the watch streams scorecards. */
+    fun armGolfLive(on: Boolean) {
+        prefs.edit().putBoolean("golf_armed", on).apply()
+        if (on) {
+            log("Live golf armed — reconnecting so registration happens first…")
+            val d = device
+            if (d != null) connect(d) else log("Now connect to the watch to begin live scoring.")
+        } else {
+            stopGolfLive()
+            log("Live golf disarmed.")
+        }
+    }
+
+    private fun isGolfArmed() = prefs.getBoolean("golf_armed", false)
+
+    fun startGolfLive(fallbackMs: Long = 60_000) {
         if (onPartialFile == null) { log("Live golf unavailable (no partial importer)."); return }
         if (golfLiveOn) return
         golfLiveOn = true
-        golfSeq = 0
-        log("── LIVE GOLF ON. Registering as the golf app, then polling every ${intervalMs / 1000}s. " +
-            "Play a hole; it should appear as a LIVE round.")
+        lastAnnouncedSeq = 0
+        log("── LIVE GOLF ON. Registered as the golf app; waiting for the watch to announce " +
+            "scorecard updates (play a hole).")
         golfJob = scope.launch {
-            // Register as the Garmin Golf app first — the watch only streams the
-            // scorecard to a registered golf client.
             registerGolfApp()
+            // The watch drives us: it announces 5:{7:{1:seq}} when the scorecard changes and
+            // we poll that seq. As a safety net, re-poll the last announced seq periodically
+            // in case an announcement is missed.
             while (golfLiveOn) {
-                if (_state.value == State.READY) {
-                    golfSeq++
-                    log("Live golf: poll #$golfSeq")
-                    runCatching { sendProtobuf(GolfLive.buildPoll(golfSeq)) }
+                kotlinx.coroutines.delay(fallbackMs)
+                if (_state.value == State.READY && lastAnnouncedSeq > 0) {
+                    runCatching { sendProtobuf(GolfLive.buildPoll(lastAnnouncedSeq)) }
                 }
-                kotlinx.coroutines.delay(intervalMs)
             }
         }
     }
@@ -954,7 +994,6 @@ class GarminBleClient(
             runCatching { sendProtobuf(reg) }
             kotlinx.coroutines.delay(300)
         }
-        kotlinx.coroutines.delay(500)
     }
 
     fun stopGolfLive() {

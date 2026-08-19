@@ -23,6 +23,24 @@ class GolfLiveTest {
         assertEquals("3a041a020810", GolfLive.buildPoll(16).toHex())
         // phone->watch  7:{ 6:{ 1:16, 2:1 } }
         assertEquals("3a06320408101001", GolfLive.buildReceiveAck(16).toHex())
+        // phone->watch  13:{ 6:{ 1:1, 2:{ 1:0, 2:1 } } }  (app-reg handshake completion)
+        assertEquals("6a0a32080801120408001001", GolfLive.buildAppRegAck().toHex())
+    }
+
+    /** The watch's scorecard announcement 5:{7:{1:seq,2:size}} yields the seq to poll. */
+    @Test
+    fun parsesAnnouncedSeq() {
+        val inner = Protobuf.Writer().varint(1, 16).varint(2, 938)
+        val notify = Protobuf.Writer()
+            .message(GolfLive.SMART_NOTIFY, Protobuf.Writer().message(7, inner))
+            .toByteArray()
+        assertTrue(GolfLive.isNotify(notify))
+        assertEquals(16, GolfLive.parseAnnouncedSeq(notify))
+        // A golf push (service 7) is not a notify.
+        val golf = Protobuf.Writer()
+            .message(GolfLive.SMART_GOLF, Protobuf.Writer().message(5, Protobuf.Writer().varint(1, 1)))
+            .toByteArray()
+        assertEquals(null, GolfLive.parseAnnouncedSeq(golf))
     }
 
     /** A service-7 push round-trips: wrap a real FIT, parse it back out unchanged. */

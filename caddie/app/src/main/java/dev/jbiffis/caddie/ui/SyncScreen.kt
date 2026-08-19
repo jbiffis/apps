@@ -221,13 +221,13 @@ fun SyncScreen(app: CaddieApp) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (livePolling) {
-                            Button(onClick = { client.stopGolfLive(); livePolling = false }) {
+                            Button(onClick = { client.armGolfLive(false); livePolling = false }) {
                                 Text("Stop live round")
                             }
                             Text("live scoring on…", style = MaterialTheme.typography.labelMedium)
                         } else {
                             OutlinedButton(
-                                onClick = { client.startGolfLive(); livePolling = true },
+                                onClick = { client.armGolfLive(true); livePolling = true },
                                 enabled = state == GarminBleClient.State.READY,
                             ) { Text("Watch live round") }
                         }
