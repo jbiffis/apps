@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-70 golf-caps"
+        const val BLE_BUILD = "ble-71 golf-foreground"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -1036,8 +1036,11 @@ class GarminBleClient(
                         runCatching { sendProtobuf(GolfLive.buildPoll(lastAnnouncedSeq)) }
                     }
                 } else {
-                    log("Live golf: ${elapsed}s — no scorecard announcement yet " +
-                        "(watch silent after handshake). Score a hole on the watch and keep waiting.")
+                    log("Live golf: ${elapsed}s — no announcement yet; re-declaring foreground. " +
+                        "Score a hole on the watch and keep waiting.")
+                    if (_state.value == State.READY) {
+                        runCatching { send(Gfdi.systemEvent(Gfdi.EVENT_HOST_FOREGROUND)) }
+                    }
                 }
             }
         }
@@ -1055,6 +1058,13 @@ class GarminBleClient(
         kotlinx.coroutines.delay(200)
         log("Live golf: sending s30 hello to start onboarding…")
         runCatching { sendProtobuf(GolfLive.buildS30Hello()) }
+        // Connect then declares the app foregrounded and nudges golf active before the
+        // watch starts streaming. Mirror that.
+        kotlinx.coroutines.delay(600)
+        log("Live golf: declaring app foreground + activating golf…")
+        runCatching { send(Gfdi.systemEvent(Gfdi.EVENT_HOST_FOREGROUND)) }
+        runCatching { sendProtobuf(GolfLive.buildS42Activate()) }
+        runCatching { sendProtobuf(GolfLive.buildFileSyncActivate()) }
     }
 
     fun stopGolfLive() {

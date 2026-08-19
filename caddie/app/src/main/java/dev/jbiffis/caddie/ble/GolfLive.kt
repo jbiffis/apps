@@ -162,6 +162,14 @@ object GolfLive {
         return Protobuf.decode(t).any { it.number == 1 }
     }
 
+    // Connect sends these two {3:{1:36352}} requests (on services 42 and 43) shortly
+    // before the watch begins pushing the golf scorecard — the "activate golf" nudge.
+    private const val ACTIVATE_MAGIC = 36352L
+    fun buildS42Activate(): ByteArray = Protobuf.Writer()
+        .message(42, Protobuf.Writer().message(3, Protobuf.Writer().varint(1, ACTIVATE_MAGIC))).toByteArray()
+    fun buildFileSyncActivate(): ByteArray = Protobuf.Writer()
+        .message(43, Protobuf.Writer().message(3, Protobuf.Writer().varint(1, ACTIVATE_MAGIC))).toByteArray()
+
     fun isGolf(smart: ByteArray): Boolean = golfServiceOf(smart) != null
 
     private fun golfServiceOf(smart: ByteArray): ByteArray? =
