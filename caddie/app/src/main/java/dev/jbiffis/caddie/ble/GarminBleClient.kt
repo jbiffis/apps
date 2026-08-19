@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-62 log-file-share"
+        const val BLE_BUILD = "ble-63 rt-capture"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -117,6 +117,8 @@ class GarminBleClient(
     private var filePagesFetched = 0
     // Diagnostic: list files without downloading them (safe to run during a round).
     private var diagnosticListOnly = false
+    // Realtime-capture diagnostic: log every inbound message to reverse the live stream.
+    @Volatile private var captureAll = false
 
     // ---- Live-round polling ----------------------------------------------------
     // While the watch is on the wrist mid-round, re-enumerate every so often and pull
@@ -436,6 +438,12 @@ class GarminBleClient(
     }
 
     private fun handleMessage(msg: Gfdi.Message) {
+        // Realtime-capture diagnostic: log EVERY inbound message verbatim so we can see
+        // whatever the watch pushes during a round (the raw material for reversing the
+        // live-golf stream). Kept separate from normal handling below.
+        if (captureAll) {
+            log("CAP id=${msg.id} seq=${msg.seq} (${msg.payload.size}b): ${Gfdi.hex(msg.payload, 64)}")
+        }
         when (msg.id) {
             Gfdi.MSG_RESPONSE -> {
                 val r = Gfdi.parseResponse(msg.payload) ?: return
@@ -888,6 +896,32 @@ class GarminBleClient(
      * idle) re-enumerate the watch's files and import any that have grown since the last
      * look as a partial round. Safe no-op if no partial importer was wired in.
      */
+    /**
+     * Realtime-capture diagnostic. Declares the app foregrounded and logs EVERY message
+     * the watch pushes, so a round played while this is on reveals whatever live stream
+     * (if any) the watch emits. Share the log afterward to reverse the golf realtime feed.
+     */
+    fun startRealtimeCapture() {
+        scope.launch {
+            if (_state.value != State.READY && _state.value != State.SYNCING) {
+                log("Connect to the watch first, then start capture."); return@launch
+            }
+            captureAll = true
+            verboseRx = true
+            log("── REALTIME CAPTURE ON. Play a hole or two, then Share the log (as a file).")
+            log("   Declaring host foreground so the watch may begin streaming…")
+            runCatching { send(Gfdi.systemEvent(Gfdi.EVENT_HOST_FOREGROUND)) }
+        }
+    }
+
+    fun stopRealtimeCapture() {
+        captureAll = false
+        verboseRx = false
+        log("── Realtime capture OFF.")
+    }
+
+    val isCapturing: Boolean get() = captureAll
+
     fun startLivePolling(intervalMs: Long = 75_000) {
         if (onPartialFile == null) { log("Live polling unavailable (no partial importer)."); return }
         if (livePolling) return
