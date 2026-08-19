@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-71 golf-foreground"
+        const val BLE_BUILD = "ble-72 golf-newfile"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -126,6 +126,11 @@ class GarminBleClient(
     @Volatile private var golfLiveOn = false
     @Volatile private var lastAnnouncedSeq = 0
     private var golfJob: kotlinx.coroutines.Job? = null
+    // Scorecard files the watch announces mid-round (NewFileNotification). Downloads are
+    // serialized through this queue because only one V2 transfer can be in flight.
+    private val liveDownloadQueue = Channel<FileSync.RemoteFile>(Channel.UNLIMITED)
+    private val liveSeenFiles = java.util.Collections.synchronizedSet(HashSet<String>())
+    private var liveDownloadJob: kotlinx.coroutines.Job? = null
 
     // V2 file transfer: FileResponse handle + a raw data channel for the transfer handle
     private val fileResponseHandles = Channel<Int>(Channel.BUFFERED)
@@ -608,6 +613,15 @@ class GarminBleClient(
         FileSync.parseNewFileNotification(fss)?.let { files ->
             log("New-file notification: ${files.size} file(s)")
             files.forEach { log("  • ${it.typeName ?: "?"} ${it.size}b") }
+            // While live golf is on, the watch announces updated scorecards this way.
+            // Queue them for download+import (deduped by file id + size, since the
+            // scorecard grows as holes are played).
+            if (golfLiveOn && onPartialFile != null) {
+                for (f in files) {
+                    val key = "${f.id?.id1}:${f.size}"
+                    if (liveSeenFiles.add(key)) liveDownloadQueue.trySend(f)
+                }
+            }
             return
         }
         if (Protobuf.firstBytes(Protobuf.decode(fss), FileSync.FS_FILE_RESPONSE) != null) {
@@ -1020,6 +1034,19 @@ class GarminBleClient(
         lastAnnouncedSeq = 0
         log("── LIVE GOLF ON. Registered as the golf app; waiting for the watch to announce " +
             "scorecard updates (play a hole).")
+        // Consume announced scorecard files one at a time and import each as a partial round.
+        liveDownloadJob = scope.launch {
+            for (file in liveDownloadQueue) {
+                if (!golfLiveOn) break
+                val importer = onPartialFile ?: continue
+                log("Live golf: fetching announced ${file.typeName ?: "file"} ${file.size}b…")
+                val bytes = runCatching { downloadFileV2(file) }.getOrNull()
+                if (bytes == null) { log("  fetch failed"); continue }
+                val summary = runCatching { importer("golf_live_${file.id?.id1}.fit", bytes) }
+                    .getOrElse { "import error: ${it.message}" }
+                log("  → $summary")
+            }
+        }
         golfJob = scope.launch {
             registerGolfApp()
             // The watch drives us: it announces 5:{7:{1:seq}} when the scorecard changes and
@@ -1071,6 +1098,9 @@ class GarminBleClient(
         if (!golfLiveOn) return
         golfLiveOn = false
         golfJob?.cancel(); golfJob = null
+        liveDownloadJob?.cancel(); liveDownloadJob = null
+        liveSeenFiles.clear()
+        while (liveDownloadQueue.tryReceive().getOrNull() != null) { /* drain */ }
         log("── Live golf OFF.")
     }
 
