@@ -135,7 +135,7 @@ class ClubStats(
                     if (shot.id in teeShotIds && hole.par >= 4 && features.isNotEmpty()) {
                         val miss = Lie.classifyMiss(
                             shot.startLat, shot.startLon, shot.endLat, shot.endLon,
-                            pinLat, pinLon, features,
+                            pinLat, pinLon, features, hole.hole,
                         )
                         val bucket = drivingByClub.getOrPut(shot.clubId) { HashMap() }
                         bucket[miss] = (bucket[miss] ?: 0) + 1

@@ -327,7 +327,7 @@ fun ShotMapScreen(
             val end = when {
                 i == shots.lastIndex -> "holed"
                 pinLat != null && pinLon != null -> Lie.classifyMiss(
-                    s.startLat, s.startLon, s.endLat, s.endLon, pinLat, pinLon, features,
+                    s.startLat, s.startLon, s.endLat, s.endLon, pinLat, pinLon, features, hole,
                 ).label
                 else -> Lie.lieAt(s.endLat, s.endLon, features).label
             }
@@ -594,7 +594,7 @@ fun ShotMapScreen(
             if (h.pinLat != null && h.pinLon != null) {
                 Lie.classifyMiss(
                     current.startLat, current.startLon, current.endLat, current.endLon,
-                    h.pinLat, h.pinLon, features,
+                    h.pinLat, h.pinLon, features, hole,
                 ).label
             } else null
         } ?: Lie.lieAt(current.endLat, current.endLon, features).label

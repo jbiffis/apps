@@ -85,20 +85,39 @@ object Lie {
         endLat: Double, endLon: Double,
         pinLat: Double, pinLon: Double,
         features: List<CourseFeature>,
+        holeRef: Int? = null,
     ): Miss {
-        when (lieAt(endLat, endLon, features)) {
-            Type.GREEN -> return Miss.GREEN
-            Type.FAIRWAY, Type.TEE -> return Miss.FAIRWAY
-            Type.BUNKER -> return Miss.BUNKER
-            Type.WATER -> return Miss.WATER
-            else -> {}
-        }
-        // In the rough (or unmapped): work out which side of the fairway we are on.
         val frame = LocalFrame(startLat, startLon, bearingDeg(startLat, startLon, pinLat, pinLon))
         val (endRight, endAlong) = frame.project(endLat, endLon)
 
-        val fairways = features.filter { it.type == Type.FAIRWAY }
-            .filter { f -> f.points.any { frame.project(it.first, it.second).let { (r, a) -> a > -50 && kotlin.math.abs(r) < 150 } } }
+        // The fairway(s) THIS hole plays down: prefer the ones OSM tags for this hole
+        // number (ref=N), otherwise the ones the tee→pin line runs through. This
+        // excludes an ADJACENT hole's fairway, so a drive that reached it is not
+        // wrongly counted as a fairway hit.
+        val allFairways = features.filter { it.type == Type.FAIRWAY }
+        val fairways = allFairways.filter { holeRef != null && it.holeRef == holeRef }
+            .ifEmpty {
+                allFairways.filter { f ->
+                    (0..24).any { i ->
+                        val t = i / 24.0
+                        pointInPolygon(
+                            startLat + (pinLat - startLat) * t,
+                            startLon + (pinLon - startLon) * t,
+                            f.points,
+                        )
+                    }
+                }
+            }
+
+        when (lieAt(endLat, endLon, features)) {
+            Type.GREEN -> return Miss.GREEN
+            Type.BUNKER -> return Miss.BUNKER
+            Type.WATER -> return Miss.WATER
+            Type.FAIRWAY, Type.TEE ->
+                if (fairways.any { pointInPolygon(endLat, endLon, it.points) }) return Miss.FAIRWAY
+            // else: on an adjacent hole's fairway/tee — fall through to a left/right miss.
+            else -> {}
+        }
         if (fairways.isEmpty()) {
             // No mapped fairway on this line — fall back to the pin-line heuristic.
             return when {
