@@ -35,16 +35,27 @@ object FitReader {
 
     const val FIT_EPOCH_OFFSET_S = 631065600L // 1989-12-31T00:00:00Z
 
-    /** Decode all data messages in a FIT file (including chained files). */
-    fun decode(bytes: ByteArray): List<FitMessage> {
+    /**
+     * Decode all data messages in a FIT file (including chained files).
+     *
+     * With [lenient] = true, a truncated file (one still being written — the header's
+     * declared data size exceeds what's present, or the last record is cut off) is
+     * decoded up to the last complete message instead of throwing. This is what lets
+     * an in-progress round be read mid-play.
+     */
+    fun decode(bytes: ByteArray, lenient: Boolean = false): List<FitMessage> {
         val out = ArrayList<FitMessage>()
         var pos = 0
         while (pos + 12 <= bytes.size) {
-            pos = decodeOne(bytes, pos, out)
+            pos = try {
+                decodeOne(bytes, pos, out, lenient)
+            } catch (e: Exception) {
+                if (lenient) break else throw e
+            }
             // Skip trailing garbage that isn't another chained FIT header.
             if (pos + 12 > bytes.size || !hasFitSignature(bytes, pos)) break
         }
-        if (out.isEmpty()) throw IllegalArgumentException("Not a FIT file")
+        if (out.isEmpty() && !lenient) throw IllegalArgumentException("Not a FIT file")
         return out
     }
 
@@ -63,78 +74,101 @@ object FitReader {
         val devFieldBytes: Int,
     )
 
-    private fun decodeOne(bytes: ByteArray, start: Int, out: MutableList<FitMessage>): Int {
+    private fun decodeOne(bytes: ByteArray, start: Int, out: MutableList<FitMessage>, lenient: Boolean): Int {
         if (!hasFitSignature(bytes, start)) throw IllegalArgumentException("Missing .FIT header")
         val headerSize = bytes[start].toInt() and 0xFF
         val dataSize = ByteBuffer.wrap(bytes, start + 4, 4).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xFFFFFFFFL
         var pos = start + headerSize
-        val end = pos + dataSize.toInt()
-        if (end > bytes.size) throw EOFException("Truncated FIT file")
+        var end = pos + dataSize.toInt()
+        val truncated = end > bytes.size
+        if (truncated) {
+            if (!lenient) throw EOFException("Truncated FIT file")
+            // In-progress file: the declared data size runs past what's been written.
+            // Decode every complete record that is present.
+            end = bytes.size
+        }
 
         val defs = HashMap<Int, MesgDef>()
         var lastTimestamp: Long? = null
 
         while (pos < end) {
-            val header = bytes[pos].toInt() and 0xFF
-            pos++
-            if (header and 0x80 != 0) {
-                // Compressed timestamp data message
-                val localType = (header shr 5) and 0x03
-                val timeOffset = header and 0x1F
-                val def = defs[localType] ?: throw IllegalArgumentException("Undefined local type $localType")
-                val (msg, newPos) = readData(bytes, pos, def)
-                pos = newPos
-                lastTimestamp?.let { last ->
-                    var ts = (last and 0x1F.inv().toLong()) or timeOffset.toLong()
-                    if (ts < last) ts += 0x20
-                    lastTimestamp = ts
-                    out.add(FitMessage(msg.globalNum, msg.fields + (253 to ts)))
-                } ?: out.add(msg)
-            } else if (header and 0x40 != 0) {
-                // Definition message
-                val localType = header and 0x0F
-                val hasDev = header and 0x20 != 0
-                pos++ // reserved
-                val littleEndian = bytes[pos].toInt() == 0
+            // A record can be cut off mid-way in a still-growing file. Snapshot the
+            // position before reading so we can rewind to the last complete record.
+            val recordStart = pos
+            try {
+                val header = bytes[pos].toInt() and 0xFF
                 pos++
-                val globalNum = ByteBuffer.wrap(bytes, pos, 2)
-                    .order(if (littleEndian) ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN)
-                    .short.toInt() and 0xFFFF
-                pos += 2
-                val numFields = bytes[pos].toInt() and 0xFF
-                pos++
-                val fields = ArrayList<FieldDef>(numFields)
-                repeat(numFields) {
-                    fields.add(
-                        FieldDef(
-                            bytes[pos].toInt() and 0xFF,
-                            bytes[pos + 1].toInt() and 0xFF,
-                            bytes[pos + 2].toInt() and 0xFF,
-                        )
-                    )
-                    pos += 3
-                }
-                var devBytes = 0
-                if (hasDev) {
-                    val numDev = bytes[pos].toInt() and 0xFF
+                if (header and 0x80 != 0) {
+                    // Compressed timestamp data message
+                    val localType = (header shr 5) and 0x03
+                    val timeOffset = header and 0x1F
+                    val def = defs[localType] ?: throw IllegalArgumentException("Undefined local type $localType")
+                    val (msg, newPos) = readData(bytes, pos, def)
+                    if (newPos > end) throw EOFException("Truncated record")
+                    pos = newPos
+                    lastTimestamp?.let { last ->
+                        var ts = (last and 0x1F.inv().toLong()) or timeOffset.toLong()
+                        if (ts < last) ts += 0x20
+                        lastTimestamp = ts
+                        out.add(FitMessage(msg.globalNum, msg.fields + (253 to ts)))
+                    } ?: out.add(msg)
+                } else if (header and 0x40 != 0) {
+                    // Definition message
+                    val localType = header and 0x0F
+                    val hasDev = header and 0x20 != 0
+                    pos++ // reserved
+                    val littleEndian = bytes[pos].toInt() == 0
                     pos++
-                    repeat(numDev) {
-                        devBytes += bytes[pos + 1].toInt() and 0xFF
+                    val globalNum = ByteBuffer.wrap(bytes, pos, 2)
+                        .order(if (littleEndian) ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN)
+                        .short.toInt() and 0xFFFF
+                    pos += 2
+                    val numFields = bytes[pos].toInt() and 0xFF
+                    pos++
+                    val fields = ArrayList<FieldDef>(numFields)
+                    repeat(numFields) {
+                        fields.add(
+                            FieldDef(
+                                bytes[pos].toInt() and 0xFF,
+                                bytes[pos + 1].toInt() and 0xFF,
+                                bytes[pos + 2].toInt() and 0xFF,
+                            )
+                        )
                         pos += 3
                     }
+                    var devBytes = 0
+                    if (hasDev) {
+                        val numDev = bytes[pos].toInt() and 0xFF
+                        pos++
+                        repeat(numDev) {
+                            devBytes += bytes[pos + 1].toInt() and 0xFF
+                            pos += 3
+                        }
+                    }
+                    if (pos > end) throw EOFException("Truncated definition")
+                    defs[localType] = MesgDef(globalNum, littleEndian, fields, devBytes)
+                } else {
+                    // Normal data message
+                    val localType = header and 0x0F
+                    val def = defs[localType] ?: throw IllegalArgumentException("Undefined local type $localType")
+                    val (msg, newPos) = readData(bytes, pos, def)
+                    if (newPos > end) throw EOFException("Truncated record")
+                    pos = newPos
+                    msg.long(253)?.let { lastTimestamp = it }
+                    out.add(msg)
                 }
-                defs[localType] = MesgDef(globalNum, littleEndian, fields, devBytes)
-            } else {
-                // Normal data message
-                val localType = header and 0x0F
-                val def = defs[localType] ?: throw IllegalArgumentException("Undefined local type $localType")
-                val (msg, newPos) = readData(bytes, pos, def)
-                pos = newPos
-                msg.long(253)?.let { lastTimestamp = it }
-                out.add(msg)
+            } catch (e: Exception) {
+                // A record ran past the available bytes (or referenced an as-yet-unseen
+                // definition). In a growing file that's the write frontier — stop cleanly
+                // at the last complete record. Otherwise the file is genuinely corrupt.
+                if (lenient) {
+                    pos = recordStart
+                    return bytes.size
+                }
+                throw e
             }
         }
-        return end + 2 // skip file CRC
+        return if (truncated || end + 2 > bytes.size) bytes.size else end + 2 // skip file CRC
     }
 
     private fun readData(bytes: ByteArray, start: Int, def: MesgDef): Pair<FitMessage, Int> {
