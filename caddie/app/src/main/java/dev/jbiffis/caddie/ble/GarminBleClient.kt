@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-64 golf-live"
+        const val BLE_BUILD = "ble-65 golf-reg"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -541,6 +541,7 @@ class GarminBleClient(
 
     private fun onSmartMessage(smart: ByteArray) {
         if (GolfLive.isGolf(smart)) { handleGolfSmart(smart); return }
+        if (GolfLive.isAppReg(smart)) { log("Live golf: app-registration response ${Gfdi.hex(smart, 24)}"); return }
         val fss = FileSync.fileSyncServiceOf(smart)
         if (fss == null) {
             log("Smart msg (non-filesync): ${Gfdi.hex(smart, 32)}")
@@ -929,9 +930,12 @@ class GarminBleClient(
         if (golfLiveOn) return
         golfLiveOn = true
         golfSeq = 0
-        log("── LIVE GOLF ON. Asking the watch for the scorecard every ${intervalMs / 1000}s. " +
+        log("── LIVE GOLF ON. Registering as the golf app, then polling every ${intervalMs / 1000}s. " +
             "Play a hole; it should appear as a LIVE round.")
         golfJob = scope.launch {
+            // Register as the Garmin Golf app first — the watch only streams the
+            // scorecard to a registered golf client.
+            registerGolfApp()
             while (golfLiveOn) {
                 if (_state.value == State.READY) {
                     golfSeq++
@@ -941,6 +945,16 @@ class GarminBleClient(
                 kotlinx.coroutines.delay(intervalMs)
             }
         }
+    }
+
+    /** Send the captured Garmin Golf app-registration Smart messages (service 13). */
+    private suspend fun registerGolfApp() {
+        log("Live golf: registering as Garmin Golf app…")
+        for (reg in GolfLive.registrationMessages) {
+            runCatching { sendProtobuf(reg) }
+            kotlinx.coroutines.delay(300)
+        }
+        kotlinx.coroutines.delay(500)
     }
 
     fun stopGolfLive() {

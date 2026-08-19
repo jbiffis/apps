@@ -20,6 +20,33 @@ package dev.jbiffis.caddie.ble
  */
 object GolfLive {
     const val SMART_GOLF = 7
+    const val SMART_APP_REG = 13   // app-registration service
+
+    /**
+     * The watch only pushes golf data to a client that has registered itself as the
+     * Garmin Golf app. These are the two registration Smart messages (service 13) the
+     * real app sends at connect, captured verbatim — they declare app UUID
+     * 8cd46041-06fe-4d04-b4be-776042af7e75 / "Garmin Golf". Replayed before polling.
+     */
+    private val REG_HEX = listOf(
+        "6aab0142a8010a2438636434363034312d303666652d346430342d623462652d373736303432616637653735" +
+            "1a0b4761726d696e20476f6c665a040802100062420888881c1a21636f6d2e676f6f676c652e616e64726f" +
+            "69642e617070732e6d6573736167696e672219636f6d2e676f6f676c652e616e64726f69642e6469616c65" +
+            "726a140802121025f508a229e12c960c339fd14badc21c720208017a020803820100b2010208018202020801",
+        "6aaf0142ac010a2438636434363034312d303666652d346430342d623462652d373736303432616637653735" +
+            "5201075a04080210016242089d881c1a21636f6d2e676f6f676c652e616e64726f69642e617070732e6d65" +
+            "73736167696e672219636f6d2e676f6f676c652e616e64726f69642e6469616c65726a1408021210e536d6" +
+            "c75dab008aabb2bace30d948b4720208017a0208038201008a01009a0100b20102080182020208019a0200ba02020801",
+    )
+
+    val registrationMessages: List<ByteArray> by lazy { REG_HEX.map { it.hexToBytes() } }
+
+    /** True if this Smart message is an app-registration (service 13) response. */
+    fun isAppReg(smart: ByteArray): Boolean =
+        Protobuf.decode(smart).any { it.number == SMART_APP_REG }
+
+    private fun String.hexToBytes(): ByteArray =
+        ByteArray(length / 2) { ((this[it * 2].digitToInt(16) shl 4) or this[it * 2 + 1].digitToInt(16)).toByte() }
 
     // Sub-message field numbers under service 7
     private const val POLL = 3        // phone->watch { 1:seq }

@@ -66,5 +66,21 @@ class GolfLiveTest {
         assertTrue(later.holes.sumOf { it.strokes } >= early.holes.sumOf { it.strokes })
     }
 
+    /** The replayed app-registration blobs must be transcribed exactly and declare golf. */
+    @Test
+    fun registrationBytesAreValid() {
+        val regs = GolfLive.registrationMessages
+        assertEquals(2, regs.size)
+        assertEquals(174, regs[0].size)
+        assertEquals(178, regs[1].size)
+        for (r in regs) {
+            assertTrue("is service 13", GolfLive.isAppReg(r))
+            assertTrue("carries app UUID",
+                String(r, Charsets.US_ASCII).contains("8cd46041-06fe-4d04-b4be-776042af7e75"))
+        }
+        // Only the first registration carries the app name string.
+        assertTrue(String(regs[0], Charsets.US_ASCII).contains("Garmin Golf"))
+    }
+
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 }
