@@ -1439,7 +1439,8 @@ private fun DrawScope.mowingStripes(path: Path, band: Float, color: Color) {
 /** One cached tuft/tree instance in world coordinates. */
 private class Tuft(val lat: Double, val lon: Double, val seed: Int, val baseR: Float)
 
-private const val MAX_TUFTS = 3000
+private const val MAX_TUFTS = 14000     // total tuft budget across the whole course view
+private const val PER_WOOD = 500.0      // approx max tufts per wood polygon (grid coarsens for big ones)
 
 /**
  * Precompute tree/tuft positions once (independent of pan/zoom): tree nodes plus a
@@ -1457,8 +1458,17 @@ private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
             Lie.Type.WOODS -> {
                 val lats = f.points.map { it.first }; val lons = f.points.map { it.second }
                 val midLat = (lats.min() + lats.max()) / 2
-                val latStep = 7.0 / 111320.0
-                val lonStep = 7.0 / (111320.0 * cos(Math.toRadians(midLat)))
+                val cosLat = cos(Math.toRadians(midLat))
+                // Coarsen the grid for large woods so one big perimeter forest can't
+                // use up the whole tuft budget and leave near-hole copses bare. Each
+                // polygon yields at most ~PER_WOOD tufts; big ones get bigger, sparser
+                // trees, small copses stay dense.
+                val wM = (lons.max() - lons.min()) * 111320.0 * cosLat
+                val hM = (lats.max() - lats.min()) * 111320.0
+                val stepM = maxOf(7.0, kotlin.math.sqrt((wM * hM) / PER_WOOD))
+                val baseR = (9.0 * (stepM / 7.0)).coerceIn(9.0, 22.0).toFloat()
+                val latStep = stepM / 111320.0
+                val lonStep = stepM / (111320.0 * cosLat)
                 var la = lats.min(); var row = 0
                 while (la <= lats.max() && out.size < MAX_TUFTS) {
                     var lo = lons.min() + if (row % 2 == 0) 0.0 else lonStep / 2
@@ -1466,7 +1476,7 @@ private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
                         var sd = ((la * 1e5).toInt() * 73856093) xor ((lo * 1e5).toInt() * 19349663) xor 0x7A17
                         sd = sd * 1103515245 + 12345; val jla = la + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * latStep * 0.8
                         sd = sd * 1103515245 + 12345; val jlo = lo + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * lonStep * 0.8
-                        if (Lie.pointInPolygon(jla, jlo, f.points)) out.add(Tuft(jla, jlo, sd, 9f))
+                        if (Lie.pointInPolygon(jla, jlo, f.points)) out.add(Tuft(jla, jlo, sd, baseR))
                         lo += lonStep
                     }
                     la += latStep; row++
