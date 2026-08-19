@@ -61,7 +61,7 @@ class GarminBleClient(
 ) {
     companion object {
         /** Bumped every BLE change so the log unambiguously identifies the running build. */
-        const val BLE_BUILD = "ble-76 golf-reliable"
+        const val BLE_BUILD = "ble-77 golf-fulllog"
         const val GARMIN_BASE_UUID_SUFFIX = "-667b-11e3-949a-0800200c9a66"
         val CCCD: java.util.UUID = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         const val FILE_TYPE_FIT = 128
@@ -388,12 +388,12 @@ class GarminBleClient(
         while (controlResponses.tryReceive().getOrNull() != null) { /* drain */ }
         sendRaw(MultiLink.registerRequest(MultiLink.SERVICE_GFDI, reliability = 2, clientId = 1L))
         val g = withTimeoutOrNull(3000) { controlResponses.receive() }
-        if (g != null && g.handle != 0) {
+        if (g != null && g.status == 0 && g.handle != 0) {
             auxHandles.add(g.handle)
-            log("Reliable GFDI registered on handle ${g.handle} (MLR stream ${g.handle and 0x07}) " +
-                "— listening for pushes here")
+            log("Reliable GFDI registered on handle ${g.handle} (MLR stream ${g.handle and 0x07})")
         } else {
-            log("Reliable GFDI registration failed (status=${g?.status})")
+            log("Reliable GFDI refused (status=${g?.status}) — the watch allows GFDI once; " +
+                "using the existing channel (it does receive pushes).")
         }
         kotlinx.coroutines.delay(150)
 
@@ -401,8 +401,8 @@ class GarminBleClient(
             while (controlResponses.tryReceive().getOrNull() != null) { /* drain */ }
             sendRaw(MultiLink.registerRequest(service, reliability))
             val r = withTimeoutOrNull(3000) { controlResponses.receive() }
-            if (r == null || r.handle == 0) {
-                log("Aux service 0x${service.toString(16)}: no handle (status=${r?.status})")
+            if (r == null || r.status != 0 || r.handle == 0) {
+                log("Aux service 0x${service.toString(16)}: refused (status=${r?.status})")
             } else {
                 auxHandles.add(r.handle)
                 log("Aux service 0x${service.toString(16)} registered on handle ${r.handle}")
@@ -646,14 +646,14 @@ class GarminBleClient(
                     return
                 }
                 24, 42, 21, 8, 30 -> {
-                    log("Live golf: watch svc${GolfLive.topField(smart)} ${Gfdi.hex(smart, 16)} (noted)")
+                    log("Live golf: watch svc${GolfLive.topField(smart)} ${Gfdi.hex(smart, 2048)} (noted)")
                     return
                 }
             }
         }
         val fss = FileSync.fileSyncServiceOf(smart)
         if (fss == null) {
-            log("Smart msg (non-filesync): ${Gfdi.hex(smart, 32)}")
+            log("Smart msg (non-filesync): ${Gfdi.hex(smart, 2048)}")
             return
         }
         FileSync.parseFileListResponse(fss)?.let { list ->
@@ -666,6 +666,7 @@ class GarminBleClient(
             scope.launch { onFileListPage(list) }
             return
         }
+        if (golfLiveOn && fss.size > 40) log("  FILESYNC full: ${Gfdi.hex(fss, 2048)}")
         FileSync.parseNewFileNotification(fss)?.let { files ->
             log("New-file notification: ${files.size} file(s)")
             files.forEach { log("  • ${it.typeName ?: "?"} ${it.size}b") }
