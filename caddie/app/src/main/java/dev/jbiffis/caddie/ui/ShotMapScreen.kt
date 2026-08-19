@@ -1055,7 +1055,9 @@ private fun HoleCanvas(
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
     // Cache tuft positions (world coords) once so panning doesn't recompute the grid.
-    val tufts = remember(features) { computeTufts(features) }
+    val tufts = remember(features, MapSettings.maxObjects, MapSettings.perWood) {
+        computeTufts(features, MapSettings.maxObjects, MapSettings.perWood.toDouble())
+    }
 
     // Shot labels are set in the design's numeral face.
     val context = LocalContext.current
@@ -1297,7 +1299,7 @@ private fun HoleCanvas(
         for (t in tufts) {
             val p = transform(t.lat, t.lon)
             if (p.x > -30f && p.x < size.width + 30f && p.y > -30f && p.y < size.height + 30f) {
-                tree(p, t.baseR * zf * 1.3f, t.seed)
+                tree(p, t.baseR * zf * MapSettings.treeScale, t.seed)
             }
         }
 
@@ -1439,15 +1441,13 @@ private fun DrawScope.mowingStripes(path: Path, band: Float, color: Color) {
 /** One cached tuft/tree instance in world coordinates. */
 private class Tuft(val lat: Double, val lon: Double, val seed: Int, val baseR: Float)
 
-private const val MAX_TUFTS = 14000     // total tuft budget across the whole course view
-private const val PER_WOOD = 4500.0     // approx max tufts per wood polygon (grid coarsens for big ones)
-
 /**
  * Precompute tree/tuft positions once (independent of pan/zoom): tree nodes plus a
  * jittered world grid inside each woods polygon. Doing this once — instead of every
- * frame — is what keeps panning smooth.
+ * frame — is what keeps panning smooth. [maxTufts] and [perWood] come from the
+ * user's Map settings.
  */
-private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
+private fun computeTufts(features: List<CourseFeature>, maxTufts: Int, perWood: Double): List<Tuft> {
     val out = ArrayList<Tuft>()
     for (f in features) {
         when (f.type) {
@@ -1465,14 +1465,14 @@ private fun computeTufts(features: List<CourseFeature>): List<Tuft> {
                 // trees, small copses stay dense.
                 val wM = (lons.max() - lons.min()) * 111320.0 * cosLat
                 val hM = (lats.max() - lats.min()) * 111320.0
-                val stepM = maxOf(7.0, kotlin.math.sqrt((wM * hM) / PER_WOOD))
+                val stepM = maxOf(7.0, kotlin.math.sqrt((wM * hM) / perWood))
                 val baseR = (9.0 * (stepM / 7.0)).coerceIn(9.0, 22.0).toFloat()
                 val latStep = stepM / 111320.0
                 val lonStep = stepM / (111320.0 * cosLat)
                 var la = lats.min(); var row = 0
-                while (la <= lats.max() && out.size < MAX_TUFTS) {
+                while (la <= lats.max() && out.size < maxTufts) {
                     var lo = lons.min() + if (row % 2 == 0) 0.0 else lonStep / 2
-                    while (lo <= lons.max() && out.size < MAX_TUFTS) {
+                    while (lo <= lons.max() && out.size < maxTufts) {
                         var sd = ((la * 1e5).toInt() * 73856093) xor ((lo * 1e5).toInt() * 19349663) xor 0x7A17
                         sd = sd * 1103515245 + 12345; val jla = la + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * latStep * 0.8
                         sd = sd * 1103515245 + 12345; val jlo = lo + (((sd ushr 16) and 0x7fff) / 32768.0 - 0.5) * lonStep * 0.8

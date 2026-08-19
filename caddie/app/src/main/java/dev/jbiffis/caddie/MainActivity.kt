@@ -36,7 +36,9 @@ import dev.jbiffis.caddie.ui.CaddieTheme
 import dev.jbiffis.caddie.ui.ClubDetailScreen
 import dev.jbiffis.caddie.ui.ClubsScreen
 import dev.jbiffis.caddie.ui.HoleScreen
+import dev.jbiffis.caddie.ui.MapSettings
 import dev.jbiffis.caddie.ui.RoundsScreen
+import dev.jbiffis.caddie.ui.SettingsScreen
 import dev.jbiffis.caddie.ui.ScorecardScreen
 import dev.jbiffis.caddie.ui.ShotMapScreen
 import dev.jbiffis.caddie.ui.SyncScreen
@@ -48,6 +50,7 @@ private const val ROUTE_CLUBS = "clubs"
 private const val ROUTE_BAG = "bag"
 private const val ROUTE_WATCH = "sync"
 private const val ROUTE_CLUB_NAMES = "clubnames"
+private const val ROUTE_SETTINGS = "settings"
 
 private class Tab(val route: String, val label: String, val icon: Int, val owns: (String?) -> Boolean)
 
@@ -73,6 +76,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as CaddieApp
+        MapSettings.init(app)
 
         setContent {
             CaddieTheme {
@@ -107,8 +111,13 @@ private fun NavHostController.switchTab(route: String) {
 private fun CaddieNavHost(app: CaddieApp, nav: NavHostController) {
     NavHost(navController = nav, startDestination = ROUTE_ROUNDS) {
         composable(ROUTE_ROUNDS) {
-            RoundsScreen(app) { roundId -> nav.navigate("scorecard/$roundId") }
+            RoundsScreen(
+                app,
+                onOpenRound = { roundId -> nav.navigate("scorecard/$roundId") },
+                onOpenSettings = { nav.navigate(ROUTE_SETTINGS) },
+            )
         }
+        composable(ROUTE_SETTINGS) { SettingsScreen(onBack = { nav.popBackStack() }) }
         composable(
             "scorecard/{roundId}",
             arguments = listOf(navArgument("roundId") { type = NavType.LongType }),
