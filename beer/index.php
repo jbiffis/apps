@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Easter Beer Order</title>
+    <title>Labour Day Beer Order</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
@@ -33,12 +33,13 @@
         .submit-btn:disabled { background: #95a5a6; cursor: not-allowed; }
         .tax-badge { display: inline-block; background: #f39c12; color: #fff; font-size: 0.7em; padding: 2px 6px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
         .no-tax-badge { display: inline-block; background: #27ae60; color: #fff; font-size: 0.7em; padding: 2px 6px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
+        .no-deposit-badge { display: inline-block; background: #2980b9; color: #fff; font-size: 0.7em; padding: 2px 6px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>🐣 Easter Beer Order</h1>
-    <p class="subtitle">Dépanneur Rapido — Easter Specials</p>
+    <h1>🍁 Labour Day Beer Order</h1>
+    <p class="subtitle">Dépanneur Rapido — Labour Day Specials (until September 6)</p>
 
     <form method="POST" action="confirm.php" id="orderForm">
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generate_csrf_token()) ?>">
@@ -61,7 +62,7 @@
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($beers as $beer): ?>
+                <?php foreach ($beers as $beer): if (!$beer['active']) continue; ?>
                 <tr data-total="<?= $beer['total'] ?>" id="row-<?= $beer['id'] ?>">
                     <td>
                         <?= htmlspecialchars($beer['name']) ?>
@@ -69,6 +70,9 @@
                             <span class="tax-badge">TAX</span>
                         <?php else: ?>
                             <span class="no-tax-badge">NO TAX</span>
+                        <?php endif; ?>
+                        <?php if ($beer['deposit_paid']): ?>
+                            <span class="no-deposit-badge">NO DEPOSIT</span>
                         <?php endif; ?>
                     </td>
                     <td class="format-label"><?= $beer['format'] ?></td>
@@ -97,7 +101,7 @@
 
 <script>
 const totals = {};
-<?php foreach ($beers as $beer): ?>
+<?php foreach ($beers as $beer): if (!$beer['active']) continue; ?>
 totals[<?= $beer['id'] ?>] = <?= $beer['total'] ?>;
 <?php endforeach; ?>
 

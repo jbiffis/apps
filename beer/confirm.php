@@ -96,6 +96,7 @@ if ($nameError) {
 $orderItems = [];
 $grandTotal = 0;
 foreach ($beers as $beer) {
+    if (!$beer['active']) continue;
     $qty = intval($quantities[$beer['id']] ?? 0);
     if ($qty < 0) $qty = 0;
     if ($qty > 99) $qty = 99;
