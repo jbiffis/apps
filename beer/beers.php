@@ -7,7 +7,8 @@ define('ORDERS_FILE', '/var/www/data/beer/orders.json');
 session_start();
 
 $beers = [
-    // No tax (store pays both taxes)
+    // ---- Labour Day specials (until September 6, 2026) ----
+    // "We pay both taxes" September 3-4-5 — no tax, deposit still applies
     ['name' => 'Bud Light',              'format' => '30 cans',    'price' => 39.93, 'taxable' => false, 'containers' => 30],
     ['name' => 'Miller Lite',            'format' => '30 cans',    'price' => 39.93, 'taxable' => false, 'containers' => 30],
     ['name' => 'Coors Light',            'format' => '30 cans',    'price' => 39.93, 'taxable' => false, 'containers' => 30],
@@ -18,33 +19,45 @@ $beers = [
     ['name' => 'Heineken (36 cans)',     'format' => '36 cans',    'price' => 48.81, 'taxable' => false, 'containers' => 36],
 
     // Taxed (15%)
-    ['name' => 'Heineken Silver',        'format' => '24 bottles',  'price' => 29.70, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Heineken Silver',        'format' => '24 cans',     'price' => 29.70, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Heineken Silver',        'format' => '24 bottles',  'price' => 31.37, 'taxable' => true, 'containers' => 24],
+    // Not on the Labour Day flyer — kept (inactive) so past orders keep their labels
+    ['name' => 'Heineken Silver',        'format' => '24 cans',     'price' => 29.70, 'taxable' => true, 'containers' => 24, 'active' => false],
     ['name' => 'Corona Extra',           'format' => '24 bottles',  'price' => 31.37, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Sol',                    'format' => '24 bottles',  'price' => 31.37, 'taxable' => true, 'containers' => 24],
+    // "Pay the sticker price" all-summer deal — store pays the taxes AND the deposit
+    ['name' => 'Sol',                    'format' => '24 bottles/cans', 'price' => 35.00, 'taxable' => false, 'containers' => 24, 'deposit_paid' => true],
     ['name' => 'Miller High Life',       'format' => '24 bottles',  'price' => 33.74, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Pabst Blue Ribbon',      'format' => '24 bottles',  'price' => 33.74, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Pabst Blue Ribbon',      'format' => '24 cans',     'price' => 33.74, 'taxable' => true, 'containers' => 24],
     ['name' => 'Heineken (24 bottles)',  'format' => '24 bottles',  'price' => 32.54, 'taxable' => true, 'containers' => 24],
     ['name' => 'Stella Artois',          'format' => '24 bottles',  'price' => 32.54, 'taxable' => true, 'containers' => 24],
-    ['name' => "Alexander Keith's",      'format' => '24 bottles',  'price' => 38.50, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Blue Moon',              'format' => '24 bottles',  'price' => 38.50, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Belle Gueule',           'format' => '24 bottles',  'price' => 35.00, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Steamwhistle',           'format' => '24 bottles',  'price' => 35.00, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Sapporo',               'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Landshark',             'format' => '24 bottles',  'price' => 35.00, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Peroni',                'format' => '24 cans',     'price' => 32.54, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Kronenbourg 1664 Blanc','format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
+    ['name' => "Alexander Keith's",      'format' => '24 cans',     'price' => 36.50, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Blue Moon',              'format' => '24 cans',     'price' => 36.50, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Belle Gueule',           'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Steam Whistle',          'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Sapporo',                'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Landshark',              'format' => '24 bottles',  'price' => 35.00, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Peroni',                 'format' => '24 cans',     'price' => 32.54, 'taxable' => true, 'containers' => 24],
+    ['name' => 'Kronenbourg 1664 Blanc', 'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
 
     // Added after initial orders — appended to preserve existing IDs
     ['name' => 'Michelob Ultra',         'format' => '30 cans',    'price' => 39.93, 'taxable' => false, 'containers' => 30],
     ['name' => 'Cracked Canoe',          'format' => '30 cans',    'price' => 39.93, 'taxable' => false, 'containers' => 30],
+
+    // Added from the Labour Day flyer
+    ['name' => 'Budweiser',              'format' => '30 cans',    'price' => 43.75, 'taxable' => false, 'containers' => 30],
+    ['name' => 'Grolsch',                'format' => '24 cans',    'price' => 35.00, 'taxable' => true,  'containers' => 24],
+    ['name' => 'Carlsberg',              'format' => '24 cans',    'price' => 35.00, 'taxable' => true,  'containers' => 24],
+    ['name' => 'Miller Lite (24)',       'format' => '24 bottles/cans', 'price' => 35.00, 'taxable' => false, 'containers' => 24, 'deposit_paid' => true],
 ];
 
 // Pre-calculate tax, deposit, and total for each beer
 foreach ($beers as $i => &$beer) {
     $beer['id'] = $i;
+    // Beers no longer on the current flyer stay in the list (so past orders keep
+    // their IDs and labels) but are hidden from the order form.
+    $beer['active'] = $beer['active'] ?? true;
+    $beer['deposit_paid'] = $beer['deposit_paid'] ?? false;
     $beer['tax'] = $beer['taxable'] ? round($beer['price'] * TAX_RATE, 2) : 0;
-    $beer['deposit'] = round($beer['containers'] * DEPOSIT_PER_CONTAINER, 2);
+    $beer['deposit'] = $beer['deposit_paid'] ? 0 : round($beer['containers'] * DEPOSIT_PER_CONTAINER, 2);
     $beer['total'] = round($beer['price'] + $beer['tax'] + $beer['deposit'], 2);
 }
 unset($beer);

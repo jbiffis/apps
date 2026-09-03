@@ -16,7 +16,7 @@ Deployed via **Komodo** on a remote server. Komodo pulls from `git@github.com:jb
 
 ## Beer Order App (`beer/`)
 
-Easter beer order form for Dépanneur Rapido specials.
+Beer order form for Dépanneur Rapido specials (currently the Labour Day flyer, until September 6, 2026).
 
 ### Files
 
@@ -33,6 +33,8 @@ Easter beer order form for Dépanneur Rapido specials.
 ### Adding Beers
 
 Beer IDs are array indexes in `beers.php`. **Always append new beers to the end of the array** to avoid breaking existing orders that reference IDs.
+
+When a new flyer comes out, edit `price` / `format` / `taxable` in place and append anything new. A beer that drops off the flyer gets `'active' => false` (hidden from the order form, ID and label preserved for past orders) rather than being deleted. `'deposit_paid' => true` marks the "pay the sticker price" deals where the store covers the deposit as well as the taxes.
 
 ## Golf Stats App (`golf/`)
 
