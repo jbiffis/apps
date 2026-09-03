@@ -32,7 +32,8 @@ $beers = [
     ['name' => "Alexander Keith's",      'format' => '24 cans',     'price' => 36.50, 'taxable' => true, 'containers' => 24],
     ['name' => 'Blue Moon',              'format' => '24 cans',     'price' => 36.50, 'taxable' => true, 'containers' => 24],
     ['name' => 'Belle Gueule',           'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
-    ['name' => 'Steam Whistle',          'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
+    // Not on the Labour Day flyer — kept (inactive) so past orders keep their labels
+    ['name' => 'Steamwhistle',           'format' => '24 bottles',  'price' => 35.00, 'taxable' => true, 'containers' => 24, 'active' => false],
     ['name' => 'Sapporo',                'format' => '24 cans',     'price' => 35.00, 'taxable' => true, 'containers' => 24],
     ['name' => 'Landshark',              'format' => '24 bottles',  'price' => 35.00, 'taxable' => true, 'containers' => 24],
     ['name' => 'Peroni',                 'format' => '24 cans',     'price' => 32.54, 'taxable' => true, 'containers' => 24],
@@ -47,6 +48,7 @@ $beers = [
     ['name' => 'Grolsch',                'format' => '24 cans',    'price' => 35.00, 'taxable' => true,  'containers' => 24],
     ['name' => 'Carlsberg',              'format' => '24 cans',    'price' => 35.00, 'taxable' => true,  'containers' => 24],
     ['name' => 'Miller Lite (24)',       'format' => '24 bottles/cans', 'price' => 35.00, 'taxable' => false, 'containers' => 24, 'deposit_paid' => true],
+    ['name' => 'Moosehead',              'format' => '24 cans',    'price' => 35.00, 'taxable' => true,  'containers' => 24],
 ];
 
 // Pre-calculate tax, deposit, and total for each beer
