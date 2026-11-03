@@ -146,6 +146,7 @@ export interface SeasonSummaryRow {
 }
 
 export interface SeasonSummary {
+  season?: Season
   tournaments: Tournament[]
   players: SeasonSummaryRow[]
 }

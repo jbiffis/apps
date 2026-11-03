@@ -221,8 +221,12 @@ export function AdminPage() {
   return (
     <div className={styles.page}>
       <div className={styles.headerRow}>
-        <h1 className={styles.title}>Admin</h1>
-        <div className={styles.controls}>
+        <div>
+          <p className="eyebrow">The clubhouse / League management</p>
+          <h1 className={styles.title}>Season admin</h1>
+          <p className="page-description">Set up your season. Keep every round in order.</p>
+        </div>
+        <div className={`${styles.controls} ${styles.seasonToolbar}`}>
           {seasons.length > 0 && (
             <select
               className={styles.select}
@@ -411,7 +415,8 @@ export function AdminPage() {
       {!loading && practiceRounds.length > 0 && (
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Practice Rounds</h2>
-          <div className="table-scroll">
+          <p className={styles.tableHint}>Swipe to see scores and actions →</p>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Practice rounds">
             <table className={styles.table}>
               <thead><tr><th>Type</th><th>Round</th><th>Course</th><th>Date</th><th>Scores</th><th>Actions</th></tr></thead>
               <tbody>{practiceRounds.map(r => <RoundRow key={r.id} r={r} />)}</tbody>
@@ -423,7 +428,8 @@ export function AdminPage() {
       {!loading && tournamentRounds.length > 0 && (
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Tournament Rounds</h2>
-          <div className="table-scroll">
+          <p className={styles.tableHint}>Swipe to see scores and actions →</p>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Tournament rounds">
             <table className={styles.table}>
               <thead><tr><th>Type</th><th>Round</th><th>Course</th><th>Date</th><th>Scores</th><th>Actions</th></tr></thead>
               <tbody>{tournamentRounds.map(r => <RoundRow key={r.id} r={r} />)}</tbody>
