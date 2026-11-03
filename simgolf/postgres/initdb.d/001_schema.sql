@@ -5,6 +5,8 @@ CREATE TABLE seasons (
     id SERIAL PRIMARY KEY,
     year INT NOT NULL,
     name VARCHAR(100) NOT NULL,
+    handicap_system VARCHAR(32) NOT NULL DEFAULT 'legacy'
+        CHECK (handicap_system IN ('legacy', 'best_rounds_v1')),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

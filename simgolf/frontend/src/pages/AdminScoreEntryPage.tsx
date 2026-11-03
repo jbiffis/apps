@@ -100,25 +100,6 @@ export function AdminScoreEntryPage() {
     }
   }
 
-  // Auto-advance to next hole after 2-digit entry or valid single digit
-  function handleInput(e: React.FormEvent<HTMLInputElement>, playerId: number, hole: number) {
-    const val = (e.target as HTMLInputElement).value
-    if (val.length >= 2) {
-      const nextHole = hole + 1
-      if (nextHole <= holes.length) {
-        inputRefs.current[cellKey(playerId, nextHole)]?.focus()
-        inputRefs.current[cellKey(playerId, nextHole)]?.select()
-      } else {
-        const idx = players.findIndex(p => p.id === playerId)
-        if (idx < players.length - 1) {
-          const firstHole = holes[0].hole_number
-          inputRefs.current[cellKey(players[idx + 1].id, firstHole)]?.focus()
-          inputRefs.current[cellKey(players[idx + 1].id, firstHole)]?.select()
-        }
-      }
-    }
-  }
-
   async function saveScores() {
     if (!id) return
     setSaving(true)
@@ -149,7 +130,7 @@ export function AdminScoreEntryPage() {
         })
       })
       setGrid(updated)
-    } catch (e) {
+    } catch {
       setError('Failed to save scores. Please try again.')
     } finally {
       setSaving(false)
@@ -194,7 +175,7 @@ export function AdminScoreEntryPage() {
         </div>
       </div>
 
-      <p className={styles.hint}>Use arrow keys or Tab to navigate between cells. Scores auto-advance after 2 digits.</p>
+      <p className={styles.hint}>Use arrow keys or Tab to navigate between cells. Enter the full score for each hole; there is no per-hole score cap.</p>
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -244,12 +225,10 @@ export function AdminScoreEntryPage() {
                           type="number"
                           inputMode="numeric"
                           min={1}
-                          max={15}
                           className={styles.scoreInput}
                           value={val}
                           onChange={e => handleChange(player.id, h.hole_number, e.target.value)}
                           onKeyDown={e => handleKeyDown(e, player.id, h.hole_number)}
-                          onInput={e => handleInput(e, player.id, h.hole_number)}
                           onFocus={e => e.target.select()}
                           placeholder="—"
                         />

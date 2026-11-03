@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Season, type Round, type Hole } from '../api'
+import { HandicapSetup } from '../components/HandicapSetup'
 import styles from './AdminPage.module.css'
 
 interface Course { id: number; name: string; holes: Hole[] }
@@ -19,6 +20,7 @@ export function AdminPage() {
   const [showSeasonForm, setShowSeasonForm] = useState(false)
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString())
   const [seasonName, setSeasonName] = useState('')
+  const [seasonSystem, setSeasonSystem] = useState<Season['handicap_system']>('best_rounds_v1')
   const [editingSeasonId, setEditingSeasonId] = useState<number | null>(null)
   const [seasonToDelete, setSeasonToDelete] = useState<Season | null>(null)
   const [seasonBusy, setSeasonBusy] = useState(false)
@@ -104,6 +106,7 @@ export function AdminPage() {
     setEditingSeasonId(season?.id ?? null)
     setSeasonYear(String(season?.year ?? new Date().getFullYear()))
     setSeasonName(season?.name ?? '')
+    setSeasonSystem(season?.handicap_system ?? 'best_rounds_v1')
     setSeasonToDelete(null)
     setSeasonError('')
     setShowSeasonForm(true)
@@ -122,16 +125,16 @@ export function AdminPage() {
     setMsg('')
     try {
       const season = editingSeasonId === null
-        ? await api.post<Season>('/seasons', { year, name })
-        : await api.put<Season>(`/seasons/${editingSeasonId}`, { year, name })
+        ? await api.post<Season>('/seasons', { year, name, handicap_system: seasonSystem })
+        : await api.put<Season>(`/seasons/${editingSeasonId}`, { year, name, handicap_system: seasonSystem })
       setSeasons(current => [...current.filter(s => s.id !== season.id), season].sort((a, b) => b.year - a.year))
       setSeasonId(season.id)
       setShowSeasonForm(false)
       setMsg(editingSeasonId === null
         ? `Season "${season.name}" created with 3 tournaments.`
         : `Season "${season.name}" updated.`)
-    } catch {
-      setSeasonError(editingSeasonId === null ? 'Error creating season. Please try again.' : 'Error updating season. Please try again.')
+    } catch (error) {
+      setSeasonError(error instanceof Error ? error.message : 'Error saving season. Please try again.')
     } finally {
       setSeasonBusy(false)
     }
@@ -186,6 +189,8 @@ export function AdminPage() {
 
   const practiceRounds = rounds.filter(r => r.is_practice).sort((a, b) => a.round_number - b.round_number)
   const tournamentRounds = rounds.filter(r => !r.is_practice).sort((a, b) => a.round_number - b.round_number)
+  const editingSeason = seasons.find(s => s.id === editingSeasonId)
+  const selectedSeason = seasons.find(s => s.id === seasonId)
 
   function RoundRow({ r }: { r: RoundWithStatus }) {
     const hasScores = r.score_count > 0
@@ -314,6 +319,18 @@ export function AdminPage() {
               />
             </label>
           </div>
+          <div className={styles.label}>
+            <label htmlFor="season-handicap-system">Handicap system</label>
+            <select id="season-handicap-system" className={styles.select} value={seasonSystem}
+              disabled={seasonBusy || editingSeason?.handicap_system_locked}
+              onChange={e => setSeasonSystem(e.target.value as Season['handicap_system'])}>
+              <option value="best_rounds_v1">Best rounds (new system)</option>
+              <option value="legacy">Original system</option>
+            </select>
+          </div>
+          <p className={styles.hint}>{editingSeason?.handicap_system_locked
+            ? 'The handicap system is locked because tournament scores have been entered.'
+            : 'Choose the system before entering tournament scores. Changing systems clears this season’s calculated handicaps so they can be calculated under the selected rules.'}</p>
           <p className={styles.hint}>{editingSeasonId === null
             ? 'Creates the season with 3 tournaments (T1, T2, T3) automatically.'
             : 'Changes the season name and year. Existing tournaments, rounds and scores are kept.'}</p>
@@ -376,6 +393,12 @@ export function AdminPage() {
       )}
 
       {/* No courses warning */}
+      {selectedSeason?.handicap_system === 'best_rounds_v1' && (
+        <HandicapSetup key={selectedSeason.id} seasonId={selectedSeason.id}
+          disabled={loading || seasonBusy}
+          scoredTournaments={tournaments.filter(t => rounds.some(r => r.tournament_id === t.id && r.score_count > 0)).map(t => t.number)} />
+      )}
+
       {seasons.length > 0 && courses.length === 0 && !loading && (
         <div className={styles.warningBox}>
           <strong>No courses yet.</strong> <Link to="/admin/courses">Add a course</Link> before creating rounds.

@@ -68,7 +68,7 @@ export function TournamentPage() {
                     return rData ? (
                       <>
                         <td key={`${r.id}-n`} className={styles.tdScore}>
-                          {rData.absent ? <em className={styles.absent}>—</em> : rData.net?.toFixed(0)}
+                          {rData.absent ? <em className={styles.absent}>—</em> : rData.net?.toFixed(tournament.handicap_system === 'best_rounds_v1' ? 1 : 0)}
                         </td>
                         <td key={`${r.id}-p`} className={styles.tdPts}>
                           {rData.points}
