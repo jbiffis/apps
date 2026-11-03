@@ -14,6 +14,7 @@ services:
       - ./bookstory-proxy.conf:/etc/apache2/conf-enabled/bookstory-proxy.conf:ro
       - ./dreamworld-proxy.conf:/etc/apache2/conf-enabled/dreamworld-proxy.conf:ro
       - ./tracker-proxy.conf:/etc/apache2/conf-enabled/tracker-proxy.conf:ro
+      - ./simgolf-proxy.conf:/etc/apache2/conf-enabled/simgolf-proxy.conf:ro
       # All app source and frontend dists are now baked into the image (see Dockerfile).
       # Removed: ./beer, ./simgolf/frontend/dist, ./book-log/dist, ./dreamworld/dist,
       #          ./dreamworld/api, ./tracker/frontend/dist
