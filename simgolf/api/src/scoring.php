@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/handicaps.php';
+
 /**
  * Calculate points for a round given an array of net scores (keyed by player_id).
  * Net score = gross - handicap. Lower is better.
@@ -140,10 +142,19 @@ function getRoundScorecard(PDO $db, int $roundId): array
     $round = $stmt->fetch();
     if (!$round) return [];
 
+    $useTenths = seasonHandicapSystem($db, (int)$round['season_id']) === BEST_ROUND_HANDICAPS;
+
     // Get holes for this course (only the nine being played)
     $nineFilter = ($round['nine'] === 'back')
         ? 'AND hole_number BETWEEN 10 AND 18'
         : 'AND hole_number BETWEEN 1 AND 9';
+    // A course may store a reusable nine-hole layout instead of all 18 holes.
+    // Keep the original hole selection for legacy seasons.
+    if ($useTenths && $round['nine'] === 'back') {
+        $stmt = $db->prepare('SELECT COUNT(*) FROM holes WHERE course_id = ? AND hole_number BETWEEN 10 AND 18');
+        $stmt->execute([$round['course_id']]);
+        if ((int)$stmt->fetchColumn() === 0) $nineFilter = 'AND hole_number BETWEEN 1 AND 9';
+    }
     $stmt = $db->prepare("
         SELECT hole_number, par, yardage
         FROM holes
@@ -210,7 +221,7 @@ function getRoundScorecard(PDO $db, int $roundId): array
         }
 
         $handicap = $player['handicap'] !== null ? (float)$player['handicap'] : 0.0;
-        $net = $absent ? null : ($gross - $handicap);
+        $net = $absent ? null : ($useTenths ? round($gross - $handicap, 1) : ($gross - $handicap));
         $netScores[$pid] = $net;
 
         $playerRows[$pid] = [
@@ -228,7 +239,8 @@ function getRoundScorecard(PDO $db, int $roundId): array
     $rankingScores = [];
     foreach ($netScores as $pid => $n) {
         if ($n === null) { $rankingScores[$pid] = null; continue; }
-        $rankingScores[$pid] = (fmod(abs((float)$n), 1.0) === 0.5) ? $n : round($n);
+        $rankingScores[$pid] = $useTenths ? round($n, 1)
+            : ((fmod(abs((float)$n), 1.0) === 0.5) ? $n : round($n));
     }
     $points = calculatePoints($rankingScores, count($players));
     foreach ($points as $pid => $pts) {

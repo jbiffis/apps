@@ -85,6 +85,30 @@
   background: #f0f7f0;
 }
 
+.btnDanger {
+  background: #fff;
+  color: #a12622;
+  border: 1px solid #a12622;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.btnDanger:hover {
+  background: #fff0ef;
+}
+
+.page button:disabled, .page select:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.errorMsg {
+  color: #a12622;
+}
+
 .successMsg {
   background: #e6f4e6;
   border: 1px solid var(--color-green);
@@ -453,4 +477,9 @@
 
 .breadcrumbLink:hover {
   text-decoration: underline;
+}
+
+.handicapTable {
+  min-width: 0;
+  margin-top: 1rem;
 }

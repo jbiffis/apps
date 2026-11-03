@@ -1,9 +1,16 @@
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '') + '/api'
 
+async function readResponse<T>(res: Response, path: string): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.error || `API error ${res.status}: ${path}`)
+  }
+  return res.json()
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`)
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
-  return res.json()
+  return readResponse<T>(res, path)
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
@@ -12,8 +19,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
-  return res.json()
+  return readResponse<T>(res, path)
 }
 
 async function put<T>(path: string, body: unknown): Promise<T> {
@@ -22,14 +28,12 @@ async function put<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
-  return res.json()
+  return readResponse<T>(res, path)
 }
 
 async function del<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
-  return res.json()
+  return readResponse<T>(res, path)
 }
 
 export const api = { get, post, put, del }
@@ -39,6 +43,8 @@ export interface Season {
   id: number
   year: number
   name: string
+  handicap_system: 'legacy' | 'best_rounds_v1'
+  handicap_system_locked?: boolean
 }
 
 export interface Player {
@@ -145,7 +151,7 @@ export interface SeasonSummary {
 }
 
 export interface TournamentDetail {
-  tournament: Tournament & { year: number; season_name: string }
+  tournament: Tournament & { year: number; season_name: string; handicap_system?: Season['handicap_system'] }
   rounds: Round[]
   players: Array<{
     player_id: number

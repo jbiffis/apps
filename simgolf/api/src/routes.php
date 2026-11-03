@@ -2,12 +2,16 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/scoring.php';
+require_once __DIR__ . '/handicaps.php';
 
 return [
 
     // ── Seasons ──────────────────────────────────────────────
     'GET /seasons' => function (PDO $db, array $p): array {
-        return $db->query("SELECT * FROM seasons ORDER BY year DESC")->fetchAll();
+        return $db->query("SELECT seasons.*, EXISTS (
+            SELECT 1 FROM rounds r JOIN scores s ON s.round_id = r.id
+            WHERE r.season_id = seasons.id AND r.is_practice = FALSE AND s.strokes IS NOT NULL
+        ) AS handicap_system_locked FROM seasons ORDER BY year DESC, id DESC")->fetchAll();
     },
 
     // ── Players ──────────────────────────────────────────────
@@ -116,6 +120,9 @@ return [
         $stmt->execute([$tid]);
         $tournament = $stmt->fetch();
         if (!$tournament) { http_response_code(404); return ['error' => 'Not found']; }
+        if (seasonHandicapSystem($db, (int)$tournament['season_id']) === BEST_ROUND_HANDICAPS) {
+            $tournament['handicap_system'] = BEST_ROUND_HANDICAPS;
+        }
 
         $stmt = $db->prepare("SELECT r.*, c.name as course_name FROM rounds r JOIN courses c ON c.id = r.course_id WHERE r.tournament_id = ? ORDER BY r.round_number");
         $stmt->execute([$tid]);
@@ -491,6 +498,9 @@ return [
     // ── Handicap recalculation ────────────────────────────────
     'POST /seasons/{seasonId}/recalculate-handicaps' => function (PDO $db, array $p): array {
         $seasonId = (int)$p['seasonId'];
+        $system = seasonHandicapSystem($db, $seasonId);
+        if ($system === null) { http_response_code(404); return ['error' => 'Season not found']; }
+        if ($system === BEST_ROUND_HANDICAPS) return recalculateBestRoundHandicaps($db, $seasonId, 1);
         $stmt = $db->prepare("SELECT DISTINCT p.* FROM players p JOIN scores s ON s.player_id = p.id JOIN rounds r ON r.id = s.round_id WHERE r.season_id = ? ORDER BY p.name");
         $stmt->execute([$seasonId]);
         $players = $stmt->fetchAll();
@@ -532,8 +542,13 @@ return [
         $name = trim($body['name'] ?? '');
         if (!$year || !$name) { http_response_code(400); return ['error' => 'year and name required']; }
 
-        $stmt = $db->prepare("INSERT INTO seasons (year, name) VALUES (?, ?) RETURNING id");
-        $stmt->execute([$year, $name]);
+        $system = $body['handicap_system'] ?? BEST_ROUND_HANDICAPS;
+        if (!in_array($system, [LEGACY_HANDICAPS, BEST_ROUND_HANDICAPS], true)) {
+            http_response_code(400); return ['error' => 'Invalid handicap system'];
+        }
+
+        $stmt = $db->prepare("INSERT INTO seasons (year, name, handicap_system) VALUES (?, ?, ?) RETURNING id");
+        $stmt->execute([$year, $name, $system]);
         $id = $stmt->fetchColumn();
 
         // Auto-create 3 tournaments
@@ -546,6 +561,57 @@ return [
         $stmt = $db->prepare("SELECT * FROM seasons WHERE id = ?");
         $stmt->execute([$id]);
         return $stmt->fetch();
+    },
+
+    // ── Update season ─────────────────────────────────────────
+    'PUT /seasons/{seasonId}' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $year = filter_var($body['year'] ?? null, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1, 'max_range' => 9999],
+        ]);
+        $name = is_string($body['name'] ?? null) ? trim($body['name']) : '';
+        if (!$year || !preg_match('/^.{1,100}$/us', $name)) {
+            http_response_code(400);
+            return ['error' => 'A year between 1 and 9999 and a name of 1–100 characters are required'];
+        }
+
+        $seasonId = (int)$p['seasonId'];
+        $db->beginTransaction();
+        $stmt = $db->prepare('SELECT * FROM seasons WHERE id = ? FOR UPDATE');
+        $stmt->execute([$seasonId]);
+        $existing = $stmt->fetch();
+        if (!$existing) {
+            $db->rollBack(); http_response_code(404); return ['error' => 'Not found'];
+        }
+        $system = $body['handicap_system'] ?? $existing['handicap_system'];
+        if (!in_array($system, [LEGACY_HANDICAPS, BEST_ROUND_HANDICAPS], true)) {
+            $db->rollBack(); http_response_code(400); return ['error' => 'Invalid handicap system'];
+        }
+        $locked = seasonHasTournamentScores($db, $seasonId);
+        if ($system !== $existing['handicap_system']) {
+            if ($locked) {
+                $db->rollBack(); http_response_code(409);
+                return ['error' => 'The handicap system cannot change after tournament scores have been entered'];
+            }
+            $stmt = $db->prepare('DELETE FROM handicaps WHERE season_id = ?');
+            $stmt->execute([$seasonId]);
+        }
+        $stmt = $db->prepare("UPDATE seasons SET year = ?, name = ?, handicap_system = ? WHERE id = ? RETURNING *");
+        $stmt->execute([$year, $name, $system, $seasonId]);
+        $season = $stmt->fetch();
+        $db->commit();
+        $season['handicap_system_locked'] = $locked;
+        return $season;
+    },
+
+    // All season-owned data is removed by the schema's ON DELETE CASCADE keys.
+    // Shared players and courses are retained.
+    'DELETE /seasons/{seasonId}' => function (PDO $db, array $p): array {
+        $stmt = $db->prepare("DELETE FROM seasons WHERE id = ? RETURNING id");
+        $stmt->execute([(int)$p['seasonId']]);
+        $deleted = $stmt->fetchColumn();
+        if (!$deleted) { http_response_code(404); return ['error' => 'Not found']; }
+        return ['success' => true, 'deleted_id' => $deleted];
     },
 
     // ── Create player ─────────────────────────────────────────
@@ -808,6 +874,20 @@ return [
             return ['error' => 'player_id, season_id, tournament_number required'];
         }
 
+        if (seasonHandicapSystem($db, $seasonId) === BEST_ROUND_HANDICAPS) {
+            $stmt = $db->prepare('SELECT id FROM tournaments WHERE season_id = ? AND number = ?');
+            $stmt->execute([$seasonId, $tournamentNumber]);
+            $targetId = $stmt->fetchColumn();
+            if (!$targetId || ($tournamentId !== null && $tournamentId !== (int)$targetId)) {
+                http_response_code(400); return ['error' => 'Tournament must belong to this season'];
+            }
+            if (seasonHasTournamentScores($db, $seasonId, $tournamentNumber)) {
+                http_response_code(409); return ['error' => 'Handicaps are locked after tournament scores have been entered'];
+            }
+            $tournamentId = (int)$targetId;
+            $value = round($value, 1, PHP_ROUND_HALF_UP);
+        }
+
         $stmt = $db->prepare("
             INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
             VALUES (?, ?, ?, ?, ?)
@@ -823,6 +903,9 @@ return [
     'POST /seasons/{seasonId}/recalculate-handicaps/{tournamentNumber}' => function (PDO $db, array $p): array {
         $seasonId = (int)$p['seasonId'];
         $tNum     = (int)$p['tournamentNumber']; // 1, 2, or 3
+        $system = seasonHandicapSystem($db, $seasonId);
+        if ($system === null) { http_response_code(404); return ['error' => 'Season not found']; }
+        if ($system === BEST_ROUND_HANDICAPS) return recalculateBestRoundHandicaps($db, $seasonId, $tNum);
 
         // For T1: use practice rounds (existing logic)
         // For T2: use T1 rounds
