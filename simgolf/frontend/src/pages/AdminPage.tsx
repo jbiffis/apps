@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Season, type Round, type Hole } from '../api'
 import styles from './AdminPage.module.css'
@@ -13,11 +13,16 @@ export function AdminPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
+  const roundsRequest = useRef(0)
 
-  // Create season form
+  // Create / edit season form
   const [showSeasonForm, setShowSeasonForm] = useState(false)
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString())
   const [seasonName, setSeasonName] = useState('')
+  const [editingSeasonId, setEditingSeasonId] = useState<number | null>(null)
+  const [seasonToDelete, setSeasonToDelete] = useState<Season | null>(null)
+  const [seasonBusy, setSeasonBusy] = useState(false)
+  const [seasonError, setSeasonError] = useState('')
 
   // Create round form
   const [showRoundForm, setShowRoundForm] = useState(false)
@@ -43,16 +48,15 @@ export function AdminPage() {
     return c
   }
 
-  async function loadRounds(sid: number) {
+  async function loadRounds(sid: number, signal?: AbortSignal) {
+    const request = ++roundsRequest.current
+    const isCurrent = () => request === roundsRequest.current && !signal?.aborted
     setLoading(true)
     try {
       const [roundList, summaryData] = await Promise.all([
         api.get<Round[]>(`/seasons/${sid}/rounds`),
         api.get<{ tournaments: Array<{ id: number; number: number; name: string }> }>(`/seasons/${sid}/summary`),
       ])
-      setTournaments(summaryData.tournaments)
-      if (summaryData.tournaments.length > 0) setFormTournamentId(String(summaryData.tournaments[0].id))
-
       const withStatus = await Promise.all(roundList.map(r =>
         api.get<{ players: Array<{ holes: Record<string, number | null> }> }>(`/rounds/${r.id}`)
           .then(sc => {
@@ -61,40 +65,103 @@ export function AdminPage() {
             return { ...r, score_count: filledHoles } as RoundWithStatus
           })
       ))
+      if (!isCurrent()) return
+      setTournaments(summaryData.tournaments)
+      setFormTournamentId(String(summaryData.tournaments[0]?.id ?? ''))
       setRounds(withStatus)
+    } catch {
+      if (isCurrent()) setMsg('Error loading rounds.')
     } finally {
-      setLoading(false)
+      if (isCurrent()) setLoading(false)
     }
   }
 
   useEffect(() => {
     Promise.all([loadSeasons(), loadCourses()]).then(([s]) => {
       if (s.length > 0) {
-        const latest = s[s.length - 1]
+        const latest = s[0]
         setSeasonId(latest.id)
-        loadRounds(latest.id)
       } else {
         setLoading(false)
         setShowSeasonForm(true)
       }
+    }).catch(() => {
+      setMsg('Error loading seasons or courses.')
+      setLoading(false)
     })
   }, [])
 
   useEffect(() => {
-    if (seasonId) loadRounds(seasonId)
+    const controller = new AbortController()
+    setRounds([])
+    setTournaments([])
+    setFormTournamentId('')
+    if (seasonId) void loadRounds(seasonId, controller.signal)
+    return () => controller.abort()
   }, [seasonId])
 
-  async function createSeason() {
-    const year = parseInt(seasonYear)
-    if (!year) return
+  function openSeasonForm(season?: Season) {
+    setEditingSeasonId(season?.id ?? null)
+    setSeasonYear(String(season?.year ?? new Date().getFullYear()))
+    setSeasonName(season?.name ?? '')
+    setSeasonToDelete(null)
+    setSeasonError('')
+    setShowSeasonForm(true)
+  }
+
+  async function saveSeason() {
+    if (seasonBusy) return
+    const year = Number(seasonYear)
+    const name = seasonName.trim() || (editingSeasonId === null ? `${year} Season` : '')
+    if (!Number.isInteger(year) || year < 1 || year > 9999 || !name || [...name].length > 100) {
+      setSeasonError('Enter a year between 1 and 9999 and a name of 1–100 characters.')
+      return
+    }
+    setSeasonBusy(true)
+    setSeasonError('')
     setMsg('')
     try {
-      const s = await api.post<Season>('/seasons', { year, name: seasonName || `${year} Season` })
-      const updated = await loadSeasons()
-      setSeasonId(s.id)
+      const season = editingSeasonId === null
+        ? await api.post<Season>('/seasons', { year, name })
+        : await api.put<Season>(`/seasons/${editingSeasonId}`, { year, name })
+      setSeasons(current => [...current.filter(s => s.id !== season.id), season].sort((a, b) => b.year - a.year))
+      setSeasonId(season.id)
       setShowSeasonForm(false)
-      setMsg(`Season "${updated.find(x => x.id === s.id)?.name}" created with 3 tournaments.`)
-    } catch { setMsg('Error creating season.') }
+      setMsg(editingSeasonId === null
+        ? `Season "${season.name}" created with 3 tournaments.`
+        : `Season "${season.name}" updated.`)
+    } catch {
+      setSeasonError(editingSeasonId === null ? 'Error creating season. Please try again.' : 'Error updating season. Please try again.')
+    } finally {
+      setSeasonBusy(false)
+    }
+  }
+
+  async function deleteSeason() {
+    if (!seasonToDelete || seasonBusy) return
+    setSeasonBusy(true)
+    setSeasonError('')
+    setMsg('')
+    try {
+      await api.del(`/seasons/${seasonToDelete.id}`)
+      roundsRequest.current++
+      const remaining = seasons.filter(s => s.id !== seasonToDelete.id)
+      setSeasons(remaining)
+      setSeasonId(remaining[0]?.id ?? null)
+      setRounds([])
+      setTournaments([])
+      setShowRoundForm(false)
+      setSeasonToDelete(null)
+      setMsg(`Season "${seasonToDelete.name}" deleted.`)
+      if (remaining.length === 0) {
+        setLoading(false)
+        openSeasonForm()
+      }
+    } catch {
+      setSeasonError('Error deleting season. Please try again.')
+    } finally {
+      setSeasonBusy(false)
+    }
   }
 
   async function createRound() {
@@ -155,24 +222,57 @@ export function AdminPage() {
             <select
               className={styles.select}
               value={seasonId ?? ''}
-              onChange={e => setSeasonId(Number(e.target.value))}
+              aria-label="Season"
+              disabled={seasonBusy}
+              onChange={e => {
+                setSeasonId(Number(e.target.value))
+                setShowSeasonForm(false)
+                setSeasonToDelete(null)
+                setSeasonError('')
+                setShowRoundForm(false)
+              }}
             >
               {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           )}
-          <button className={styles.btnOutline} onClick={() => setShowSeasonForm(v => !v)}>
+          {seasonId !== null && (
+            <>
+              <button className={styles.btnOutline} disabled={seasonBusy} onClick={() => {
+                const season = seasons.find(s => s.id === seasonId)
+                if (season) openSeasonForm(season)
+              }}>Edit Season</button>
+              <button className={styles.btnDanger} disabled={seasonBusy} onClick={() => {
+                setSeasonToDelete(seasons.find(s => s.id === seasonId) ?? null)
+                setShowSeasonForm(false)
+                setSeasonError('')
+              }}>Delete Season</button>
+            </>
+          )}
+          <button className={styles.btnOutline} disabled={seasonBusy} onClick={() => openSeasonForm()}>
             + Season
           </button>
           <Link className={styles.btnOutline} to="/admin/courses">Courses</Link>
           {seasons.length > 0 && courses.length > 0 && (
-            <button className={styles.btnCreate} onClick={() => setShowRoundForm(v => !v)}>
+            <button className={styles.btnCreate} disabled={seasonBusy} onClick={() => setShowRoundForm(v => !v)}>
               + Round
             </button>
           )}
         </div>
       </div>
 
-      {msg && <p className={styles.successMsg}>{msg}</p>}
+      {msg && <p className={styles.successMsg} role="status">{msg}</p>}
+
+      {seasonToDelete && (
+        <div className={styles.formCard}>
+          <h2 className={styles.formTitle}>Delete "{seasonToDelete.name}"?</h2>
+          <p>This permanently deletes the season and all its tournaments, rounds, scores, handicaps, prizes, closest-to-pin entries and score edit history. Players and courses are kept. This cannot be undone.</p>
+          {seasonError && <p className={styles.errorMsg} role="alert">{seasonError}</p>}
+          <div className={styles.formActions}>
+            <button className={styles.btnDanger} disabled={seasonBusy} onClick={deleteSeason}>{seasonBusy ? 'Deleting…' : 'Permanently Delete Season'}</button>
+            <button className={styles.btnSecondary} disabled={seasonBusy} onClick={() => setSeasonToDelete(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {/* No seasons state */}
       {seasons.length === 0 && !loading && (
@@ -184,8 +284,8 @@ export function AdminPage() {
 
       {/* Create season form */}
       {showSeasonForm && (
-        <div className={styles.formCard}>
-          <h2 className={styles.formTitle}>Create Season</h2>
+        <form className={styles.formCard} onSubmit={e => { e.preventDefault(); void saveSeason() }}>
+          <h2 className={styles.formTitle}>{editingSeasonId === null ? 'Create Season' : 'Edit Season'}</h2>
           <div className={styles.formRow}>
             <label className={styles.label}>
               Year
@@ -194,27 +294,35 @@ export function AdminPage() {
                 className={styles.input}
                 value={seasonYear}
                 onChange={e => setSeasonYear(e.target.value)}
-                min={2020}
-                max={2040}
+                min={1}
+                max={9999}
+                required
+                disabled={seasonBusy}
               />
             </label>
             <label className={styles.label}>
-              Name (optional)
+              Name {editingSeasonId === null ? '(optional)' : ''}
               <input
                 type="text"
                 className={styles.input}
                 value={seasonName}
                 onChange={e => setSeasonName(e.target.value)}
                 placeholder={`${seasonYear} Season`}
+                maxLength={100}
+                required={editingSeasonId !== null}
+                disabled={seasonBusy}
               />
             </label>
           </div>
-          <p className={styles.hint}>Creates the season with 3 tournaments (T1, T2, T3) automatically.</p>
+          <p className={styles.hint}>{editingSeasonId === null
+            ? 'Creates the season with 3 tournaments (T1, T2, T3) automatically.'
+            : 'Changes the season name and year. Existing tournaments, rounds and scores are kept.'}</p>
+          {seasonError && <p className={styles.errorMsg} role="alert">{seasonError}</p>}
           <div className={styles.formActions}>
-            <button className={styles.btnPrimary} onClick={createSeason}>Create Season</button>
-            <button className={styles.btnSecondary} onClick={() => setShowSeasonForm(false)}>Cancel</button>
+            <button className={styles.btnPrimary} type="submit" disabled={seasonBusy}>{seasonBusy ? 'Saving…' : editingSeasonId === null ? 'Create Season' : 'Save Changes'}</button>
+            <button className={styles.btnSecondary} type="button" disabled={seasonBusy} onClick={() => setShowSeasonForm(false)}>Cancel</button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* Create round form */}
@@ -261,7 +369,7 @@ export function AdminPage() {
             </label>
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnPrimary} onClick={createRound}>Create Round</button>
+            <button className={styles.btnPrimary} disabled={seasonBusy} onClick={createRound}>Create Round</button>
             <button className={styles.btnSecondary} onClick={() => setShowRoundForm(false)}>Cancel</button>
           </div>
         </div>

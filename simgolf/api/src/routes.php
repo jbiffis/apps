@@ -548,6 +548,35 @@ return [
         return $stmt->fetch();
     },
 
+    // ── Update season ─────────────────────────────────────────
+    'PUT /seasons/{seasonId}' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $year = filter_var($body['year'] ?? null, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1, 'max_range' => 9999],
+        ]);
+        $name = is_string($body['name'] ?? null) ? trim($body['name']) : '';
+        if (!$year || !preg_match('/^.{1,100}$/us', $name)) {
+            http_response_code(400);
+            return ['error' => 'A year between 1 and 9999 and a name of 1–100 characters are required'];
+        }
+
+        $stmt = $db->prepare("UPDATE seasons SET year = ?, name = ? WHERE id = ? RETURNING *");
+        $stmt->execute([$year, $name, (int)$p['seasonId']]);
+        $season = $stmt->fetch();
+        if (!$season) { http_response_code(404); return ['error' => 'Not found']; }
+        return $season;
+    },
+
+    // All season-owned data is removed by the schema's ON DELETE CASCADE keys.
+    // Shared players and courses are retained.
+    'DELETE /seasons/{seasonId}' => function (PDO $db, array $p): array {
+        $stmt = $db->prepare("DELETE FROM seasons WHERE id = ? RETURNING id");
+        $stmt->execute([(int)$p['seasonId']]);
+        $deleted = $stmt->fetchColumn();
+        if (!$deleted) { http_response_code(404); return ['error' => 'Not found']; }
+        return ['success' => true, 'deleted_id' => $deleted];
+    },
+
     // ── Create player ─────────────────────────────────────────
     'POST /players' => function (PDO $db, array $p): array {
         $body = json_decode(file_get_contents('php://input'), true);
