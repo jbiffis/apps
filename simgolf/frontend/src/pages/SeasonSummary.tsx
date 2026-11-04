@@ -35,45 +35,17 @@ export function SeasonSummaryPage() {
     <div>
       <div className={styles.heading}>
         <div>
-          <p className="eyebrow">The clubhouse / Season overview</p>
           <h1 className={styles.title}>Season standings</h1>
-          <p className="page-description">Every round counts. See how the field stacks up.</p>
+          <p className="page-description">Tournament points and overall rankings.</p>
         </div>
         <SeasonSelect value={seasonId} onChange={selectSeason} />
       </div>
-
-      <section className={styles.banner} aria-label="Season overview">
-        <div className={styles.bannerCopy}>
-          <span className={styles.bannerLabel}>CREEKSIDE SIM GOLF</span>
-          <h2>{data?.season?.name ?? 'A new season. The same great game.'}</h2>
-          <p>Your league. Your rounds. Your place on the board.</p>
-          <Link to="/admin">Manage season <ArrowUpRight /></Link>
-        </div>
-        <svg className={styles.courseArt} viewBox="0 0 420 240" fill="none" aria-hidden="true">
-          <path d="M480 15C325-61 186-9 236 71S469 122 401 209 198 201 185 289" stroke="#42644e" strokeWidth="35" />
-          <path d="M420-45C287-8 163 32 203 103S372 153 323 212 102 237 119 295" stroke="#587955" strokeWidth="1" />
-          <path d="M450-13C307 12 206 38 243 103S418 152 367 223 158 261 159 308" stroke="#587955" strokeWidth="1" />
-          <ellipse cx="278" cy="136" rx="60" ry="31" transform="rotate(-23 278 136)" fill="#c4da83" />
-          <ellipse cx="297" cy="134" rx="7" ry="3" fill="#1c4234" />
-          <path d="M297 134V65l32 11-32 13" stroke="#f1f2db" strokeWidth="2" strokeLinejoin="round" />
-          <path d="m197 176-4 7M186 188l-4 6M175 202l-4 5" stroke="#a4ba8b" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="176" cy="213" r="4" fill="#f1f2db" />
-        </svg>
-      </section>
 
       {loading && <p className={styles.loading} role="status">Loading standings…</p>}
       {error && <p className="empty-panel" role="alert">{error}</p>}
 
       {data && <>
-        <div className={styles.metrics}>
-          <div><span>Players on the board</span><strong>{data.players.length.toString().padStart(2, '0')}</strong><small>In this season</small></div>
-          <div><span>Tournaments</span><strong>{data.tournaments.length.toString().padStart(2, '0')}</strong><small>One overall leaderboard</small></div>
-          <div><span>Leading points</span><strong>{data.players[0]?.overall ?? '—'}</strong><small>{data.players.length ? 'The score to catch' : 'Waiting for the first round'}</small></div>
-        </div>
-        <div className={styles.boardHeading}>
-          <div><p className="eyebrow">The leaderboard</p><h2>Race to the top</h2></div>
-          <span className={styles.pointsLabel}>Ranked by total points</span>
-        </div>
+        <p className={styles.pointsLabel}>Ranked by total points</p>
         {data.players.length === 0 ? (
           <div className="empty-panel"><h3>The board is ready.</h3><p>Standings will appear once this season’s scores are entered.</p><Link to="/admin">Go to season admin →</Link></div>
         ) : (
