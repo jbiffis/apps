@@ -31,8 +31,8 @@ export function AdminPage() {
   const [formCourseId, setFormCourseId] = useState('')
   const [formNine, setFormNine] = useState<'front' | 'back'>('front')
   const [formDate, setFormDate] = useState(new Date().toISOString().slice(0, 10))
-  const [formIsPractice, setFormIsPractice] = useState(false)
-  const [formTournamentId, setFormTournamentId] = useState('')
+  const [formTournamentId, setFormTournamentId] = useState('practice')
+  const formIsPractice = formTournamentId === 'practice'
   const [formCtpHole, setFormCtpHole] = useState('')
   const [formCtpYardage, setFormCtpYardage] = useState('')
   const [tournaments, setTournaments] = useState<Array<{ id: number; number: number; name: string }>>([])
@@ -69,7 +69,7 @@ export function AdminPage() {
       ))
       if (!isCurrent()) return
       setTournaments(summaryData.tournaments)
-      setFormTournamentId(String(summaryData.tournaments[0]?.id ?? ''))
+      setFormTournamentId(String(summaryData.tournaments[0]?.id ?? 'practice'))
       setRounds(withStatus)
     } catch {
       if (isCurrent()) setMsg('Error loading rounds.')
@@ -97,7 +97,7 @@ export function AdminPage() {
     const controller = new AbortController()
     setRounds([])
     setTournaments([])
-    setFormTournamentId('')
+    setFormTournamentId('practice')
     if (seasonId) void loadRounds(seasonId, controller.signal)
     return () => controller.abort()
   }, [seasonId])
@@ -168,7 +168,7 @@ export function AdminPage() {
   }
 
   async function createRound() {
-    if (!seasonId || !formCourseId) return
+    if (!seasonId || !formCourseId || loading) return
     setMsg('')
     try {
       await api.post('/rounds', {
@@ -368,18 +368,14 @@ export function AdminPage() {
               Date
               <input type="date" className={styles.input} value={formDate} onChange={e => setFormDate(e.target.value)} />
             </label>
-            <label className={styles.checkLabel}>
-              <input type="checkbox" checked={formIsPractice} onChange={e => setFormIsPractice(e.target.checked)} />
-              Practice round
+            <label className={styles.label}>
+              Tournament
+              <select className={styles.select} aria-label="Tournament" disabled={loading}
+                value={formTournamentId} onChange={e => setFormTournamentId(e.target.value)}>
+                <option value="practice">Practice</option>
+                {tournaments.map(t => <option key={t.id} value={t.id}>Tournament {t.number}</option>)}
+              </select>
             </label>
-            {!formIsPractice && (
-              <label className={styles.label}>
-                Tournament
-                <select className={styles.select} value={formTournamentId} onChange={e => setFormTournamentId(e.target.value)}>
-                  {tournaments.map(t => <option key={t.id} value={t.id}>Tournament {t.number}</option>)}
-                </select>
-              </label>
-            )}
             <label className={styles.label}>
               CTP Hole
               <input type="number" min={1} max={9} className={styles.input} value={formCtpHole} onChange={e => setFormCtpHole(e.target.value)} placeholder="optional" />
@@ -390,7 +386,7 @@ export function AdminPage() {
             </label>
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnPrimary} disabled={seasonBusy} onClick={createRound}>Create Round</button>
+            <button className={styles.btnPrimary} disabled={seasonBusy || loading} onClick={createRound}>Create Round</button>
             <button className={styles.btnSecondary} onClick={() => setShowRoundForm(false)}>Cancel</button>
           </div>
         </div>
