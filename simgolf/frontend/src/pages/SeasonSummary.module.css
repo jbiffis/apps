@@ -1,77 +1,29 @@
-.title {
-  font-family: var(--font-serif);
-  font-size: 1.8rem;
-  color: var(--green);
-  margin-bottom: 1.2rem;
-}
-
-.loading {
-  color: var(--text-muted);
-  padding: 2rem 0;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow);
-  font-size: 0.9rem;
-}
-
-.table thead tr {
-  background: var(--green);
-  color: white;
-}
-
-.table thead th {
-  padding: 0.5rem 0.4rem;
-  text-align: left;
-  font-weight: 600;
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.table thead th a {
-  color: var(--gold-light);
-}
-
-.table tbody tr:nth-child(even) {
-  background: var(--cream);
-}
-
-.table tbody tr:nth-child(odd) {
-  background: white;
-}
-
-.table tbody td {
-  padding: 0.5rem 0.4rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.thPos, .tdPos {
-  width: 2rem;
-  text-align: center;
-}
-
-.thName, .tdName {
-  min-width: 120px;
-}
-
-.thTournament, .tdScore {
-  text-align: center;
-  width: 5rem;
-}
-
-.thTotal, .tdTotal {
-  text-align: center;
-  width: 5rem;
-  font-weight: 600;
+.heading { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 1.25rem; margin-bottom: 1.8rem; }
+.heading .title { color: var(--text); margin: 0; font-family: var(--font-sans); font-size: clamp(1.8rem, 4vw, 2.2rem); font-weight: 600; letter-spacing: -0.05em; }
+.heading > div:last-child { margin-bottom: 0; }
+.pointsLabel { font-size: 0.72rem; color: var(--text-muted); text-align: right; margin-bottom: 0.8rem; }
+.loading { color: var(--text-muted); padding: 2rem 0; }
+.table { width: 100%; min-width: 460px; border-collapse: separate; border-spacing: 0; background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 0.9rem; }
+.table thead tr { background: #edf0e9; color: var(--green); }
+.table th { padding: 1rem 1.2rem; text-align: left; font-weight: 600; font-size: 0.63rem; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.table th a { color: var(--green); display: inline-flex; align-items: center; gap: 0.25rem; }
+.table td { padding: 1rem 1.2rem; border-top: 1px solid #e9ede5; }
+.table tbody tr { background: white; }
+.table tbody tr:hover { background: #f6f8f1; }
+.table tbody .leader { background: #f6f8f2; }
+.table .thPos, .table .tdPos { width: 65px; text-align: center; padding-right: 0.2rem; }
+.rank { display: inline-grid; place-items: center; font-size: 0.75rem; color: var(--text-muted); width: 30px; height: 30px; }
+.leader .rank { border-radius: 50%; background: var(--green); color: var(--gold-light); font-weight: 600; }
+.thName, .tdName { min-width: 145px; }
+.tdName a { font-weight: 600; }
+.leaderTag { display: inline-block; margin-left: 0.65rem; padding: 0.15rem 0.4rem; background: #dfe9ca; color: var(--green); border-radius: 4px; font-size: 0.55rem; vertical-align: middle; }
+.table .thTournament, .table .tdScore { text-align: center; }
+.table .thTotal, .table .tdTotal { text-align: right; padding-right: 1.6rem; }
+.tdTotal { font-weight: 700; color: var(--green); font-size: 1.05rem; }
+@media (max-width: 600px) {
+  .pointsLabel { font-size: 0.6rem; text-align: right; }
+  .leaderTag { display: none; }
+  .table th, .table td { padding: 0.85rem 0.65rem; }
+  .table { min-width: 360px; font-size: 0.8rem; }
+  .thName, .tdName { min-width: 95px; }
 }

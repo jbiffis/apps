@@ -1,75 +1,64 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap');
-
 :root {
-  --green:       #2d5a27;
-  --green-light: #3d7a36;
-  --green-dark:  #1e3d1a;
-  --gold:        #c9a84c;
-  --gold-light:  #e8c96a;
-  --gold-dark:   #a07a30;
-  --cream:       #faf8f2;
-  --cream-dark:  #f0ece0;
-  --text:        #1a1a1a;
-  --text-muted:  #5a5a5a;
-  --border:      #d4cfc0;
-  --white:       #ffffff;
-
-  --font-serif:  'Playfair Display', Georgia, serif;
-  --font-sans:   'Inter', system-ui, sans-serif;
-
-  --radius:      8px;
-  --shadow:      0 2px 12px rgba(0,0,0,0.08);
-  --shadow-lg:   0 4px 24px rgba(0,0,0,0.14);
+  color-scheme: light;
+  --green: #153e32;
+  --green-light: #2c6552;
+  --green-dark: #102e26;
+  --gold: #c4da83;
+  --gold-light: #e1edbb;
+  --gold-dark: #667d2c;
+  --cream: #f5f5ee;
+  --cream-dark: #eceee4;
+  --text: #1c3028;
+  --text-muted: #637269;
+  --border: #dce2d6;
+  --white: #fff;
+  --font-sans: 'Inter', 'Aptos', 'Segoe UI', system-ui, sans-serif;
+  --font-serif: var(--font-sans);
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --radius: 12px;
+  --shadow: 0 3px 16px rgb(20 49 36 / 4%);
+  --shadow-lg: 0 8px 30px rgb(20 49 36 / 8%);
+  /* Admin and score-entry screens share the same palette. */
+  --color-green: var(--green);
+  --color-gold: var(--border);
+  --color-cream: var(--white);
+  --color-muted: var(--text-muted);
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html {
-  font-size: 18px;
-  -webkit-text-size-adjust: 100%;
-}
-
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 body {
-  font-family: var(--font-serif);
+  min-width: 320px;
+  min-height: 100dvh;
   background: var(--cream);
   color: var(--text);
-  line-height: 1.6;
-  min-height: 100dvh;
+  font-family: var(--font-sans);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
 }
-
-a {
-  color: var(--green);
-  text-decoration: none;
+a { color: var(--green); text-decoration: none; text-underline-offset: 4px; }
+a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; }
+button, select { cursor: pointer; }
+button, input:not([type='checkbox']), select { min-height: 42px; }
+button { transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease; }
+button:disabled, select:disabled { cursor: not-allowed; opacity: 0.6; }
+input, select, textarea { color: var(--text); }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 3px solid #6d8d3a;
+  outline-offset: 3px;
 }
-
-a:hover {
-  text-decoration: underline;
+::selection { background: var(--gold-light); color: var(--green-dark); }
+table { font-variant-numeric: tabular-nums; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius); }
+.table-sticky th:first-child, .table-sticky td:first-child {
+  position: sticky; left: 0; background: inherit; z-index: 1;
 }
-
-button {
-  cursor: pointer;
-  font-family: var(--font-serif);
-}
-
-/* Scrollable tables */
-.table-scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Sticky first column for wide tables */
-.table-sticky th:first-child,
-.table-sticky td:first-child {
-  position: sticky;
-  left: 0;
-  background: inherit;
-  z-index: 1;
-  box-shadow: 2px 0 4px rgba(0,0,0,0.06);
-}
+.eyebrow { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+.page-heading { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.75rem; }
+.page-description { color: var(--text-muted); margin-top: 0.35rem; font-size: 0.9rem; }
+.empty-panel { padding: 2.5rem 1.5rem; text-align: center; background: white; border: 1px dashed var(--border); border-radius: var(--radius); color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
 
 /* Golf score marks */
 .score-eagle {
@@ -132,3 +121,6 @@ button {
   color: white;
   font-weight: 700;
 }
+
+.page-heading h1 { margin: 0.4rem 0 0; }
+.page-heading > div:last-child { margin-bottom: 0; }

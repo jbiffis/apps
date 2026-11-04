@@ -483,3 +483,46 @@
   min-width: 0;
   margin-top: 1rem;
 }
+
+/* Shared club administration surfaces. */
+.headerRow { margin-bottom: 1.75rem; }
+.title { margin: 0.4rem 0 0; }
+.seasonToolbar {
+  flex-basis: 100%;
+  padding: 1rem;
+  margin-top: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: white;
+  gap: 0.5rem;
+}
+.seasonToolbar > select { margin-right: auto; max-width: 100%; }
+.input, .select { min-height: 44px; border-color: var(--border); border-radius: 7px; }
+.input { background: #fbfcf9; }
+.label { font-weight: 600; font-size: 0.75rem; }
+.formCard, .courseCard { border-color: var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.formCard { padding: 1.5rem; }
+.formTitle { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.025em; }
+.formCard > p { font-size: 0.85rem; line-height: 1.8; margin-bottom: 0.8rem; }
+.hint { font-style: normal; line-height: 1.7; }
+.btnCreate, .btnPrimary, .btnSecondary, .btnOutline, .btnDanger { border-radius: 7px; font-size: 0.78rem; font-weight: 600; min-height: 42px; }
+.btnOutline, .btnSecondary { border-color: var(--border); }
+.btnDanger { border-color: #edd1cd; color: #993b30; background: #fff9f7; }
+.table { background: white; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.table th { font-size: 0.65rem; padding: 0.8rem; letter-spacing: 0.05em; }
+.table td { border-bottom: 1px solid #e8ece3; }
+.table tbody tr:nth-child(even) { background: #f6f8f1; }
+.table tbody tr:hover { background: #edf2e5; }
+.sectionTitle { border-bottom: 1px solid var(--border); font-size: 1.05rem; font-weight: 600; padding-bottom: 0.8rem; }
+.btnEnter, .btnLive, .btnView { min-height: 36px; display: inline-flex; align-items: center; padding: 0.4rem 0.65rem; border-radius: 5px; font-size: 0.7rem; }
+.successMsg { background: #eaf2df; border-color: #c9d8b1; border-radius: 8px; font-size: 0.85rem; }
+.warningBox { border-radius: 8px; }
+@media (max-width: 600px) {
+  .seasonToolbar > select { flex-basis: 100%; margin-bottom: 0.4rem; }
+  .seasonToolbar > button, .seasonToolbar > a { flex-grow: 1; text-align: center; }
+  .formCard { padding: 1.2rem; }
+  .formActions { flex-wrap: wrap; }
+  .formActions button { flex-grow: 1; }
+}
+.tableHint { display: none; }
+@media (max-width: 600px) { .tableHint { display: block; color: var(--text-muted); font-size: 0.65rem; margin: -0.2rem 0 0.65rem; } }
