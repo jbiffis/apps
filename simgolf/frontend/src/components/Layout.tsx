@@ -26,7 +26,7 @@ export function Layout({ children }: LayoutProps) {
             </span>
             <span className={styles.brandText}>Creekside<span><small>Sim Golf League</small></span></span>
           </Link>
-          <p className={styles.clubNote}><span aria-hidden="true" />The game brings us together.</p>
+          <p className={styles.clubNote}><span aria-hidden="true" />Have fun! No Politics, Racial, or Gay conversations</p>
         </div>
       </header>
 
