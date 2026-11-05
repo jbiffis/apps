@@ -12,23 +12,23 @@ export default defineConfig({
         name: 'Sim Golf League',
         short_name: 'SimGolf',
         description: 'Simulation Golf League Score Tracker',
-        theme_color: '#2d5a27',
-        background_color: '#faf8f2',
+        theme_color: '#102e26',
+        background_color: '#f5f5ee',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'pwa-192x192.png?v=2',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'pwa-512x512.png?v=2',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: 'pwa-maskable-512x512.png',
+            src: 'pwa-maskable-512x512.png?v=2',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

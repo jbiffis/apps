@@ -1,4 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <circle cx="50" cy="50" r="50" fill="#2d5a27"/>
-  <text x="50" y="68" font-size="55" text-anchor="middle">⛳</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#102e26"/>
+  <path d="M146 354V207a110 110 0 0 1 220 0v147Z" fill="none" stroke="#7d9368" stroke-width="3"/>
+  <g fill="none" stroke="#c4da83" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M230 320V169l80 34-80 34" stroke-width="6"/>
+    <ellipse cx="247" cy="326" rx="58" ry="17" stroke-width="5"/>
+    <path d="m325 164 12-12m-2 97 15 4" stroke-width="5"/>
+  </g>
 </svg>
