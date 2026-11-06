@@ -66,6 +66,10 @@ export interface Round {
   round_number: number
   course_id: number
   course_name?: string
+  tournament_number?: number | null
+  tournament_name?: string | null
+  leader_name?: string | null
+  leader_net?: number | null
   nine: 'front' | 'back'
   played_date: string
   is_practice: number

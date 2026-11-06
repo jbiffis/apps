@@ -791,7 +791,19 @@ return [
             ORDER BY r.played_date, r.id
         ");
         $stmt->execute([(int)$p['seasonId']]);
-        return $stmt->fetchAll();
+        $rounds = $stmt->fetchAll();
+
+        foreach ($rounds as &$round) {
+            $leader = null;
+            foreach (getRoundScorecard($db, (int)$round['id'])['players'] ?? [] as $row) {
+                if ($row['net'] === null) continue;
+                if ($leader === null || $row['net'] < $leader['net']) $leader = $row;
+            }
+            $round['leader_name'] = $leader['name'] ?? null;
+            $round['leader_net'] = $leader['net'] ?? null;
+        }
+
+        return $rounds;
     },
 
     // ── Batch score entry for a round ────────────────────────

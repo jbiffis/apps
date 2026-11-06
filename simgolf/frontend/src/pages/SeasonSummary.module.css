@@ -20,6 +20,33 @@
 .table .thTournament, .table .tdScore { text-align: center; }
 .table .thTotal, .table .tdTotal { text-align: right; padding-right: 1.6rem; }
 .tdTotal { font-weight: 700; color: var(--green); font-size: 1.05rem; }
+.weeklySection { margin-top: 2.5rem; }
+.weeklyTitle { font-family: var(--font-serif); font-size: 1.4rem; color: var(--green); margin-bottom: 1rem; }
+.weeklyGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.weeklyCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.1rem 1.2rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease;
+}
+.weeklyCard:hover { border-color: var(--green); }
+.weeklyLabel { font-weight: 600; color: var(--green); font-size: 0.9rem; }
+.weeklyCourse { color: var(--text-muted); font-size: 0.78rem; }
+.weeklyLeader { display: flex; justify-content: space-between; align-items: baseline; margin-top: 0.5rem; }
+.weeklyLeaderName { font-weight: 600; }
+.weeklyLeaderScore { font-weight: 700; color: var(--green); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.weeklyNoScores { color: var(--text-muted); font-size: 0.8rem; font-style: italic; margin-top: 0.5rem; }
+
+@media (max-width: 800px) {
+  .weeklyGrid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 600px) {
   .pointsLabel { font-size: 0.6rem; text-align: right; }
   .leaderTag { display: none; }
