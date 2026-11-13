@@ -76,7 +76,7 @@ CREATE TABLE handicaps (
     tournament_id INT REFERENCES tournaments(id) ON DELETE SET NULL,
     season_id INT NOT NULL REFERENCES seasons(id) ON DELETE CASCADE,
     tournament_number SMALLINT NOT NULL,
-    value NUMERIC(5,2) NOT NULL,
+    value NUMERIC(5,1) NOT NULL,
     UNIQUE (player_id, season_id, tournament_number)
 );
 
