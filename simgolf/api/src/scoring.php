@@ -114,8 +114,11 @@ function calculateHandicap(PDO $db, int $playerId, int $seasonId): float
         $totalGross += $gross;
         $roundsPlayed++;
 
-        // Get par for this course
-        $stmt3 = $db->prepare("SELECT SUM(par) FROM holes WHERE course_id = ?");
+        // Get par for the nine actually played
+        $nineFilter = ($round['nine'] === 'back')
+            ? 'AND hole_number BETWEEN 10 AND 18'
+            : 'AND hole_number BETWEEN 1 AND 9';
+        $stmt3 = $db->prepare("SELECT SUM(par) FROM holes WHERE course_id = ? $nineFilter");
         $stmt3->execute([$round['course_id']]);
         $par = (int)$stmt3->fetchColumn();
         $totalPar += $par;
