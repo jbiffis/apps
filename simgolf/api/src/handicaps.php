@@ -32,8 +32,9 @@ function bestRoundHandicap(array $differentials, int $number): ?float
     if (!$required || count($differentials) < $required) return null;
     sort($differentials, SORT_NUMERIC);
     $selected = array_slice($differentials, 0, $required);
-    // T1 intentionally uses the combined two-practice-round total.
-    $value = array_sum($selected) / ($number === 1 ? 1 : $required);
+    // Average per round, so the handicap is on the same 9-hole scale as a
+    // single round's gross score (net = gross - handicap in getRoundScorecard).
+    $value = array_sum($selected) / $required;
     return round($value, 1, PHP_ROUND_HALF_UP);
 }
 

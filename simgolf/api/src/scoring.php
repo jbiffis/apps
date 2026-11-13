@@ -80,8 +80,10 @@ function calculatePoints(array $netScores, int $totalPlayers = 8): array
 /**
  * Calculate handicap from practice rounds.
  * Handicap = sum of gross scores over practice rounds - total par.
+ * Returns null if the player hasn't completed every practice round in the
+ * season yet (rather than computing a partial handicap from a subset).
  */
-function calculateHandicap(PDO $db, int $playerId, int $seasonId): float
+function calculateHandicap(PDO $db, int $playerId, int $seasonId): ?float
 {
     // Get practice round IDs for this season
     $stmt = $db->prepare("
@@ -93,7 +95,7 @@ function calculateHandicap(PDO $db, int $playerId, int $seasonId): float
     $stmt->execute([$seasonId]);
     $practiceRounds = $stmt->fetchAll();
 
-    if (empty($practiceRounds)) return 0.0;
+    if (empty($practiceRounds)) return null;
 
     $totalGross = 0;
     $totalPar = 0;
@@ -124,7 +126,7 @@ function calculateHandicap(PDO $db, int $playerId, int $seasonId): float
         $totalPar += $par;
     }
 
-    if ($roundsPlayed === 0) return 0.0;
+    if ($roundsPlayed < count($practiceRounds)) return null; // hasn't completed every practice round yet
 
     return max(0, $totalGross - $totalPar);
 }

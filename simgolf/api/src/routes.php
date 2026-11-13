@@ -514,15 +514,21 @@ return [
             // Tournament 1 handicap: from practice rounds
             $h1 = calculateHandicap($db, $pid, $seasonId);
 
-            // Upsert tournament 1 handicap
+            // Tournament 1 handicap: upsert if computed, otherwise clear any stale value
+            // (e.g. from before the player had completed every practice round)
             if (!empty($tournaments)) {
                 $t1 = $tournaments[0];
-                $stmt2 = $db->prepare("
-                    INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
-                    VALUES (?, ?, ?, 1, ?)
-                    ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
-                ");
-                $stmt2->execute([$pid, $t1['id'], $seasonId, $h1]);
+                if ($h1 !== null) {
+                    $stmt2 = $db->prepare("
+                        INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
+                        VALUES (?, ?, ?, 1, ?)
+                        ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
+                    ");
+                    $stmt2->execute([$pid, $t1['id'], $seasonId, $h1]);
+                } else {
+                    $stmt2 = $db->prepare("DELETE FROM handicaps WHERE player_id = ? AND season_id = ? AND tournament_number = 1");
+                    $stmt2->execute([$pid, $seasonId]);
+                }
             }
 
             $updated[] = ['player_id' => $pid, 'name' => $player['name'], 't1_handicap' => $h1];
@@ -935,12 +941,17 @@ return [
             foreach ($players as $player) {
                 $h = calculateHandicap($db, $player['id'], $seasonId);
                 if ($t) {
-                    $stmt2 = $db->prepare("
-                        INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
-                        VALUES (?, ?, ?, 1, ?)
-                        ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
-                    ");
-                    $stmt2->execute([$player['id'], $t['id'], $seasonId, $h]);
+                    if ($h !== null) {
+                        $stmt2 = $db->prepare("
+                            INSERT INTO handicaps (player_id, tournament_id, season_id, tournament_number, value)
+                            VALUES (?, ?, ?, 1, ?)
+                            ON CONFLICT (player_id, season_id, tournament_number) DO UPDATE SET value = EXCLUDED.value
+                        ");
+                        $stmt2->execute([$player['id'], $t['id'], $seasonId, $h]);
+                    } else {
+                        $stmt2 = $db->prepare("DELETE FROM handicaps WHERE player_id = ? AND season_id = ? AND tournament_number = 1");
+                        $stmt2->execute([$player['id'], $seasonId]);
+                    }
                 }
                 $updated[] = ['player_id' => $player['id'], 'name' => $player['name'], 'handicap' => $h];
             }

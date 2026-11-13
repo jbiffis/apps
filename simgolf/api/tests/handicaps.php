@@ -8,11 +8,11 @@ function check(bool $condition, string $description): void
     if (!$condition) throw new RuntimeException($description);
 }
 
-check(bestRoundHandicap([10, 12], 1) === 22.0, 'T1 combines both practice rounds');
+check(bestRoundHandicap([10, 12], 1) === 11.0, 'T1 averages both practice rounds');
 check(bestRoundHandicap([8, 9, 10, 11, 12, 13, 99, 100], 2) === 10.5, 'T2 averages the lowest six');
 check(bestRoundHandicap(range(1, 14), 3) === 5.5, 'T3 averages the lowest ten');
 check(bestRoundHandicap([0, 0, 0, 0, 0, 1], 2) === 0.2, 'Round only the final handicap to one decimal');
-check(bestRoundHandicap([-10, -8], 1) === -18.0, 'No floor on handicap');
+check(bestRoundHandicap([-10, -8], 1) === -9.0, 'No floor on handicap');
 check(bestRoundHandicap([100, 200, 300, 400, 500, 600], 2) === 350.0, 'No handicap cap');
 check(bestRoundHandicap([10], 1) === null, 'T1 needs both practice rounds');
 check(bestRoundHandicap(range(1, 5), 2) === null, 'T2 needs six complete rounds');
@@ -68,7 +68,7 @@ try {
     for ($hole = 1; $hole <= 9; $hole++) {
         $stmt->execute([$practice, $players[1], $hole, $hole === 9 ? null : 4]);
     }
-    foreach ([1 => [17.0, 2], 2 => [10.5, 8], 3 => [12.5, 14]] as $number => [$expected, $count]) {
+    foreach ([1 => [8.5, 2], 2 => [10.5, 8], 3 => [12.5, 14]] as $number => [$expected, $count]) {
         $rows = bestRoundHandicapCandidates($db, $season, $number);
         $indexed = array_column($rows, null, 'player_id');
         check($indexed[$players[0]]['handicap'] === $expected, "T$number: correct differential selection and averaging");
