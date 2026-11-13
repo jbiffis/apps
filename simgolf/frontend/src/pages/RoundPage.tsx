@@ -108,7 +108,7 @@ export function RoundPage() {
       <div className={styles.headerRow}>
         <h1 className={styles.title}>
           {round.is_practice ? 'Practice ' : ''}Round {round.round_number}
-          <span className={styles.subtitle}>{round.course_name} · {round.nine} nine · {round.played_date}</span>
+          <span className={styles.subtitle}>{round.course_name} · {round.nine} nine · Par {parTotal} · {round.played_date}</span>
         </h1>
         {!editMode && (
           <div className={styles.editActions}>
