@@ -31,8 +31,6 @@ services:
     build:
       context: ./simgolf/api
       dockerfile: Dockerfile
-    volumes:
-      - ./simgolf/api:/var/www/api
     env_file: ./.env
     restart: unless-stopped
 
