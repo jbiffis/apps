@@ -1087,6 +1087,35 @@ return [
         return ['success' => true, 'deleted_id' => $deleted];
     },
 
+    // ── Manual prize winning (side bets, one-off awards, etc.) ─
+    'POST /prize-winnings' => function (PDO $db, array $p): array {
+        $body = json_decode(file_get_contents('php://input'), true);
+        $playerId     = (int)($body['player_id'] ?? 0);
+        $seasonId     = (int)($body['season_id'] ?? 0);
+        $roundId      = isset($body['round_id']) ? (int)$body['round_id'] : null;
+        $tournamentId = isset($body['tournament_id']) ? (int)$body['tournament_id'] : null;
+        $type         = $body['type'] ?? 'chip_in';
+        $amount       = (float)($body['amount'] ?? 0);
+        $description  = trim($body['description'] ?? '');
+
+        if (!$playerId || !$seasonId || $amount <= 0 || !$description) {
+            http_response_code(400);
+            return ['error' => 'player_id, season_id, amount, and description are required'];
+        }
+        if (!in_array($type, ['ctp', 'chip_in', 't1st', 't2nd'], true)) {
+            http_response_code(400);
+            return ['error' => 'Invalid prize type'];
+        }
+
+        $stmt = $db->prepare("
+            INSERT INTO prize_winnings (player_id, round_id, tournament_id, season_id, type, amount, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+        ");
+        $stmt->execute([$playerId, $roundId, $tournamentId, $seasonId, $type, $amount, $description]);
+        return ['success' => true, 'id' => $stmt->fetchColumn()];
+    },
+
     // ── Delete prize winning ──────────────────────────────────
     'DELETE /prize-winnings/{id}' => function (PDO $db, array $p): array {
         $stmt = $db->prepare("DELETE FROM prize_winnings WHERE id = ? RETURNING id");
